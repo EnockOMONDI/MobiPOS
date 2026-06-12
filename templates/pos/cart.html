@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Sale cart | Kipekee Access{% endblock %}
+{% block content %}
+<div class="mb-6">
+  <p class="text-sm font-medium text-red-700">{{ location }}</p>
+  <h1 class="text-3xl font-bold">Sale cart</h1>
+  <p class="mt-2 text-slate-600">Add phones, serialized items, and accessories before completing payment.</p>
+</div>
+<div class="grid gap-6 xl:grid-cols-2">
+  <form method="post" action="{% url 'pos-cart-add' %}" class="space-y-4 rounded-xl border bg-white p-6 shadow-sm">
+    {% csrf_token %}
+    <h2 class="text-xl font-semibold">Add item</h2>
+    {{ item_form.as_p }}
+    <button class="rounded-lg bg-slate-900 px-5 py-3 font-medium text-white" type="submit">Add to cart</button>
+  </form>
+  <section class="rounded-xl border bg-white p-6 shadow-sm">
+    <h2 class="text-xl font-semibold">Current cart</h2>
+    {% if cart and cart.lines.exists %}
+      <div class="mt-4 space-y-3">
+        {% for line in cart.lines.all %}
+          <div class="flex items-center justify-between border-b pb-3">
+            <div>
+              <p class="font-medium">{{ line.product.name }}</p>
+              <p class="text-sm text-slate-500">{{ line.quantity }} × KES {{ line.unit_price }}{% if line.discount %} · Discount KES {{ line.discount }}{% endif %}{% if line.stock_unit %} · {{ line.stock_unit.serial_number }}{% endif %}</p>
+            </div>
+            <form method="post" action="{% url 'pos-cart-remove' line.id %}">
+              {% csrf_token %}<button class="text-sm font-medium text-red-700" type="submit">Remove</button>
+            </form>
+          </div>
+        {% endfor %}
+      </div>
+      <form method="post" action="{% url 'pos-cart-complete' cart.id %}" class="mt-6 space-y-4 border-t pt-6">
+        {% csrf_token %}
+        <h3 class="font-semibold">Payment</h3>
+        {{ complete_form.as_p }}
+        <button class="rounded-lg bg-red-700 px-5 py-3 font-medium text-white" type="submit">Complete sale</button>
+      </form>
+    {% else %}
+      <p class="mt-4 text-slate-500">No items have been added.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

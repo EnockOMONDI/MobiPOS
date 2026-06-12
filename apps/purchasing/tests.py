@@ -1,0 +1,172 @@
+import pytest
+from django.contrib.auth.models import Permission
+from django.core.management import call_command
+from django.urls import reverse
+
+from apps.accounts.models import User
+from apps.catalog.models import Product
+from apps.contacts.models import Contact
+from apps.inventory.models import StockBalance
+from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization, Role
+from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, SupplierReturn
+from apps.operations.models import Payable
+
+
+@pytest.mark.django_db
+def test_purchase_staff_workflow_receives_stock(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="kipekee-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    response = client.post(reverse("purchase-create"), {
+        "supplier": supplier.id, "destination": destination.id, "product": product.id,
+        "quantity": "5", "unit_cost": "800", "notes": "Restock",
+    })
+    order = PurchaseOrder.objects.filter(organization=organization).exclude(number="").latest("created_at")
+    assert response.status_code == 302
+    assert client.post(reverse("purchase-approve", args=[order.id])).status_code == 302
+    line = order.lines.get()
+    assert client.post(reverse("purchase-receive", args=[line.id]), {"quantity": "5", "serial_numbers": ""}).status_code == 302
+
+    order.refresh_from_db()
+    assert order.status == "received"
+    assert StockBalance.objects.get(organization=organization, product=product, location=destination).quantity == 5
+    assert Payable.objects.get(purchase_order=order).outstanding_amount == 4000
+
+
+@pytest.mark.django_db
+def test_purchase_create_rejects_cross_tenant_supplier(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    own_org = Organization.objects.get(slug="kipekee-electronics")
+    other_org = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.get(organization=other_org, contact_type="supplier")
+    destination = Location.objects.get(organization=own_org, location_type="warehouse")
+    product = Product.objects.get(organization=own_org, sku="CHG-20W")
+    client.force_login(user)
+
+    response = client.post(reverse("purchase-create"), {
+        "supplier": supplier.id, "destination": destination.id, "product": product.id,
+        "quantity": "5", "unit_cost": "800",
+    })
+
+    assert response.status_code == 200
+    assert not PurchaseOrder.objects.filter(organization=own_org, supplier=supplier).exists()
+
+
+@pytest.mark.django_db
+def test_non_owner_cannot_approve_purchase(client):
+    call_command("seed_demo_data")
+    organization = Organization.objects.get(slug="kipekee-electronics")
+    staff = User.objects.create_user(username="purchase-staff", email="purchase-staff@example.com")
+    Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
+    order = PurchaseOrder.objects.create(
+        organization=organization, number="PO-AUTH",
+        supplier=Contact.objects.get(organization=organization, contact_type="supplier"),
+        destination=Location.objects.get(organization=organization, location_type="warehouse"),
+        ordered_on="2026-06-12", created_by=staff,
+    )
+    client.force_login(staff)
+
+    response = client.post(reverse("purchase-approve", args=[order.id]))
+
+    assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_purchase_form_rejects_unassigned_branch_location(client):
+    call_command("seed_demo_data")
+    organization = Organization.objects.get(slug="kipekee-electronics")
+    staff = User.objects.create_user(username="limited-purchaser", email="limited-purchaser@example.com")
+    membership = Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
+    role = Role.objects.create(organization=organization, name="Purchaser", code="purchaser")
+    role.permissions.add(Permission.objects.get(content_type__app_label="purchasing", codename="add_purchaseorder"))
+    membership.roles.add(role)
+    assigned_branch = Branch.objects.get(organization=organization)
+    membership.branches.add(assigned_branch)
+    company = Company.objects.get(organization=organization)
+    hidden_branch = Branch.objects.create(organization=organization, company=company, name="Hidden", code="HIDDEN")
+    hidden_location = Location.objects.create(
+        organization=organization, branch=hidden_branch, name="Hidden Warehouse",
+        code="HIDDEN-WH", location_type="warehouse",
+    )
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(staff)
+
+    response = client.post(reverse("purchase-create"), {
+        "supplier": supplier.id, "destination": hidden_location.id, "product": product.id,
+        "quantity": "1", "unit_cost": "800",
+    })
+
+    assert response.status_code == 200
+    assert not PurchaseOrder.objects.filter(organization=organization, created_by=staff).exists()
+
+
+@pytest.mark.django_db
+def test_supplier_return_reduces_stock_and_payable(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="kipekee-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+    client.post(reverse("purchase-create"), {
+        "supplier": supplier.id, "destination": destination.id, "product": product.id,
+        "quantity": "2", "unit_cost": "800",
+    })
+    order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+    client.post(reverse("purchase-approve", args=[order.id]))
+    line = order.lines.get()
+    client.post(reverse("purchase-receive", args=[line.id]), {"quantity": "2"})
+    client.post(reverse("supplier-return-create"), {
+        "line": line.id, "quantity": "1", "reason": "Damaged on receipt",
+    })
+    supplier_return = SupplierReturn.objects.get(line=line)
+
+    client.post(reverse("supplier-return-complete", args=[supplier_return.id]))
+
+    supplier_return.refresh_from_db()
+    order.payable.refresh_from_db()
+    assert supplier_return.status == "completed"
+    assert StockBalance.objects.get(organization=organization, product=product, location=destination).quantity == 1
+    assert order.payable.outstanding_amount == 800
+
+
+@pytest.mark.django_db
+def test_purchase_receipt_discrepancy_records_only_accepted_stock(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="kipekee-electronics")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+    client.post(reverse("purchase-create"), {
+        "supplier": Contact.objects.get(organization=organization, contact_type="supplier").id,
+        "destination": destination.id, "product": product.id, "quantity": "5", "unit_cost": "800",
+    })
+    order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+    client.post(reverse("purchase-approve", args=[order.id]))
+    line = order.lines.get()
+    client.post(reverse("purchase-receive", args=[line.id]), {
+        "quantity": "3", "damaged_quantity": "1", "close_with_discrepancy": "on",
+        "discrepancy_reason": "One damaged and one missing",
+    })
+
+    order.refresh_from_db()
+    issue = PurchaseDiscrepancy.objects.get(line=line)
+    assert order.status == "discrepancy"
+    assert issue.damaged_quantity == 1
+    assert issue.missing_quantity == 1
+    assert StockBalance.objects.get(organization=organization, product=product, location=destination).quantity == 3
+
+    client.post(reverse("purchase-discrepancy-resolve", args=[issue.id]), {"resolution": "accept_short"})
+    order.refresh_from_db()
+    issue.refresh_from_db()
+    assert order.status == "closed"
+    assert issue.status == "resolved"

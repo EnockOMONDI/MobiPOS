@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ supplier_return.number }} | Kipekee Access{% endblock %}
+{% block content %}
+<p class="text-sm text-red-700">Supplier return</p>
+<h1 class="text-3xl font-bold">{{ supplier_return.number }}</h1>
+<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+  <p><strong>Supplier:</strong> {{ supplier_return.line.order.supplier }}</p>
+  <p><strong>Product:</strong> {{ supplier_return.line.product }}</p>
+  <p><strong>Quantity:</strong> {{ supplier_return.quantity }}</p>
+  <p><strong>Reason:</strong> {{ supplier_return.reason }}</p>
+  <p><strong>Status:</strong> {{ supplier_return.get_status_display }}</p>
+  {% if supplier_return.status == "requested" %}
+  <form method="post" action="{% url 'supplier-return-complete' supplier_return.id %}" class="mt-5">
+    {% csrf_token %}<button class="rounded-lg bg-red-700 px-5 py-3 text-white">Approve and complete return</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

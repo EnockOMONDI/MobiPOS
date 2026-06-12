@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Kipekee Access{% endblock %}
+
+{% block content %}
+  <div class="mb-8">
+    <p class="text-sm font-medium text-red-700">Operational overview</p>
+    <h1 class="text-3xl font-bold">Dashboard</h1>
+    <p class="mt-2 text-slate-600">
+      Live operational overview for {{ active_organization|default:"the platform" }}.
+    </p>
+  </div>
+  <section class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+    <article class="rounded-xl border bg-red-700 p-6 text-white shadow-sm">
+      <p class="text-sm text-red-100">Sales total</p>
+      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.sales_total }}</p>
+    </article>
+    <article class="rounded-xl border bg-emerald-700 p-6 text-white shadow-sm">
+      <p class="text-sm text-emerald-100">Available serialized stock</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.stock_units }}</p>
+    </article>
+    <article class="rounded-xl border bg-amber-500 p-6 text-slate-950 shadow-sm">
+      <p class="text-sm">Expenses total</p>
+      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.expenses_total }}</p>
+    </article>
+    <article class="rounded-xl border bg-slate-800 p-6 text-white shadow-sm">
+      <p class="text-sm text-slate-300">Integration failures</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.integration_failures }}</p>
+    </article>
+    <article class="rounded-xl border bg-white p-6 shadow-sm">
+      <p class="text-sm text-slate-500">Organizations</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.organizations }}</p>
+    </article>
+    <article class="rounded-xl border bg-white p-6 shadow-sm">
+      <p class="text-sm text-slate-500">Branches</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.branches }}</p>
+    </article>
+    <article class="rounded-xl border bg-white p-6 shadow-sm">
+      <p class="text-sm text-slate-500">Active users</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.active_users }}</p>
+    </article>
+    <article class="rounded-xl border bg-white p-6 shadow-sm">
+      <p class="text-sm text-slate-500">Pending approvals</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.pending_approvals }}</p>
+    </article>
+  </section>
+{% endblock %}

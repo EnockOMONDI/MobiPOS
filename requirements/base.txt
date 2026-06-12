@@ -1,0 +1,15 @@
+Django==6.0.6
+celery==5.6.3
+dj-database-url==2.3.0
+django-axes==8.3.1
+django-ckeditor-5==0.2.18
+django-environ==0.13.0
+django-js-asset==3.1.2
+django-otp==1.7.0
+django-unfold==0.63.0
+gunicorn==23.0.0
+pillow==11.2.1
+psycopg[binary]==3.3.4
+redis==8.0.0
+sentry-sdk==2.62.0
+whitenoise==6.8.2

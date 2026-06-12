@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ payout.number }} | Kipekee Access{% endblock %}
+{% block content %}
+<p class="text-sm text-red-700">Commission payout</p>
+<h1 class="text-3xl font-bold">{{ payout.number }}</h1>
+<p>{{ payout.agent }} · {{ payout.period_start }} to {{ payout.period_end }} · KES {{ payout.amount }} · {{ payout.get_status_display }}</p>
+<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+  {% for line in payout.lines.all %}<p class="border-b py-2">{{ line.accrual.sale }} · KES {{ line.amount }}</p>{% endfor %}
+  {% if payout.status == "requested" %}
+  <form method="post" action="{% url 'commission-payout-approve' payout.id %}" class="mt-5">{% csrf_token %}<button class="rounded bg-amber-600 px-4 py-2 text-white">Approve payout</button></form>
+  {% endif %}
+  {% if payout.status == "approved" %}
+  <form method="post" action="{% url 'commission-payout-pay' payout.id %}" class="mt-5 space-y-3">{% csrf_token %}
+    <label class="block">Payment reference <input class="block rounded border px-3 py-2" name="payment_reference" required></label>
+    <button class="rounded bg-emerald-700 px-4 py-2 text-white">Mark paid</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

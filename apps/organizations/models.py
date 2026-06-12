@@ -1,0 +1,286 @@
+import uuid
+
+from django.conf import settings
+from django.contrib.auth.models import Permission
+from django.core.exceptions import ValidationError
+from django.db import models
+from django_ckeditor_5.fields import CKEditor5Field
+
+
+class TimestampedModel(models.Model):
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class OrganizationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACTIVE = "active", "Active"
+    SUSPENDED = "suspended", "Suspended"
+    CLOSED = "closed", "Closed"
+
+
+class Organization(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    slug = models.SlugField(max_length=200, unique=True)
+    status = models.CharField(
+        max_length=20,
+        choices=OrganizationStatus.choices,
+        default=OrganizationStatus.PENDING,
+    )
+    currency = models.CharField(max_length=3, default="KES")
+    timezone = models.CharField(max_length=64, default="Africa/Nairobi")
+    email = models.EmailField(blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class OrganizationOwnedModel(TimestampedModel):
+    organization = models.ForeignKey(Organization, on_delete=models.PROTECT)
+
+    class Meta:
+        abstract = True
+
+    def clean(self):
+        """Reject cross-tenant foreign keys in admin and explicit validation."""
+        super().clean()
+        if not self.organization_id:
+            return
+        for field in self._meta.fields:
+            if not field.is_relation or not field.many_to_one:
+                continue
+            if not getattr(self, field.attname, None):
+                continue
+            related = getattr(self, field.name, None)
+            related_organization_id = getattr(related, "organization_id", None)
+            if related_organization_id and related_organization_id != self.organization_id:
+                raise ValidationError(
+                    {field.name: "Related record must belong to the same organization."}
+                )
+
+
+class Company(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=32)
+    legal_name = models.CharField(max_length=255, blank=True)
+    tax_number = models.CharField(max_length=64, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "code"), name="unique_company_code_per_org"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Branch(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name="branches")
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=32)
+    email = models.EmailField(blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "code"), name="unique_branch_code_per_org"
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.company_id and self.company.organization_id != self.organization_id:
+            raise ValidationError("Branch and company must belong to the same organization.")
+
+    def __str__(self):
+        return self.name
+
+
+class LocationType(models.TextChoices):
+    WAREHOUSE = "warehouse", "Warehouse"
+    POS = "pos", "POS location"
+    IN_TRANSIT = "in_transit", "In transit"
+    REPAIR = "repair", "Repair"
+
+
+class Location(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="locations")
+    name = models.CharField(max_length=200)
+    code = models.CharField(max_length=32)
+    location_type = models.CharField(max_length=20, choices=LocationType.choices)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "code"), name="unique_location_code_per_org"
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.branch_id and self.branch.organization_id != self.organization_id:
+            raise ValidationError("Location and branch must belong to the same organization.")
+
+    def __str__(self):
+        return self.name
+
+
+class Role(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    code = models.SlugField(max_length=100)
+    description = models.TextField(blank=True)
+    permissions = models.ManyToManyField(Permission, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "code"), name="unique_role_code_per_org"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class MembershipStatus(models.TextChoices):
+    INVITED = "invited", "Invited"
+    ACTIVE = "active", "Active"
+    SUSPENDED = "suspended", "Suspended"
+
+
+class Membership(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="memberships"
+    )
+    roles = models.ManyToManyField(Role, blank=True, related_name="memberships")
+    branches = models.ManyToManyField(Branch, blank=True, related_name="memberships")
+    status = models.CharField(
+        max_length=20, choices=MembershipStatus.choices, default=MembershipStatus.INVITED
+    )
+    is_owner = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "user"), name="unique_user_membership_per_org"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user} at {self.organization}"
+
+
+class Plan(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    code = models.SlugField(max_length=100, unique=True)
+    monthly_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    limits = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return self.name
+
+
+class SubscriptionStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACTIVE = "active", "Active"
+    GRACE = "grace", "Grace period"
+    SUSPENDED = "suspended", "Suspended"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class Subscription(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name="subscriptions")
+    status = models.CharField(
+        max_length=20,
+        choices=SubscriptionStatus.choices,
+        default=SubscriptionStatus.PENDING,
+    )
+    starts_on = models.DateField(null=True, blank=True)
+    renews_on = models.DateField(null=True, blank=True)
+    grace_ends_on = models.DateField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.organization} - {self.plan}"
+
+
+class SubscriptionInvoiceStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PAID = "paid", "Paid"
+    OVERDUE = "overdue", "Overdue"
+    VOID = "void", "Void"
+
+
+class SubscriptionInvoice(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    subscription = models.ForeignKey(Subscription, on_delete=models.PROTECT, related_name="invoices")
+    number = models.CharField(max_length=40, unique=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    status = models.CharField(max_length=20, choices=SubscriptionInvoiceStatus.choices, default=SubscriptionInvoiceStatus.PENDING)
+    due_on = models.DateField()
+    paid_at = models.DateTimeField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=120, blank=True)
+
+
+class OrganizationSetting(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    key = models.SlugField(max_length=100)
+    value = models.JSONField(default=dict, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ("key",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "key"), name="unique_setting_key_per_org"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.organization}: {self.key}"
+
+
+class Announcement(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization, on_delete=models.PROTECT, null=True, blank=True
+    )
+    title = models.CharField(max_length=200)
+    body = CKEditor5Field(config_name="default")
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return self.title
+
+# Create your models here.

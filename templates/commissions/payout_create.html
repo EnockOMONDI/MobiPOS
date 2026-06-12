@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Commission payout | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Create commission payout</h1>
+<p class="mt-2 text-slate-600">Build an immutable payout snapshot from collected, payable commissions.</p>
+<form method="post" class="mt-6 max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
+  {% csrf_token %}{{ form.as_p }}
+  <button class="rounded-lg bg-red-700 px-5 py-3 text-white" type="submit">Create payout</button>
+</form>
+{% endblock %}

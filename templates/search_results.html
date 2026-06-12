@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Search | Kipekee Access{% endblock %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold">Search results</h1>
+  <p class="mt-2 text-slate-600">Results for "{{ query }}"</p>
+  <div class="mt-6 divide-y rounded-xl border bg-white shadow-sm">
+    {% for type, result in results %}
+      <div class="px-5 py-4"><span class="mr-3 rounded bg-slate-100 px-2 py-1 text-xs font-medium">{{ type }}</span>{{ result }}</div>
+    {% empty %}
+      <div class="px-5 py-8 text-center text-slate-500">No matching records.</div>
+    {% endfor %}
+  </div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}New transfer | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">New stock transfer</h1>
+<form method="post" class="mt-6 max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">{% csrf_token %}{{ form.as_p }}<button class="rounded-lg bg-red-700 px-5 py-3 text-white">Request transfer</button></form>
+{% endblock %}

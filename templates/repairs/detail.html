@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.number }} | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">{{ ticket.number }}</h1>
+<p>{{ ticket.customer }} · {{ ticket.get_status_display }} · {{ ticket.get_warranty_type_display }}</p>
+<div class="mt-6 grid gap-6 xl:grid-cols-2">
+  <section class="rounded-xl border bg-white p-6">
+    <p><strong>Issue:</strong> {{ ticket.issue }}</p>
+    <form method="post" action="{% url 'repair-update' ticket.id %}" class="mt-5 space-y-4">
+      {% csrf_token %}{{ form.as_p }}
+      <button class="rounded-lg bg-red-700 px-4 py-2 text-white">Update ticket</button>
+    </form>
+  </section>
+  <section class="rounded-xl border bg-white p-6">
+    <h2 class="text-xl font-semibold">Parts usage</h2>
+    {% for part in ticket.parts_used.all %}
+      <p class="mt-3 border-b pb-3">{{ part.product }} · {{ part.quantity }} · {{ part.location }}</p>
+    {% empty %}
+      <p class="mt-3 text-slate-500">No parts issued.</p>
+    {% endfor %}
+    <form method="post" action="{% url 'repair-use-part' ticket.id %}" class="mt-5 space-y-4">
+      {% csrf_token %}{{ part_form.as_p }}
+      <button class="rounded-lg bg-slate-900 px-4 py-2 text-white">Issue part</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

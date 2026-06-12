@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Approval inbox | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Approval inbox</h1>
+<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+{% for approval in approvals %}
+  <a class="block border-b py-3 hover:text-red-700" href="{% url 'approval-detail' approval.id %}">
+    {{ approval.display_type }} · {{ approval.reason }} · {{ approval.get_status_display }}
+  </a>
+{% empty %}<p class="text-slate-500">No approval requests.</p>{% endfor %}
+</div>
+{% endblock %}

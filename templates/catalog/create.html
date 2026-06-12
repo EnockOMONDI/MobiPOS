@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">{{ title }}</h1>
+<form method="post" class="mt-6 max-w-3xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
+  {% csrf_token %}{{ form.as_p }}
+  <button class="rounded-lg bg-red-700 px-5 py-3 text-white" type="submit">Save</button>
+</form>
+{% endblock %}

@@ -1,0 +1,59 @@
+services:
+  - type: web
+    name: kipekee-access-web
+    runtime: python
+    buildCommand: pip install -r requirements/base.txt && npm ci && npm run css:build && python manage.py collectstatic --noinput
+    preDeployCommand: python manage.py check --deploy && python manage.py migrate
+    startCommand: gunicorn config.wsgi:application
+    healthCheckPath: /health/ready/
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: CSRF_TRUSTED_ORIGINS
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: INTEGRATION_MODE
+        value: disabled
+  - type: worker
+    name: kipekee-access-worker
+    runtime: python
+    buildCommand: pip install -r requirements/base.txt
+    startCommand: celery -A config worker -l info
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: INTEGRATION_MODE
+        value: disabled
+  - type: worker
+    name: kipekee-access-scheduler
+    runtime: python
+    buildCommand: pip install -r requirements/base.txt
+    startCommand: celery -A config beat -l info
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: INTEGRATION_MODE
+        value: disabled

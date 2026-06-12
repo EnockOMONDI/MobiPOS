@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Operational report | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Operational report</h1>
+<div class="mt-6 grid gap-4 md:grid-cols-3">
+  <div class="rounded-xl border bg-white p-5">Revenue<br><strong>KES {{ revenue }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Gross profit<br><strong>KES {{ gross_profit }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Operational profit<br><strong>KES {{ operational_profit }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Expenses<br><strong>KES {{ expenses }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Receivables<br><strong>KES {{ receivable_total }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Payables<br><strong>KES {{ payable_total }}</strong></div>
+  <div class="rounded-xl border bg-white p-5">Overdue<br><strong>KES {{ overdue_total }}</strong></div>
+</div>
+<div class="mt-6 rounded-xl border bg-white p-5">
+  <h2 class="font-semibold">Stock balances</h2>
+  {% for balance in stock_balances %}<p class="border-t py-2">{{ balance.product }} · {{ balance.location }} · {{ balance.quantity }}</p>{% endfor %}
+</div>
+{% endblock %}

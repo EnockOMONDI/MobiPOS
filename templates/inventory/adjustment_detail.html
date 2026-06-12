@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ adjustment.number }} | Kipekee Access{% endblock %}
+{% block content %}
+<p class="text-sm text-red-700">Stock adjustment</p>
+<h1 class="text-3xl font-bold">{{ adjustment.number }}</h1>
+<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+  <p><strong>Product:</strong> {{ adjustment.product }}</p>
+  <p><strong>Location:</strong> {{ adjustment.location }}</p>
+  <p><strong>Quantity:</strong> {{ adjustment.quantity }}</p>
+  <p><strong>Reason:</strong> {{ adjustment.reason }}</p>
+  <p><strong>Status:</strong> {{ adjustment.get_status_display }}</p>
+  {% if adjustment.status == "requested" %}
+  <form method="post" action="{% url 'stock-adjustment-complete' adjustment.id %}" class="mt-5">
+    {% csrf_token %}<button class="rounded-lg bg-red-700 px-5 py-3 text-white">Approve and post adjustment</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

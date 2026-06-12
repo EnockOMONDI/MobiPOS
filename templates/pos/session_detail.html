@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ session.number }} | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Cashier session {{ session.number }}</h1><p>{{ session.location }} · {{ session.get_status_display }}</p>
+<div class="mt-6 grid gap-4 md:grid-cols-4"><div class="rounded-xl border bg-white p-5">Opening float<br><strong>KES {{ session.opening_float }}</strong></div><div class="rounded-xl border bg-white p-5">Expected cash<br><strong>KES {{ session.expected_cash }}</strong></div><div class="rounded-xl border bg-white p-5">Actual cash<br><strong>KES {{ session.actual_cash|default:"—" }}</strong></div><div class="rounded-xl border bg-white p-5">Variance<br><strong>KES {{ session.variance }}</strong></div></div>
+{% if session.status == "open" %}<form method="post" action="{% url 'session-close' session.id %}" class="mt-6 max-w-xl space-y-4 rounded-xl border bg-white p-5">{% csrf_token %}{{ form.as_p }}<button class="rounded-lg bg-red-700 px-4 py-2 text-white">Close session</button></form>{% endif %}
+{% if session.status == "closed" %}<form method="post" action="{% url 'session-review' session.id %}" class="mt-6">{% csrf_token %}<button class="rounded-lg bg-emerald-700 px-4 py-2 text-white">Manager review complete</button></form>{% endif %}
+{% endblock %}

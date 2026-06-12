@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Approval request | Kipekee Access{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">{{ approval.display_type }}</h1>
+<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
+  <p><strong>Reason:</strong> {{ approval.reason }}</p>
+  <p><strong>Requested by:</strong> {{ approval.requested_by }}</p>
+  {% if approval.request_type == "access_request" %}<p><strong>Requested access:</strong> {{ approval.requested_permission_code }}</p>{% endif %}
+  <p><strong>Status:</strong> {{ approval.get_status_display }}</p>
+  {% if approval.status == "pending" %}
+  <form method="post" action="{% url 'approval-decide' approval.id %}" class="mt-5 flex gap-3">{% csrf_token %}
+    <button name="decision" value="approved" class="rounded bg-emerald-700 px-4 py-2 text-white">Approve</button>
+    <button name="decision" value="rejected" class="rounded bg-red-700 px-4 py-2 text-white">Reject</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

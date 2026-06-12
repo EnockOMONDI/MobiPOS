@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}New sale | Kipekee Access{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <p class="text-sm font-medium text-red-700">{{ location }}</p>
+    <h1 class="text-3xl font-bold">New sale</h1>
+    <p class="mt-2 text-slate-600">Sell serialized phones and quantity-based accessories from one checkout.</p>
+  </div>
+  <form method="post" class="max-w-2xl space-y-5 rounded-xl border bg-white p-6 shadow-sm">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit" class="rounded-lg bg-red-700 px-6 py-3 font-medium text-white hover:bg-red-800">Complete sale</button>
+  </form>
+{% endblock %}
