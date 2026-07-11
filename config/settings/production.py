@@ -12,8 +12,13 @@ if SECRET_KEY == "unsafe-local-development-key":  # noqa: F405
     raise ImproperlyConfigured("Production requires a strong SECRET_KEY.")
 if not ALLOWED_HOSTS:  # noqa: F405
     raise ImproperlyConfigured("Production requires ALLOWED_HOSTS.")
-if not os.environ.get("REDIS_URL"):
-    raise ImproperlyConfigured("Production requires REDIS_URL for background work.")
+BACKGROUND_WORKERS_ENABLED = os.environ.get("BACKGROUND_WORKERS_ENABLED", "false").lower() == "true"
+if BACKGROUND_WORKERS_ENABLED and not os.environ.get("REDIS_URL"):
+    raise ImproperlyConfigured("Production background workers require REDIS_URL.")
+if not BACKGROUND_WORKERS_ENABLED and not os.environ.get("REDIS_URL"):
+    CELERY_TASK_ALWAYS_EAGER = True  # noqa: F405
+    CELERY_BROKER_URL = "memory://"  # noqa: F405
+    CELERY_RESULT_BACKEND = "cache+memory://"  # noqa: F405
 INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "disabled")
 if INTEGRATION_MODE == "sandbox":
     raise ImproperlyConfigured("Sandbox integration adapters cannot run in production.")
