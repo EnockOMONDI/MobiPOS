@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Retail analytics | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-bold uppercase tracking-wider text-red-700">SYSCO parity report</p>
+    <h1 class="mt-1 text-3xl font-bold">Retail analytics</h1>
+    <p class="mt-2 text-slate-600">Sales, purchases, serials, expenses, commissions, and payments in one branch-scoped report.</p>
+  </div>
+  <a class="btn-secondary" href="?start={{ start|date:'Y-m-d' }}&end={{ end|date:'Y-m-d' }}{% if selected_branch %}&branch={{ selected_branch.id }}{% endif %}&format=csv">Export CSV</a>
+</div>
+
+<form method="get" class="card mt-6 grid gap-4 p-5 md:grid-cols-4">
+  <div>
+    <label class="text-sm font-semibold text-slate-700" for="start">Start date</label>
+    <input id="start" name="start" type="date" value="{{ start|date:'Y-m-d' }}" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+  </div>
+  <div>
+    <label class="text-sm font-semibold text-slate-700" for="end">End date</label>
+    <input id="end" name="end" type="date" value="{{ end|date:'Y-m-d' }}" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+  </div>
+  <div>
+    <label class="text-sm font-semibold text-slate-700" for="branch">Branch</label>
+    <select id="branch" name="branch" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+      <option value="">All accessible branches</option>
+      {% for branch in branches %}
+        <option value="{{ branch.id }}"{% if selected_branch and selected_branch.id == branch.id %} selected{% endif %}>{{ branch.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="flex items-end">
+    <button class="btn-primary w-full">Apply filters</button>
+  </div>
+</form>
+
+<section class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Sales</p><p class="mt-2 text-2xl font-bold">KES {{ summary.sales_total }}</p><p class="text-sm text-slate-500">{{ summary.sales_count }} receipts</p></article>
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Gross profit</p><p class="mt-2 text-2xl font-bold">KES {{ summary.gross_profit }}</p></article>
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Purchases</p><p class="mt-2 text-2xl font-bold">KES {{ summary.purchase_value }}</p></article>
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Expenses</p><p class="mt-2 text-2xl font-bold">KES {{ summary.expense_total }}</p></article>
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Commissions</p><p class="mt-2 text-2xl font-bold">KES {{ summary.commission_total }}</p></article>
+  <article class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Period</p><p class="mt-2 text-lg font-bold">{{ start|date:"d M" }} - {{ end|date:"d M Y" }}</p></article>
+</section>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-2">
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Sales by branch</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Branch</th><th class="py-2">Receipts</th><th class="py-2 text-right">Sales</th></tr></thead><tbody class="divide-y">{% for row in sales_by_branch %}<tr><td class="py-2">{{ row.location__branch__name }}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No sales in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Sales by agent</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Agent</th><th class="py-2">Receipts</th><th class="py-2 text-right">Sales</th></tr></thead><tbody class="divide-y">{% for row in sales_by_agent %}<tr><td class="py-2">{{ row.agent__first_name }} {{ row.agent__last_name }}{% if not row.agent__first_name and not row.agent__last_name %}{{ row.agent__username }}{% endif %}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No agent sales in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Purchases by supplier</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Supplier</th><th class="py-2">Orders</th><th class="py-2 text-right">Value</th></tr></thead><tbody class="divide-y">{% for row in purchases_by_supplier %}<tr><td class="py-2">{{ row.supplier__name }}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No purchases in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Payment methods</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Method</th><th class="py-2">Payments</th><th class="py-2 text-right">Amount</th></tr></thead><tbody class="divide-y">{% for row in payment_methods %}<tr><td class="py-2">{{ row.method|title }}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No confirmed payments in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Expenses by category</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Category</th><th class="py-2">Entries</th><th class="py-2 text-right">Amount</th></tr></thead><tbody class="divide-y">{% for row in expenses_by_category %}<tr><td class="py-2">{{ row.category }}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No expenses in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Commissions by agent</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Agent</th><th class="py-2">Accruals</th><th class="py-2 text-right">Amount</th></tr></thead><tbody class="divide-y">{% for row in commissions_by_agent %}<tr><td class="py-2">{{ row.agent__first_name }} {{ row.agent__last_name }}{% if not row.agent__first_name and not row.agent__last_name %}{{ row.agent__username }}{% endif %}</td><td class="py-2">{{ row.count }}</td><td class="py-2 text-right">KES {{ row.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="3">No commissions in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+</div>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Serial status</h2>
+    <div class="mt-4 space-y-3">{% for row in serial_status %}<div class="flex justify-between rounded-xl bg-slate-50 p-3 text-sm"><span>{{ row.status|title }}</span><strong>{{ row.count }}</strong></div>{% empty %}<p class="text-sm text-slate-500">No serialized stock in scope.</p>{% endfor %}</div>
+  </section>
+  <section class="card p-5 xl:col-span-2">
+    <h2 class="text-lg font-bold">Recent sales in period</h2>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-left text-sm"><thead class="text-xs uppercase text-slate-500"><tr><th class="py-2">Date</th><th class="py-2">Receipt</th><th class="py-2">Branch</th><th class="py-2">Customer</th><th class="py-2 text-right">Total</th></tr></thead><tbody class="divide-y">{% for sale in recent_sales %}<tr><td class="py-2">{{ sale.created_at|date:"d/m/Y" }}</td><td class="py-2"><a class="font-bold text-red-700" href="{% url 'sale-detail' sale.id %}">{{ sale.number }}</a></td><td class="py-2">{{ sale.location.branch.name }}</td><td class="py-2">{{ sale.customer|default:"Walk-in" }}</td><td class="py-2 text-right">KES {{ sale.total }}</td></tr>{% empty %}<tr><td class="py-6 text-slate-500" colspan="5">No recent sales in this period.</td></tr>{% endfor %}</tbody></table>
+    </div>
+  </section>
+</div>
+{% endblock %}

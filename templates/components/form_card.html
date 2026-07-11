@@ -1,0 +1,9 @@
+<form method="post" class="card mt-6 max-w-3xl space-y-5 p-6 sm:p-8">
+  {% csrf_token %}
+  {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+  {{ form.as_p }}
+  <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+    <button class="btn-primary" type="submit">{{ submit_label|default:"Save changes" }}</button>
+    {% if cancel_url %}<a class="btn-secondary" href="{{ cancel_url }}">Cancel</a>{% endif %}
+  </div>
+</form>

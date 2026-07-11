@@ -11,7 +11,7 @@ from apps.organizations.models import Branch, Organization
 def test_expense_submit_and_owner_approve(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     branch = Branch.objects.get(organization=organization)
     client.force_login(user)
 

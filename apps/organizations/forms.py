@@ -9,8 +9,10 @@ TENANT_ROLE_PERMISSION_CODES = (
     "catalog.add_brand",
     "catalog.add_category",
     "catalog.add_product",
+    "catalog.change_product",
     "catalog.view_product",
     "contacts.add_contact",
+    "contacts.change_contact",
     "contacts.view_contact",
     "expenses.add_expense",
     "expenses.view_expense",
@@ -86,7 +88,6 @@ class TenantUserForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
     phone_number = forms.CharField(max_length=32, required=False)
-    password = forms.CharField(widget=forms.PasswordInput, min_length=10)
     branches = forms.ModelMultipleChoiceField(queryset=Branch.objects.none())
     roles = forms.ModelMultipleChoiceField(queryset=Role.objects.none(), required=False)
 
@@ -107,6 +108,18 @@ class TenantUserForm(forms.Form):
         if get_user_model().objects.filter(email=email).exists():
             raise forms.ValidationError("This email is already in use.")
         return email
+
+
+class InvitationAcceptForm(forms.Form):
+    password = forms.CharField(widget=forms.PasswordInput, min_length=10)
+    password_confirm = forms.CharField(widget=forms.PasswordInput, min_length=10)
+    accept_terms = forms.BooleanField(label="I accept the organization policies and terms")
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("password") and cleaned.get("password") != cleaned.get("password_confirm"):
+            self.add_error("password_confirm", "Passwords do not match.")
+        return cleaned
 
 
 class MembershipAccessForm(forms.ModelForm):

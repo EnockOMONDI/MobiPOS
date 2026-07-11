@@ -58,7 +58,7 @@ def test_stock_ledger_rejects_serial_from_another_product_or_location():
 def test_owner_approved_adjustment_posts_ledger_movement(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="kipekee-electronics")
+    org = Organization.objects.get(slug="mobipos-electronics")
     product = Product.objects.get(organization=org, sku="CHG-20W")
     location = Location.objects.get(organization=org, location_type="warehouse")
     client.force_login(user)

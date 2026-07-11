@@ -35,13 +35,10 @@ def purchase_create(request):
             notes=form.cleaned_data["notes"],
             created_by=request.user,
         )
-        PurchaseOrderLine.objects.create(
-            organization=request.organization,
-            order=order,
-            product=form.cleaned_data["product"],
-            quantity=form.cleaned_data["quantity"],
-            unit_cost=form.cleaned_data["unit_cost"],
-        )
+        PurchaseOrderLine.objects.bulk_create([
+            PurchaseOrderLine(organization=request.organization, order=order, **line)
+            for line in form.cleaned_data["lines"]
+        ])
         record_audit_event(action="purchase.created", actor=request.user, organization=request.organization, target=order, request=request)
         messages.success(request, f"Purchase order {order.number} created.")
         return redirect("purchase-detail", order_id=order.id)

@@ -194,6 +194,32 @@ class Membership(OrganizationOwnedModel):
         return f"{self.user} at {self.organization}"
 
 
+class InvitationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    REVOKED = "revoked", "Revoked"
+    EXPIRED = "expired", "Expired"
+
+
+class Invitation(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    membership = models.OneToOneField(Membership, on_delete=models.CASCADE, related_name="invitation")
+    invited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="sent_invitations"
+    )
+    status = models.CharField(max_length=20, choices=InvitationStatus.choices, default=InvitationStatus.PENDING)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"Invitation for {self.membership.user} to {self.organization}"
+
+
 class Plan(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)

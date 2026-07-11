@@ -3,6 +3,119 @@
 @source "../templates";
 @source "../apps";
 
+@layer base {
+  input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+  select,
+  textarea {
+    max-width: 100%;
+  }
+
+  :focus-visible {
+    outline: 2px solid #b91c1c;
+    outline-offset: 2px;
+  }
+
+  form p {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  form p > label {
+    color: #334155;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  form input:not([type="checkbox"], [type="radio"], [type="hidden"]),
+  form select,
+  form textarea {
+    width: 100%;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: white;
+    padding: 0.7rem 0.85rem;
+    color: #0f172a;
+  }
+
+  form input:focus,
+  form select:focus,
+  form textarea:focus {
+    border-color: #b91c1c;
+    box-shadow: 0 0 0 3px rgb(185 28 28 / 0.12);
+    outline: none;
+  }
+
+  form .helptext {
+    color: #64748b;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+  }
+
+  form .errorlist {
+    color: #b91c1c;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    border-radius: 0.75rem;
+    background: #0f172a;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 700;
+    padding: 0.7rem 1rem;
+  }
+
+  .btn-secondary {
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: white;
+    color: #334155;
+    font-size: 0.875rem;
+    font-weight: 700;
+    padding: 0.65rem 1rem;
+  }
+
+  .btn-danger {
+    border-radius: 0.75rem;
+    background: #b91c1c;
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 700;
+    padding: 0.7rem 1rem;
+  }
+
+  .card {
+    border: 1px solid #e2e8f0;
+    border-radius: 1rem;
+    background: white;
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+  }
+
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.3rem 0.65rem;
+  }
+
+  .status-badge-active {
+    background: #d1fae5;
+    color: #047857;
+  }
+
+  .status-badge-inactive {
+    background: #fee2e2;
+    color: #b91c1c;
+  }
+}
+
 [x-cloak] {
   display: none !important;
 }

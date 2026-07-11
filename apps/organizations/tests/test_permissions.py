@@ -31,6 +31,29 @@ def test_role_permission_is_scoped_to_active_membership():
 
 
 @pytest.mark.django_db
+def test_role_permissions_are_cached_per_user_and_organization(django_assert_num_queries):
+    user = User.objects.create_user(username="cached-manager", email="cached@example.com")
+    organization = Organization.objects.create(name="Cached", slug="cached", status="active")
+    membership = Membership.objects.create(
+        user=user, organization=organization, status=MembershipStatus.ACTIVE,
+    )
+    permissions = Permission.objects.filter(
+        content_type__app_label="organizations",
+        codename__in=("view_branch", "add_branch"),
+    )
+    role = Role.objects.create(organization=organization, name="Manager", code="cached-manager")
+    role.permissions.set(permissions)
+    membership.roles.add(role)
+    user._organization_permission_cache_enabled = True
+
+    with django_assert_num_queries(5):
+        assert user_has_organization_permission(user, organization, "organizations.view_branch")
+    with django_assert_num_queries(0):
+        assert user_has_organization_permission(user, organization, "organizations.add_branch")
+        assert not user_has_organization_permission(user, organization, "organizations.delete_branch")
+
+
+@pytest.mark.django_db
 def test_non_owner_is_limited_to_assigned_branches():
     user = User.objects.create_user(username="branchstaff", email="branchstaff@example.com")
     organization = Organization.objects.create(name="Branch Org", slug="branch-org", status="active")
@@ -59,8 +82,10 @@ def test_owner_privileged_action_requires_verified_otp():
 
     protected = organization_owner_required(lambda request: "ok")
 
-    with pytest.raises(PermissionDenied):
-        protected(request)
+    response = protected(request)
+
+    assert response.status_code == 302
+    assert response.url.startswith("/accounts/mfa/verify/")
 
 
 @pytest.mark.django_db

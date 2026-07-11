@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ order.number }} | Kipekee Access{% endblock %}
+{% block title %}{{ order.number }} | MobiPOS{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between"><div><p class="text-sm text-red-700">Purchase order</p><h1 class="text-3xl font-bold">{{ order.number }}</h1><p>{{ order.supplier }} → {{ order.destination }} · {{ order.get_status_display }}</p></div>
 {% if order.status == "draft" %}<form method="post" action="{% url 'purchase-approve' order.id %}">{% csrf_token %}<button class="rounded-lg bg-red-700 px-5 py-3 text-white">Approve</button></form>{% endif %}</div>

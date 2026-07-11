@@ -30,13 +30,10 @@ def transfer_create(request):
             requested_by=request.user,
             notes=form.cleaned_data["notes"],
         )
-        StockTransferLine.objects.create(
-            organization=request.organization,
-            transfer=transfer,
-            product=form.cleaned_data["product"],
-            stock_unit=form.cleaned_data["stock_unit"],
-            quantity=form.cleaned_data["quantity"],
-        )
+        StockTransferLine.objects.bulk_create([
+            StockTransferLine(organization=request.organization, transfer=transfer, **line)
+            for line in form.cleaned_data["lines"]
+        ])
         record_audit_event(action="transfer.requested", actor=request.user, organization=request.organization, target=transfer, request=request)
         return redirect("transfer-detail", transfer_id=transfer.id)
     return render(request, "transfers/create.html", {"form": form})

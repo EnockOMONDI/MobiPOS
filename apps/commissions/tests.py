@@ -52,7 +52,7 @@ def test_commission_becomes_payable_after_full_collection():
 def test_owner_approves_and_pays_commission_batch(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="kipekee-electronics")
+    org = Organization.objects.get(slug="mobipos-electronics")
     client.force_login(owner)
     today = timezone.localdate()
 

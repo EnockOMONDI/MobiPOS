@@ -1,9 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Add customer or supplier | Kipekee Access{% endblock %}
+{% block title %}Add customer or supplier | MobiPOS{% endblock %}
 {% block content %}
-<h1 class="text-3xl font-bold">Add customer or supplier</h1>
-<form method="post" class="mt-6 max-w-3xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
-  {% csrf_token %}{{ form.as_p }}
-  <button class="rounded-lg bg-red-700 px-5 py-3 text-white" type="submit">Save contact</button>
-</form>
+<p class="text-sm font-semibold text-red-700">Customers and suppliers</p>
+<h1 class="mt-1 text-3xl font-bold">{{ title }}</h1>
+<p class="mt-2 text-slate-600">Maintain identity, contact, tax, payment terms, and credit settings.</p>
+{% include "components/form_card.html" %}
 {% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{{ contact.name }} statement | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Statement</p>
+    <h1 class="mt-1 text-3xl font-bold">{{ contact.name }}</h1>
+    <p class="mt-2 text-slate-600">{{ contact.get_contact_type_display }} · Generated from live sales, payments, receivables, and payables.</p>
+  </div>
+  <button onclick="window.print()" class="btn-secondary">Print statement</button>
+</div>
+<div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Sales</p><p class="mt-2 text-2xl font-bold">KES {{ sales_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Payments</p><p class="mt-2 text-2xl font-bold">KES {{ payments_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Receivable</p><p class="mt-2 text-2xl font-bold">KES {{ receivable_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Payable</p><p class="mt-2 text-2xl font-bold">KES {{ payable_total }}</p></div>
+</div>
+<div class="mt-6 grid gap-6 xl:grid-cols-2">
+  <section class="card p-6"><h2 class="text-lg font-bold">Sales</h2>{% for sale in sales %}<a href="{% url 'sale-detail' sale.id %}" class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ sale.number }} · {{ sale.get_status_display }}</span><strong>KES {{ sale.total }}</strong></a>{% empty %}<p class="mt-3 text-sm text-slate-500">No sales.</p>{% endfor %}</section>
+  <section class="card p-6"><h2 class="text-lg font-bold">Payments</h2>{% for payment in payments %}<div class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ payment.number }} · {{ payment.get_method_display }} · {{ payment.get_status_display }}</span><strong>KES {{ payment.amount }}</strong></div>{% empty %}<p class="mt-3 text-sm text-slate-500">No payments.</p>{% endfor %}</section>
+  <section class="card p-6"><h2 class="text-lg font-bold">Receivables</h2>{% for receivable in receivables %}<a href="{% url 'sale-detail' receivable.sale_id %}" class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ receivable.sale.number }} · Due {{ receivable.due_on }}</span><strong>KES {{ receivable.outstanding_amount }}</strong></a>{% empty %}<p class="mt-3 text-sm text-slate-500">No receivables.</p>{% endfor %}</section>
+  <section class="card p-6"><h2 class="text-lg font-bold">Payables</h2>{% for payable in payables %}<a href="{% url 'purchase-detail' payable.purchase_order_id %}" class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ payable.purchase_order.number }} · Due {{ payable.due_on }}</span><strong>KES {{ payable.outstanding_amount }}</strong></a>{% empty %}<p class="mt-3 text-sm text-slate-500">No payables.</p>{% endfor %}</section>
+</div>
+{% endblock %}

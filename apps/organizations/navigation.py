@@ -34,10 +34,11 @@ def item(label, url_name, icon, permission=None, args=(), owner_only=False, requ
 NAVIGATION_GROUPS = (
     ("Overview", "sparkles", (
         item("Dashboard", "dashboard", "home"),
-        item("Approval inbox", "approval-inbox", "lock", owner_only=True, requestable=False),
+        item("Approval inbox", "approval-inbox", "lock"),
         item("Notifications", "notification-list", "bell"),
     )),
     ("Sales & POS", "cart", (
+        item("Open register", "session-open", "wallet", "sales.add_sale"),
         item("New sale", "pos-cart", "cart", "sales.add_sale"),
         item("Sales register", "module-overview", "chart", "sales.view_sale", ("sales",)),
         item("Payments", "module-overview", "wallet", "payments.view_payment", ("payments",)),
@@ -76,11 +77,15 @@ NAVIGATION_GROUPS = (
     )),
     ("Reports", "chart", (
         item("Operational report", "operational-report", "chart"),
+        item("Retail analytics", "retail-analytics-report", "chart"),
+        item("IMEI history", "imei-history", "box", "inventory.view_stockunit"),
+        item("Aged stock", "module-overview", "chart", "inventory.view_stockunit", ("aged-stock",)),
         item("Exception and aging report", "exception-report", "chart", owner_only=True, requestable=False),
     )),
     ("Administration", "cog", (
         item("Users and access", "membership-access-list", "cog", owner_only=True, requestable=False),
         item("Roles and permissions", "module-overview", "lock", owner_only=True, args=("roles",), requestable=False),
+        item("Approval policies", "approval-policy-list", "lock", owner_only=True, requestable=False),
         item("Branches", "module-overview", "box", owner_only=True, args=("branches",), requestable=False),
         item("Locations", "module-overview", "box", owner_only=True, args=("locations",), requestable=False),
         item("Subscriptions", "module-overview", "wallet", owner_only=True, args=("subscriptions",), requestable=False),

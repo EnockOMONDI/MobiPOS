@@ -1,11 +1,107 @@
 from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from decimal import Decimal
+
+from django.db import models, transaction
+from django.utils import timezone
 
 from apps.organizations.forms import TENANT_ROLE_PERMISSION_CODES
 from apps.organizations.models import Membership, Role
 
-from .models import ApprovalRequest, ApprovalStatus
+from .models import ApprovalPolicy, ApprovalRequest, ApprovalStatus, InstallmentStatus, ReceivableInstallment
+
+
+def matching_approval_policy(*, organization, request_type, amount=Decimal("0"), branch=None):
+    policies = ApprovalPolicy.objects.filter(
+        organization=organization,
+        request_type=request_type,
+        is_active=True,
+        minimum_amount__lte=amount,
+    ).filter(branch__isnull=True) if branch is None else ApprovalPolicy.objects.filter(
+        organization=organization,
+        request_type=request_type,
+        is_active=True,
+        minimum_amount__lte=amount,
+    ).filter(models.Q(branch__isnull=True) | models.Q(branch=branch))
+    return policies.order_by("-minimum_amount", "-branch_id").first()
+
+
+def user_can_decide_approval(*, user, approval):
+    membership = Membership.objects.filter(
+        organization=approval.organization,
+        user=user,
+        status="active",
+    ).prefetch_related("roles").first()
+    if user.is_superuser or user.is_platform_admin or (membership and membership.is_owner):
+        allowed = True
+    elif approval.policy_id and membership:
+        allowed = approval.policy.approver_roles.filter(id__in=membership.roles.values("id")).exists()
+    else:
+        allowed = False
+    if allowed and approval.policy_id and approval.policy.require_separate_approver:
+        return approval.requested_by_id != user.id
+    return allowed
+
+
+@transaction.atomic
+def request_approval(*, organization, request_type, target, requested_by, reason, amount=Decimal("0"), branch=None):
+    policy = matching_approval_policy(
+        organization=organization, request_type=request_type, amount=amount, branch=branch
+    )
+    approval, _ = ApprovalRequest.objects.update_or_create(
+        organization=organization,
+        request_type=request_type,
+        target_type=target._meta.label,
+        target_id=str(target.pk),
+        defaults={
+            "reason": reason,
+            "requested_by": requested_by,
+            "amount": amount,
+            "branch": branch,
+            "policy": policy,
+            "status": ApprovalStatus.PENDING,
+            "decided_by": None,
+            "decided_at": None,
+        },
+    )
+    return approval
+
+
+@transaction.atomic
+def replace_installment_schedule(*, receivable, entries):
+    receivable.installments.all().delete()
+    ReceivableInstallment.objects.bulk_create([
+        ReceivableInstallment(
+            organization=receivable.organization,
+            receivable=receivable,
+            sequence=index,
+            due_on=due_on,
+            amount=amount,
+        )
+        for index, (due_on, amount) in enumerate(entries, start=1)
+    ])
+    sync_receivable_installments(receivable=receivable)
+    return receivable.installments.all()
+
+
+@transaction.atomic
+def sync_receivable_installments(*, receivable):
+    allocated = max(receivable.original_amount - receivable.outstanding_amount, Decimal("0"))
+    today = timezone.localdate()
+    for installment in receivable.installments.select_for_update().order_by("sequence"):
+        paid_amount = min(allocated, installment.amount)
+        allocated -= paid_amount
+        if paid_amount >= installment.amount:
+            status = InstallmentStatus.PAID
+        elif paid_amount > 0:
+            status = InstallmentStatus.PART_PAID
+        elif installment.due_on < today:
+            status = InstallmentStatus.OVERDUE
+        else:
+            status = InstallmentStatus.PENDING
+        installment.paid_amount = paid_amount
+        installment.status = status
+        installment.save(update_fields=["paid_amount", "status", "updated_at"])
 
 
 @transaction.atomic

@@ -19,9 +19,10 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from apps.reports.views import dashboard
-from apps.reports.views import global_search, module_overview
-from apps.organizations.views import branch_create, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
-from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, checkout, close_session, review_session, session_detail
+from apps.reports.views import global_search, imei_history, module_overview
+from apps.organizations.views import branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
+from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
+from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, open_session, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
 from apps.transfers.views import transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_receive
 from apps.sales.views import return_approve_complete, sale_add_payment, sale_detail, sale_request_return
@@ -30,11 +31,12 @@ from apps.repairs.views import repair_create, repair_detail, repair_update, repa
 from apps.notifications.views import notification_list, notification_read
 from apps.reports.operational import operational_report
 from apps.reports.advanced import exception_report
+from apps.reports.retail import retail_analytics_report
 from apps.inventory.views import stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
 from apps.commissions.views import commission_payout_approve, commission_payout_create, commission_payout_detail, commission_payout_pay
-from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox
-from apps.catalog.views import brand_create, category_create, product_create
-from apps.contacts.views import contact_create
+from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox, approval_policy_create, approval_policy_list, receivable_installment_schedule
+from apps.catalog.views import brand_create, category_create, product_create, product_detail, product_toggle_active, product_update
+from apps.contacts.views import contact_create, contact_detail, contact_statement, contact_toggle_active, contact_update
 from config.views import health_live, health_ready
 
 urlpatterns = [
@@ -44,18 +46,23 @@ urlpatterns = [
     path("register/", register_organization, name="register-organization"),
     path("subscriptions/invoices/<uuid:invoice_id>/activate/", subscription_invoice_activate, name="subscription-invoice-activate"),
     path("users/new/", tenant_user_create, name="tenant-user-create"),
+    path("invitations/<uuid:token>/accept/", invitation_accept, name="invitation-accept"),
+    path("invitations/<uuid:invitation_id>/resend/", invitation_resend, name="invitation-resend"),
+    path("invitations/<uuid:invitation_id>/revoke/", invitation_revoke, name="invitation-revoke"),
     path("users/access/", membership_access_list, name="membership-access-list"),
     path("users/access/<uuid:membership_id>/", membership_access_update, name="membership-access-update"),
     path("branches/new/", branch_create, name="branch-create"),
     path("locations/new/", location_create, name="location-create"),
     path("roles/new/", role_create, name="role-create"),
     path("pos/checkout/", checkout, name="pos-checkout"),
+    path("pos/sessions/open/", open_session, name="session-open"),
     path("pos/cart/", cart_detail, name="pos-cart"),
     path("pos/cart/add/", cart_add, name="pos-cart-add"),
     path("pos/cart/lines/<uuid:line_id>/remove/", cart_remove, name="pos-cart-remove"),
     path("pos/cart/<uuid:sale_id>/complete/", cart_complete, name="pos-cart-complete"),
     path("pos/sessions/<uuid:session_id>/", session_detail, name="session-detail"),
     path("pos/sessions/<uuid:session_id>/close/", close_session, name="session-close"),
+    path("pos/sessions/<uuid:session_id>/cash-movements/", cash_movement_create, name="cash-movement-create"),
     path("pos/sessions/<uuid:session_id>/review/", review_session, name="session-review"),
     path("sales/<uuid:sale_id>/", sale_detail, name="sale-detail"),
     path("sales/<uuid:sale_id>/payment/", sale_add_payment, name="sale-add-payment"),
@@ -69,7 +76,9 @@ urlpatterns = [
     path("repairs/<uuid:ticket_id>/parts/", repair_use_part, name="repair-use-part"),
     path("notifications/", notification_list, name="notification-list"),
     path("notifications/<uuid:notification_id>/read/", notification_read, name="notification-read"),
+    path("reports/imei-history/", imei_history, name="imei-history"),
     path("reports/operational/", operational_report, name="operational-report"),
+    path("reports/retail-analytics/", retail_analytics_report, name="retail-analytics-report"),
     path("reports/exceptions/", exception_report, name="exception-report"),
     path("inventory/adjustments/new/", stock_adjustment_create, name="stock-adjustment-create"),
     path("inventory/adjustments/<uuid:adjustment_id>/", stock_adjustment_detail, name="stock-adjustment-detail"),
@@ -82,11 +91,21 @@ urlpatterns = [
     path("approvals/", approval_inbox, name="approval-inbox"),
     path("approvals/<uuid:approval_id>/", approval_detail, name="approval-detail"),
     path("approvals/<uuid:approval_id>/decide/", approval_decide, name="approval-decide"),
+    path("approval-policies/", approval_policy_list, name="approval-policy-list"),
+    path("approval-policies/new/", approval_policy_create, name="approval-policy-create"),
     path("access-requests/new/", access_request_create, name="access-request-create"),
+    path("receivables/<uuid:receivable_id>/installments/", receivable_installment_schedule, name="receivable-installment-schedule"),
     path("catalog/categories/new/", category_create, name="category-create"),
     path("catalog/brands/new/", brand_create, name="brand-create"),
     path("catalog/products/new/", product_create, name="product-create"),
+    path("catalog/products/<uuid:product_id>/", product_detail, name="product-detail"),
+    path("catalog/products/<uuid:product_id>/edit/", product_update, name="product-update"),
+    path("catalog/products/<uuid:product_id>/toggle-active/", product_toggle_active, name="product-toggle-active"),
     path("contacts/new/", contact_create, name="contact-create"),
+    path("contacts/<uuid:contact_id>/", contact_detail, name="contact-detail"),
+    path("contacts/<uuid:contact_id>/statement/", contact_statement, name="contact-statement"),
+    path("contacts/<uuid:contact_id>/edit/", contact_update, name="contact-update"),
+    path("contacts/<uuid:contact_id>/toggle-active/", contact_toggle_active, name="contact-toggle-active"),
     path("purchases/new/", purchase_create, name="purchase-create"),
     path("purchases/<uuid:order_id>/", purchase_detail, name="purchase-detail"),
     path("purchases/<uuid:order_id>/approve/", purchase_approve, name="purchase-approve"),
@@ -103,6 +122,17 @@ urlpatterns = [
     path("transfers/discrepancies/<uuid:discrepancy_id>/resolve/", transfer_discrepancy_resolve, name="transfer-discrepancy-resolve"),
     path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path("accounts/password/change/", auth_views.PasswordChangeView.as_view(success_url="/accounts/security/"), name="password-change"),
+    path("accounts/password/reset/", auth_views.PasswordResetView.as_view(), name="password-reset"),
+    path("accounts/password/reset/done/", auth_views.PasswordResetDoneView.as_view(), name="password-reset-done"),
+    path("accounts/password/reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
+    path("accounts/password/reset/complete/", auth_views.PasswordResetCompleteView.as_view(), name="password-reset-complete"),
+    path("accounts/security/", security_settings, name="security-settings"),
+    path("accounts/mfa/setup/", mfa_setup, name="mfa-setup"),
+    path("accounts/mfa/verify/", mfa_verify, name="mfa-verify"),
+    path("accounts/mfa/recovery-codes/regenerate/", recovery_codes_regenerate, name="recovery-codes-regenerate"),
+    path("accounts/sessions/revoke-others/", sessions_revoke_others, name="sessions-revoke-others"),
+    path("accounts/sessions/<uuid:session_id>/revoke/", session_revoke, name="session-revoke"),
     path('admin/', admin.site.urls),
     path("ckeditor5/", include("django_ckeditor_5.urls")),
     path("health/live/", health_live, name="health-live"),

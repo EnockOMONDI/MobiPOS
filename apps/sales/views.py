@@ -7,12 +7,13 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.operations.forms import InstallmentScheduleForm
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from apps.payments.forms import AdditionalPaymentForm
-from apps.payments.models import Payment, PaymentStatus, Refund
-from apps.payments.services import confirm_payment, confirm_refund
+from apps.payments.models import Payment
+from apps.payments.services import allocate_sale_refund, confirm_payment
 from .forms import ReturnRequestForm
-from .models import ReturnStatus, Sale, SaleReturn
+from .models import ReturnStatus, Sale, SaleReturn, SaleReturnLine
 from .services import complete_return
 
 
@@ -22,7 +23,12 @@ def sale_detail(request, sale_id):
         Sale, id=sale_id, organization=request.organization,
         location__in=accessible_locations_for(request.user, request.organization),
     )
-    return render(request, "sales/detail.html", {"sale": sale, "payment_form": AdditionalPaymentForm(), "return_form": ReturnRequestForm()})
+    return render(request, "sales/detail.html", {
+        "sale": sale,
+        "payment_form": AdditionalPaymentForm(),
+        "return_form": ReturnRequestForm(sale=sale),
+        "installment_form": InstallmentScheduleForm(receivable=getattr(sale, "receivable", None)),
+    })
 
 
 @login_required
@@ -63,7 +69,7 @@ def sale_request_return(request, sale_id):
         Sale, id=sale_id, organization=request.organization,
         location__in=accessible_locations_for(request.user, request.organization),
     )
-    form = ReturnRequestForm(request.POST)
+    form = ReturnRequestForm(request.POST, sale=sale)
     if form.is_valid():
         sale_return = SaleReturn.objects.create(
             organization=request.organization,
@@ -71,8 +77,20 @@ def sale_request_return(request, sale_id):
             sale=sale,
             reason=form.cleaned_data["reason"],
             refund_amount=form.cleaned_data["refund_amount"],
+            outcome=form.cleaned_data["outcome"],
             requested_by=request.user,
         )
+        SaleReturnLine.objects.bulk_create([
+            SaleReturnLine(
+                organization=request.organization,
+                sale_return=sale_return,
+                sale_line=line,
+                quantity=quantity,
+                disposition=form.cleaned_data["disposition"],
+                refundable_amount=line_value,
+            )
+            for line, quantity, line_value in form.cleaned_data["selected_lines"]
+        ])
         record_audit_event(action="return.requested", actor=request.user, organization=request.organization, target=sale_return, request=request)
         messages.success(request, "Return request created.")
     return redirect("sale-detail", sale_id=sale.id)
@@ -89,17 +107,12 @@ def return_approve_complete(request, return_id):
     sale_return.save(update_fields=["status", "approved_by", "updated_at"])
     complete_return(sale_return=sale_return, actor=request.user)
     if sale_return.refund_amount:
-        payment = sale_return.sale.payments.filter(status=PaymentStatus.CONFIRMED).first()
-        if payment:
-            refund = Refund.objects.create(
-                organization=request.organization,
-                number=f"RFD-{timezone.now():%Y%m%d%H%M%S%f}",
-                payment=payment,
-                amount=min(sale_return.refund_amount, payment.amount),
-                reason=sale_return.reason,
-                approved_by=request.user,
-            )
-            confirm_refund(refund=refund)
+        allocate_sale_refund(
+            sale=sale_return.sale,
+            amount=sale_return.refund_amount,
+            reason=sale_return.reason,
+            approved_by=request.user,
+        )
     record_audit_event(action="return.completed", actor=request.user, organization=request.organization, target=sale_return, request=request)
     messages.success(request, "Return and refund completed.")
     return redirect("sale-detail", sale_id=sale_return.sale_id)

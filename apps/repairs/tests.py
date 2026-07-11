@@ -14,7 +14,7 @@ from apps.repairs.models import RepairPartUsage, RepairTicket
 def test_repair_ticket_workflow(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     branch = Branch.objects.get(organization=organization)
     customer = Contact.objects.get(organization=organization, contact_type="customer")
     client.force_login(user)

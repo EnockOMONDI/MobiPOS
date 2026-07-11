@@ -1,27 +1,59 @@
 {% extends "base.html" %}
 
-{% block title %}{{ title }} | Kipekee Access{% endblock %}
+{% block title %}{{ title }} | MobiPOS{% endblock %}
 
 {% block content %}
   <div class="mb-6">
     <p class="text-sm font-medium text-red-700">{{ active_organization }}</p>
     <div class="flex items-center justify-between gap-4">
       <h1 class="text-3xl font-bold">{{ title }}</h1>
-      <a class="rounded-lg border bg-white px-4 py-2 text-sm font-medium" href="?format=csv">Export CSV</a>
+      <a class="btn-secondary" href="?format=csv{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Export CSV</a>
     </div>
   </div>
-  <div class="overflow-x-auto rounded-xl border bg-white shadow-sm">
+  <form method="get" class="card mb-5 flex flex-wrap items-end gap-3 p-4">
+    <label class="min-w-0 flex-1">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Search register</span>
+      <input name="q" value="{{ query }}" placeholder="Search visible fields..." class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+    </label>
+    {% if supports_status_filter %}
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Status</span>
+      <select name="status" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+        <option value="">All records</option><option value="active" {% if status == "active" %}selected{% endif %}>Active</option><option value="inactive" {% if status == "inactive" %}selected{% endif %}>Archived</option>
+      </select>
+    </label>
+    {% endif %}
+    <button class="btn-primary">Apply filters</button>
+    {% if query or status %}<a class="btn-secondary" href="{{ request.path }}">Clear</a>{% endif %}
+  </form>
+  <div class="card overflow-x-auto">
     <table class="min-w-full text-left text-sm">
       <thead class="border-b bg-slate-50">
-        <tr>{% for header in headers %}<th class="px-4 py-3 font-semibold">{{ header }}</th>{% endfor %}</tr>
+        <tr>{% for header in headers %}<th class="px-4 py-3 font-semibold">{{ header }}</th>{% endfor %}{% if has_detail_pages %}<th class="px-4 py-3 text-right font-semibold">Actions</th>{% endif %}</tr>
       </thead>
       <tbody class="divide-y">
         {% for row in rows %}
-          <tr>{% for value in row %}<td class="px-4 py-3">{{ value|default:"—" }}</td>{% endfor %}</tr>
+          <tr class="transition hover:bg-slate-50">{% for value in row.values %}<td class="px-4 py-3">{% if value is True %}<span class="status-badge status-badge-active">Yes</span>{% elif value is False %}<span class="status-badge">No</span>{% else %}{{ value|default:"—" }}{% endif %}</td>{% endfor %}{% if row.detail_url %}<td class="px-4 py-3 text-right"><a href="{{ row.detail_url }}" class="font-semibold text-red-700">View</a></td>{% endif %}</tr>
         {% empty %}
-          <tr><td class="px-4 py-8 text-center text-slate-500" colspan="{{ headers|length }}">No records yet.</td></tr>
+          <tr><td class="px-4 py-8 text-center text-slate-500" colspan="{{ headers|length|add:1 }}">No matching records.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-4 flex items-center justify-between gap-4 text-sm" aria-label="Pagination">
+      <p class="text-slate-500">
+        Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+      </p>
+      <div class="flex items-center gap-2">
+        {% if page_obj.has_previous %}
+          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Previous</a>
+        {% endif %}
+        <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Next</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
 {% endblock %}

@@ -16,7 +16,7 @@ from apps.operations.models import Payable
 def test_purchase_staff_workflow_receives_stock(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     supplier = Contact.objects.get(organization=organization, contact_type="supplier")
     destination = Location.objects.get(organization=organization, location_type="warehouse")
     product = Product.objects.get(organization=organization, sku="CHG-20W")
@@ -39,10 +39,33 @@ def test_purchase_staff_workflow_receives_stock(client):
 
 
 @pytest.mark.django_db
+def test_purchase_create_supports_multiple_lines(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    products = list(Product.objects.filter(organization=organization).order_by("sku")[:2])
+    client.force_login(user)
+
+    response = client.post(reverse("purchase-create"), {
+        "supplier": supplier.id, "destination": destination.id,
+        "product": products[0].id, "quantity": "2", "unit_cost": "100",
+        "product_2": products[1].id, "quantity_2": "3", "unit_cost_2": "200",
+        "notes": "Multi-line restock",
+    })
+
+    order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+    assert response.status_code == 302
+    assert order.lines.count() == 2
+    assert set(order.lines.values_list("product_id", flat=True)) == {product.id for product in products}
+
+
+@pytest.mark.django_db
 def test_purchase_create_rejects_cross_tenant_supplier(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    own_org = Organization.objects.get(slug="kipekee-electronics")
+    own_org = Organization.objects.get(slug="mobipos-electronics")
     other_org = Organization.objects.get(slug="nairobi-mobile-hub")
     supplier = Contact.objects.get(organization=other_org, contact_type="supplier")
     destination = Location.objects.get(organization=own_org, location_type="warehouse")
@@ -61,7 +84,7 @@ def test_purchase_create_rejects_cross_tenant_supplier(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_approve_purchase(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     staff = User.objects.create_user(username="purchase-staff", email="purchase-staff@example.com")
     Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     order = PurchaseOrder.objects.create(
@@ -80,7 +103,7 @@ def test_non_owner_cannot_approve_purchase(client):
 @pytest.mark.django_db
 def test_purchase_form_rejects_unassigned_branch_location(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     staff = User.objects.create_user(username="limited-purchaser", email="limited-purchaser@example.com")
     membership = Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     role = Role.objects.create(organization=organization, name="Purchaser", code="purchaser")
@@ -111,7 +134,7 @@ def test_purchase_form_rejects_unassigned_branch_location(client):
 def test_supplier_return_reduces_stock_and_payable(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     supplier = Contact.objects.get(organization=organization, contact_type="supplier")
     destination = Location.objects.get(organization=organization, location_type="warehouse")
     product = Product.objects.get(organization=organization, sku="CHG-20W")
@@ -142,7 +165,7 @@ def test_supplier_return_reduces_stock_and_payable(client):
 def test_purchase_receipt_discrepancy_records_only_accepted_stock(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     destination = Location.objects.get(organization=organization, location_type="warehouse")
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)

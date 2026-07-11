@@ -32,4 +32,20 @@ class POSSession(OrganizationOwnedModel):
     def __str__(self):
         return self.number
 
-# Create your models here.
+
+class CashMovementType(models.TextChoices):
+    CASH_IN = "cash_in", "Cash in"
+    CASH_OUT = "cash_out", "Cash out"
+    DROP = "drop", "Safe drop"
+
+
+class CashMovement(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    session = models.ForeignKey(POSSession, on_delete=models.PROTECT, related_name="cash_movements")
+    movement_type = models.CharField(max_length=20, choices=CashMovementType.choices)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    reason = models.CharField(max_length=255)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="cash_movements")
+
+    class Meta:
+        ordering = ("-created_at",)
