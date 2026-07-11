@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Sign in | Kipekee Access{% endblock %}
+{% block title %}Sign in | MobiPOS{% endblock %}
 
 {% block anonymous_content %}
   <div class="mx-auto max-w-md rounded-xl border bg-white p-8 shadow-sm">
@@ -12,6 +12,9 @@
         Sign in
       </button>
     </form>
-    <p class="mt-6 text-center text-sm"><a class="font-medium text-red-700" href="{% url 'register-organization' %}">Register a new organization</a></p>
+    <div class="mt-6 flex justify-between text-sm">
+      <a class="font-medium text-red-700" href="{% url 'password-reset' %}">Forgot password?</a>
+      <a class="font-medium text-red-700" href="{% url 'register-organization' %}">Register organization</a>
+    </div>
   </div>
 {% endblock %}

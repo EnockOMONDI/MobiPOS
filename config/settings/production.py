@@ -18,6 +18,7 @@ INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "disabled")
 if INTEGRATION_MODE == "sandbox":
     raise ImproperlyConfigured("Sandbox integration adapters cannot run in production.")
 PRIVILEGED_OTP_REQUIRED = True
+POS_AUTO_OPEN_SESSION = False
 
 DEBUG = False
 SECURE_SSL_REDIRECT = True

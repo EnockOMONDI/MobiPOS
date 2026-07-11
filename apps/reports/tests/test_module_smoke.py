@@ -23,4 +23,8 @@ def test_all_staff_modules_search_and_export_render(client):
     assert search.status_code == 200
     assert b"A07 64GB/4GB" in search.content
     assert client.get(reverse("operational-report")).status_code == 200
+    assert client.get(reverse("retail-analytics-report")).status_code == 200
+    retail_export = client.get(reverse("retail-analytics-report"), {"format": "csv"})
+    assert retail_export.status_code == 200
+    assert retail_export["Content-Type"] == "text/csv"
     assert client.get(reverse("exception-report")).status_code == 200

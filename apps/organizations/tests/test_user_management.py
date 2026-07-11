@@ -11,7 +11,7 @@ from apps.organizations.models import Branch, Company, Location, Membership, Org
 def test_owner_can_create_branch_scoped_user(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     branch = Branch.objects.get(organization=organization)
     client.force_login(owner)
 
@@ -30,7 +30,7 @@ def test_owner_can_create_branch_scoped_user(client):
 def test_owner_branch_and_pos_creation_enforce_plan_limits(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     company = Company.objects.get(organization=organization)
     subscription = Subscription.objects.get(organization=organization)
     subscription.plan.limits = {"users": 25, "branches": 2, "pos_locations": 2}
@@ -77,7 +77,7 @@ def test_tenant_role_form_excludes_framework_and_privileged_permissions():
 def test_owner_can_assign_multiple_roles_and_branches(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     membership = Membership.objects.get(organization=organization, user=owner)
     first_role = Role.objects.create(organization=organization, name="Sales", code="sales-role")
     second_role = Role.objects.create(organization=organization, name="Inventory", code="inventory-role")

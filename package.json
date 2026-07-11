@@ -1,5 +1,5 @@
 {
-  "name": "kipekee-access",
+  "name": "mobipos",
   "private": true,
   "scripts": {
     "css:build": "tailwindcss -i ./frontend/input.css -o ./static/css/app.css --minify",

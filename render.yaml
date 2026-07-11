@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kipekee-access-web
+    name: mobipos-web
     runtime: python
     buildCommand: pip install -r requirements/base.txt && npm ci && npm run css:build && python manage.py collectstatic --noinput
     preDeployCommand: python manage.py check --deploy && python manage.py migrate
@@ -26,7 +26,7 @@ services:
       - key: INTEGRATION_MODE
         value: disabled
   - type: worker
-    name: kipekee-access-worker
+    name: mobipos-worker
     runtime: python
     buildCommand: pip install -r requirements/base.txt
     startCommand: celery -A config worker -l info
@@ -42,7 +42,7 @@ services:
       - key: INTEGRATION_MODE
         value: disabled
   - type: worker
-    name: kipekee-access-scheduler
+    name: mobipos-scheduler
     runtime: python
     buildCommand: pip install -r requirements/base.txt
     startCommand: celery -A config beat -l info

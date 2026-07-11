@@ -20,6 +20,7 @@ from apps.payments.models import Payment, PaymentMethod, PaymentStatus
 from apps.pos.models import POSSession, SessionStatus
 from apps.repairs.models import RepairStatus, RepairTicket
 from apps.sales.models import Sale, SaleLine, SaleStatus
+from apps.sales.services import calculate_sale_line_amounts
 from apps.organizations.models import (
     Announcement,
     Branch,
@@ -45,28 +46,28 @@ ADMIN_PASSWORD = "AdminPass123!"
 DEMO_ORGANIZATIONS = (
     {
         "organization": {
-            "name": "Kipekee Electronics",
-            "slug": "kipekee-electronics",
-            "email": "hello@kipekee-electronics.test",
+            "name": "MobiPOS Electronics",
+            "slug": "mobipos-electronics",
+            "email": "hello@mobipos-electronics.test",
             "phone_number": "+254700000101",
         },
         "owner": {
             "username": "alice",
-            "email": "alice@kipekee-electronics.test",
+            "email": "alice@mobipos-electronics.test",
             "first_name": "Alice",
             "last_name": "Wanjiku",
             "phone_number": "+254700000111",
         },
         "company": {
-            "name": "Kipekee Electronics Limited",
-            "code": "KEL",
-            "legal_name": "Kipekee Electronics Limited",
+            "name": "MobiPOS Electronics Limited",
+            "code": "MEL",
+            "legal_name": "MobiPOS Electronics Limited",
             "tax_number": "P051234567A",
         },
         "branch": {
             "name": "Nairobi CBD Branch",
             "code": "NBO-CBD",
-            "email": "cbd@kipekee-electronics.test",
+            "email": "cbd@mobipos-electronics.test",
             "phone_number": "+254700000121",
         },
     },
@@ -116,7 +117,7 @@ class Command(BaseCommand):
         )
         admin = self._upsert_user(
             username="platformadmin",
-            email="admin@kipekee-access.test",
+            email="admin@mobipos.test",
             password=ADMIN_PASSWORD,
             first_name="Platform",
             last_name="Administrator",
@@ -246,7 +247,7 @@ class Command(BaseCommand):
         )
         Announcement.objects.update_or_create(
             organization=organization,
-            title="Welcome to Kipekee Access",
+            title="Welcome to MobiPOS",
             defaults={
                 "body": (
                     f"<p>{organization.name} is configured with a branch, warehouse, "
@@ -276,10 +277,10 @@ class Command(BaseCommand):
             organization=organization, code="accessories", defaults={"name": "Accessories", "is_active": True}
         )
         brand, _ = Brand.objects.update_or_create(
-            organization=organization, name="Kipekee Mobile", defaults={"is_active": True}
+            organization=organization, name="MobiPOS Mobile", defaults={"is_active": True}
         )
         phone, _ = Product.objects.update_or_create(
-            organization=organization, sku="KM-A07-64",
+            organization=organization, sku="MP-A07-64",
             defaults={
                 "category": phones, "brand": brand, "name": "A07 64GB/4GB",
                 "barcode": f"{organization.slug}-PHONE", "is_serialized": True,
@@ -338,19 +339,21 @@ class Command(BaseCommand):
                 "opening_float": Decimal("5000.00"), "expected_cash": Decimal("1500.00"),
             },
         )
+        sale_amounts = calculate_sale_line_amounts(product=charger, quantity=Decimal("1"))
         sale, _ = Sale.objects.update_or_create(
             organization=organization, number="DEMO-SALE-001",
             defaults={
                 "session": session, "location": pos_location, "customer": customer, "agent": owner,
-                "status": SaleStatus.PAID, "subtotal": Decimal("1500.00"), "total": Decimal("1500.00"),
-                "paid_total": Decimal("1500.00"), "created_by": owner, "completed_at": timezone.now(),
+                "status": SaleStatus.PAID, "subtotal": sale_amounts["gross"],
+                "tax_total": sale_amounts["tax"], "total": sale_amounts["total"],
+                "paid_total": sale_amounts["total"], "created_by": owner, "completed_at": timezone.now(),
             },
         )
         SaleLine.objects.update_or_create(
             organization=organization, sale=sale, product=charger,
             defaults={
                 "quantity": 1, "unit_price": charger.selling_price, "unit_cost": charger.cost_price,
-                "line_total": charger.selling_price,
+                "tax": sale_amounts["tax"], "line_total": sale_amounts["gross"],
             },
         )
         Payment.objects.update_or_create(

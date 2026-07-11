@@ -9,6 +9,7 @@ from .models import PurchaseOrderLine
 
 
 class PurchaseOrderForm(forms.Form):
+    MAX_LINES = 5
     supplier = forms.ModelChoiceField(queryset=Contact.objects.none())
     destination = forms.ModelChoiceField(queryset=Location.objects.none())
     product = forms.ModelChoiceField(queryset=Product.objects.none())
@@ -26,6 +27,47 @@ class PurchaseOrderForm(forms.Form):
             self.fields["product"].queryset = Product.objects.filter(
                 organization=organization, is_purchasable=True, is_active=True
             )
+            for index in range(2, self.MAX_LINES + 1):
+                self.fields[f"product_{index}"] = forms.ModelChoiceField(
+                    queryset=self.fields["product"].queryset,
+                    required=False,
+                    label=f"Additional item {index}",
+                )
+                self.fields[f"quantity_{index}"] = forms.DecimalField(
+                    min_value=1, decimal_places=3, required=False, label=f"Item {index} quantity"
+                )
+                self.fields[f"unit_cost_{index}"] = forms.DecimalField(
+                    min_value=0, decimal_places=2, required=False, label=f"Item {index} unit cost"
+                )
+        self.additional_line_groups = [
+            (self[f"product_{index}"], self[f"quantity_{index}"], self[f"unit_cost_{index}"])
+            for index in range(2, self.MAX_LINES + 1)
+        ] if organization else []
+
+    def clean(self):
+        cleaned = super().clean()
+        lines = []
+        seen = set()
+        for index in range(1, self.MAX_LINES + 1):
+            suffix = "" if index == 1 else f"_{index}"
+            product = cleaned.get(f"product{suffix}")
+            quantity = cleaned.get(f"quantity{suffix}")
+            unit_cost = cleaned.get(f"unit_cost{suffix}")
+            if not product:
+                if quantity is not None or unit_cost is not None:
+                    self.add_error(f"product{suffix}", "Choose a product for this line.")
+                continue
+            if quantity is None:
+                self.add_error(f"quantity{suffix}", "Enter a quantity.")
+            if unit_cost is None:
+                self.add_error(f"unit_cost{suffix}", "Enter a unit cost.")
+            if product.id in seen:
+                self.add_error(f"product{suffix}", "Combine duplicate products into one line.")
+            seen.add(product.id)
+            if quantity is not None and unit_cost is not None:
+                lines.append({"product": product, "quantity": quantity, "unit_cost": unit_cost})
+        cleaned["lines"] = lines
+        return cleaned
 
 
 class ReceivePurchaseLineForm(forms.Form):

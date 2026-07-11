@@ -16,7 +16,7 @@ class CategoryForm(OrganizationFormMixin, forms.ModelForm):
 
     def clean_code(self):
         code = self.cleaned_data["code"]
-        if Category.objects.filter(organization=self.organization, code=code).exists():
+        if Category.objects.filter(organization=self.organization, code=code).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("This category code is already in use.")
         return code
 
@@ -28,7 +28,7 @@ class BrandForm(OrganizationFormMixin, forms.ModelForm):
 
     def clean_name(self):
         name = self.cleaned_data["name"]
-        if Brand.objects.filter(organization=self.organization, name__iexact=name).exists():
+        if Brand.objects.filter(organization=self.organization, name__iexact=name).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("This brand name is already in use.")
         return name
 
@@ -49,6 +49,14 @@ class ProductForm(OrganizationFormMixin, forms.ModelForm):
 
     def clean_sku(self):
         sku = self.cleaned_data["sku"].upper()
-        if Product.objects.filter(organization=self.organization, sku=sku).exists():
+        if Product.objects.filter(organization=self.organization, sku=sku).exclude(pk=self.instance.pk).exists():
             raise forms.ValidationError("This product SKU is already in use.")
         return sku
+
+    def clean_barcode(self):
+        barcode = self.cleaned_data.get("barcode", "").strip()
+        if barcode and Product.objects.filter(
+            organization=self.organization, barcode=barcode
+        ).exclude(pk=self.instance.pk).exists():
+            raise forms.ValidationError("This barcode is already assigned to another product.")
+        return barcode

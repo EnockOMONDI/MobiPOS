@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Accept invitation | MobiPOS{% endblock %}
+{% block anonymous_content %}
+<div class="mx-auto max-w-lg rounded-2xl border bg-white p-8 shadow-sm">
+  <p class="text-sm font-semibold text-red-700">Invitation</p>
+  <h1 class="mt-1 text-2xl font-bold">Join {{ invitation.organization.name }}</h1>
+  <p class="mt-2 text-slate-600">Verify your invitation by setting a password and accepting the organization policies.</p>
+  <form method="post" class="mt-6 space-y-4">{% csrf_token %}{{ form.as_p }}<button class="w-full rounded-xl bg-red-700 px-4 py-3 font-semibold text-white">Accept invitation</button></form>
+</div>
+{% endblock %}

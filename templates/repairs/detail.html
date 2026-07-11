@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ ticket.number }} | Kipekee Access{% endblock %}
+{% block title %}{{ ticket.number }} | MobiPOS{% endblock %}
 {% block content %}
 <h1 class="text-3xl font-bold">{{ ticket.number }}</h1>
 <p>{{ ticket.customer }} · {{ ticket.get_status_display }} · {{ ticket.get_warranty_type_display }}</p>

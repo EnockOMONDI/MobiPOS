@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Users and access | Kipekee Access{% endblock %}
+{% block title %}Users and access | MobiPOS{% endblock %}
 {% block content %}
 <div class="flex flex-wrap items-end justify-between gap-4">
   <div>
@@ -27,6 +27,13 @@
       <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Branches</p><p class="mt-1 text-sm text-slate-700">{% for branch in row.membership.branches.all %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% empty %}No branches assigned{% endfor %}</p></div>
       <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Effective permissions</p><p class="mt-1 text-sm text-slate-700">{{ row.permissions|length }} combined permissions</p></div>
     </div>
+    {% if row.membership.status == "invited" and row.membership.invitation %}
+    <div class="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+      <span class="font-semibold">Invitation pending until {{ row.membership.invitation.expires_at }}</span>
+      <form method="post" action="{% url 'invitation-resend' row.membership.invitation.id %}">{% csrf_token %}<button class="rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm">Resend</button></form>
+      <form method="post" action="{% url 'invitation-revoke' row.membership.invitation.id %}">{% csrf_token %}<button class="rounded-lg bg-white px-3 py-1.5 font-semibold text-red-700 shadow-sm">Revoke</button></form>
+    </div>
+    {% endif %}
   </article>
   {% empty %}<p class="rounded-2xl border bg-white p-6 text-slate-500">No organization users found.</p>{% endfor %}
 </div>

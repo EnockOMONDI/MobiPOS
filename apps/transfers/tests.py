@@ -13,7 +13,7 @@ from apps.transfers.models import StockTransfer, TransferDiscrepancy
 def test_transfer_staff_workflow_moves_quantity_stock(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     source = Location.objects.get(organization=organization, location_type="pos")
     destination = Location.objects.get(organization=organization, location_type="warehouse")
     product = Product.objects.get(organization=organization, sku="CHG-20W")
@@ -35,9 +35,37 @@ def test_transfer_staff_workflow_moves_quantity_stock(client):
 
 
 @pytest.mark.django_db
+def test_transfer_create_supports_multiple_quantity_lines(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    source = Location.objects.get(organization=organization, location_type="pos")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    first = Product.objects.get(organization=organization, is_serialized=False)
+    second = Product.objects.create(
+        organization=organization, category=first.category, brand=first.brand,
+        name="Transfer Cable", sku="TRANSFER-CABLE", is_serialized=False,
+    )
+    products = [first, second]
+    client.force_login(user)
+
+    response = client.post(reverse("transfer-create"), {
+        "source": source.id, "destination": destination.id,
+        "product": products[0].id, "quantity": "2",
+        "product_2": products[1].id, "quantity_2": "3",
+        "notes": "Multi-line movement",
+    })
+
+    transfer = StockTransfer.objects.filter(organization=organization).latest("created_at")
+    assert response.status_code == 302
+    assert transfer.lines.count() == 2
+    assert set(transfer.lines.values_list("product_id", flat=True)) == {product.id for product in products}
+
+
+@pytest.mark.django_db
 def test_non_owner_cannot_approve_transfer(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     staff = User.objects.create_user(username="transfer-staff", email="transfer-staff@example.com")
     Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     locations = list(Location.objects.filter(organization=organization)[:2])
@@ -56,7 +84,7 @@ def test_non_owner_cannot_approve_transfer(client):
 def test_transfer_discrepancy_can_be_received_and_reconciled(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="kipekee-electronics")
+    organization = Organization.objects.get(slug="mobipos-electronics")
     source = Location.objects.get(organization=organization, location_type="pos")
     destination = Location.objects.get(organization=organization, location_type="warehouse")
     product = Product.objects.get(organization=organization, sku="CHG-20W")

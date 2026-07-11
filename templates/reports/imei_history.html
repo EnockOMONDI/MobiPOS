@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+
+{% block title %}IMEI history | MobiPOS{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <p class="text-sm font-medium text-red-700">Serialized stock intelligence</p>
+  <h1 class="text-3xl font-bold">IMEI history</h1>
+  <p class="mt-2 text-slate-600">Search any IMEI or serial to see product, current location, stock movements, sale history, and purchase context.</p>
+</div>
+
+<form method="get" class="card mb-6 flex flex-wrap items-end gap-3 p-4">
+  <label class="min-w-0 flex-1">
+    <span class="text-xs font-bold uppercase tracking-wider text-slate-500">IMEI / serial</span>
+    <input name="q" value="{{ query }}" placeholder="Enter IMEI, secondary IMEI, or serial" class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+  </label>
+  <button class="btn-primary">Search</button>
+  {% if query %}<a href="{% url 'imei-history' %}" class="btn-secondary">Clear</a>{% endif %}
+</form>
+
+{% if query and not unit %}
+  <div class="card p-8 text-center text-slate-500">No matching serialized unit found.</div>
+{% endif %}
+
+{% if unit %}
+  <section class="grid gap-4 md:grid-cols-4">
+    <div class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Serial</p>
+      <p class="mt-2 text-xl font-bold">{{ unit.serial_number }}</p>
+      {% if unit.secondary_serial %}<p class="text-sm text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}
+    </div>
+    <div class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Product</p>
+      <p class="mt-2 text-xl font-bold">{{ unit.product }}</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Status</p>
+      <p class="mt-2 text-xl font-bold">{{ unit.get_status_display }}</p>
+    </div>
+    <div class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Current location</p>
+      <p class="mt-2 text-xl font-bold">{{ unit.location|default:"Not in stock" }}</p>
+    </div>
+  </section>
+
+  <div class="mt-6 grid gap-6 xl:grid-cols-2">
+    <section class="card overflow-hidden">
+      <div class="border-b p-5">
+        <h2 class="text-lg font-bold">Movement timeline</h2>
+        <p class="text-sm text-slate-500">Append-only inventory events for this serial.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-50">
+            <tr><th class="px-4 py-3">Date</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Location</th><th class="px-4 py-3">Qty</th><th class="px-4 py-3">Actor</th></tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for movement in movements %}
+              <tr>
+                <td class="px-4 py-3">{{ movement.created_at|date:"d/m/Y H:i" }}</td>
+                <td class="px-4 py-3">{{ movement.get_movement_type_display }}</td>
+                <td class="px-4 py-3">{{ movement.location }}</td>
+                <td class="px-4 py-3">{{ movement.quantity }}</td>
+                <td class="px-4 py-3">{{ movement.actor|default:"System" }}</td>
+              </tr>
+            {% empty %}
+              <tr><td class="px-4 py-8 text-center text-slate-500" colspan="5">No stock movements found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="space-y-6">
+      <div class="card p-5">
+        <h2 class="text-lg font-bold">Sales</h2>
+        {% for sale in sales %}
+          <a href="{% url 'sale-detail' sale.id %}" class="mt-3 flex justify-between rounded-xl border p-3 text-sm hover:bg-slate-50">
+            <span>{{ sale.number }} · {{ sale.customer|default:"Walk-in" }}</span>
+            <strong>KES {{ sale.total }}</strong>
+          </a>
+        {% empty %}
+          <p class="mt-3 text-sm text-slate-500">No sale found for this serial.</p>
+        {% endfor %}
+      </div>
+      <div class="card p-5">
+        <h2 class="text-lg font-bold">Purchase context</h2>
+        {% for order in purchases %}
+          <a href="{% url 'purchase-detail' order.id %}" class="mt-3 flex justify-between rounded-xl border p-3 text-sm hover:bg-slate-50">
+            <span>{{ order.number }} · {{ order.supplier }}</span>
+            <span>{{ order.get_status_display }}</span>
+          </a>
+        {% empty %}
+          <p class="mt-3 text-sm text-slate-500">No purchase context found.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+{% endif %}
+{% endblock %}

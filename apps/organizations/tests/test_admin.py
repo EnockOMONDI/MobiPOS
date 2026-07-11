@@ -13,7 +13,7 @@ def test_admin_login_page_supports_anonymous_user(client):
     response = client.get(reverse("admin:login"))
 
     assert response.status_code == 200
-    assert b"Kipekee Access" in response.content
+    assert b"MobiPOS" in response.content
 
 
 @pytest.mark.django_db

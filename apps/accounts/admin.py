@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from unfold.admin import ModelAdmin
 
-from .models import User
+from .models import RecoveryCode, User, UserSession
 
 
 @admin.register(User)
@@ -18,10 +18,10 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     list_filter = ("is_platform_admin", "is_staff", "is_active")
     search_fields = ("username", "email", "first_name", "last_name", "phone_number")
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("Kipekee Access", {"fields": ("phone_number", "is_platform_admin")}),
+        ("MobiPOS", {"fields": ("phone_number", "is_platform_admin")}),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ("Kipekee Access", {"fields": ("email", "phone_number", "is_platform_admin")}),
+        ("MobiPOS", {"fields": ("email", "phone_number", "is_platform_admin")}),
     )
 
     def has_module_permission(self, request):
@@ -40,3 +40,5 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
         return self.has_module_permission(request)
 
 # Register your models here.
+admin.site.register(RecoveryCode, ModelAdmin)
+admin.site.register(UserSession, ModelAdmin)

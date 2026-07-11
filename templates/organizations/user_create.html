@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Add user | Kipekee Access{% endblock %}
+{% block title %}Add user | MobiPOS{% endblock %}
 {% block content %}
 <h1 class="text-3xl font-bold">Add organization user</h1>
-<p class="mt-2 text-slate-600">Create a scoped staff account and assign its branches and roles.</p>
+<p class="mt-2 text-slate-600">Invite a staff member, assign branches and multiple roles, then let them securely set their own password.</p>
 <form method="post" class="mt-6 max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
   {% csrf_token %}{{ form.as_p }}
-  <button class="rounded-lg bg-red-700 px-5 py-3 font-medium text-white" type="submit">Create user</button>
+  <button class="rounded-lg bg-red-700 px-5 py-3 font-medium text-white" type="submit">Send invitation</button>
 </form>
 {% endblock %}

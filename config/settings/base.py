@@ -70,6 +70,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
     "axes.middleware.AxesMiddleware",
+    "apps.accounts.middleware.UserSessionTrackingMiddleware",
     "apps.organizations.middleware.OrganizationContextMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -163,8 +164,8 @@ CKEDITOR_5_CONFIGS = {
 }
 
 UNFOLD = {
-    "SITE_TITLE": "Kipekee Access Administration",
-    "SITE_HEADER": "Kipekee Access",
+    "SITE_TITLE": "MobiPOS Administration",
+    "SITE_HEADER": "MobiPOS",
     "SITE_SYMBOL": "point_of_sale",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
@@ -188,6 +189,9 @@ CELERY_BEAT_SCHEDULE = {
 }
 INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "sandbox")
 PRIVILEGED_OTP_REQUIRED = os.environ.get("PRIVILEGED_OTP_REQUIRED", "false").lower() == "true"
+POS_AUTO_OPEN_SESSION = os.environ.get("POS_AUTO_OPEN_SESSION", "true").lower() == "true"
+EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "MobiPOS <no-reply@mobipos.local>")
 
 LOGGING = {
     "version": 1,

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Account security | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div><p class="text-sm font-semibold text-red-700">Identity</p><h1 class="mt-1 text-3xl font-bold">Account security</h1><p class="mt-2 text-slate-600">Manage password, two-factor authentication, recovery codes, and active sessions.</p></div>
+  <a href="{% url 'password-change' %}" class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white">Change password</a>
+</div>
+<div class="mt-6 grid gap-6 lg:grid-cols-2">
+  <section class="rounded-2xl border bg-white p-6 shadow-sm">
+    <h2 class="text-lg font-bold">Two-factor authentication</h2>
+    {% if device %}
+      <p class="mt-2 text-sm text-emerald-700">Enabled with {{ device.name }}. {{ unused_recovery_codes }} unused recovery codes remain.</p>
+      <form method="post" action="{% url 'recovery-codes-regenerate' %}" class="mt-4">{% csrf_token %}<button class="rounded-xl border px-4 py-2 text-sm font-semibold">Generate new recovery codes</button></form>
+    {% else %}
+      <p class="mt-2 text-sm text-amber-700">Not enabled. Privileged actions require MFA in production.</p>
+      <a href="{% url 'mfa-setup' %}" class="mt-4 inline-block rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white">Set up MFA</a>
+    {% endif %}
+  </section>
+  <section class="rounded-2xl border bg-white p-6 shadow-sm">
+    <div class="flex items-center justify-between"><h2 class="text-lg font-bold">Active sessions</h2><form method="post" action="{% url 'sessions-revoke-others' %}">{% csrf_token %}<button class="text-sm font-semibold text-red-700">Revoke others</button></form></div>
+    <div class="mt-4 space-y-3">
+      {% for tracked in sessions %}<div class="rounded-xl bg-slate-50 p-3 text-sm"><p class="font-semibold">{{ tracked.ip_address|default:"Unknown IP" }}{% if tracked.session_key == request.session.session_key %} · Current session{% endif %}</p><p class="mt-1 truncate text-xs text-slate-500">{{ tracked.user_agent|default:"Unknown device" }} · Last seen {{ tracked.last_seen_at }}</p><form method="post" action="{% url 'session-revoke' tracked.id %}" class="mt-2">{% csrf_token %}<button class="text-xs font-semibold text-red-700">Revoke session</button></form></div>{% empty %}<p class="text-sm text-slate-500">No tracked sessions.</p>{% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

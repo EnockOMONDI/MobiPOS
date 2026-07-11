@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}{{ contact.name }} | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <div class="flex flex-wrap items-center gap-2"><p class="text-sm font-semibold text-red-700">{{ contact.get_contact_type_display }}</p><span class="status-badge {% if contact.is_active %}status-badge-active{% else %}status-badge-inactive{% endif %}">{% if contact.is_active %}Active{% else %}Archived{% endif %}</span></div>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">{{ contact.name }}</h1>
+    <p class="mt-2 text-slate-600">{{ contact.phone_number|default:"No phone" }} · {{ contact.email|default:"No email" }}</p>
+  </div>
+  <div class="flex flex-wrap gap-3"><a href="{% url 'contact-statement' contact.id %}" class="btn-secondary">Statement</a><a href="{% url 'contact-update' contact.id %}" class="btn-primary">Edit contact</a><form method="post" action="{% url 'contact-toggle-active' contact.id %}">{% csrf_token %}<button class="{% if contact.is_active %}btn-danger{% else %}btn-secondary{% endif %}">{% if contact.is_active %}Archive{% else %}Restore{% endif %}</button></form></div>
+</div>
+<div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Sales total</p><p class="mt-2 text-2xl font-bold">KES {{ sales_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Receivable</p><p class="mt-2 text-2xl font-bold">KES {{ receivable_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Payable</p><p class="mt-2 text-2xl font-bold">KES {{ payable_total }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Credit limit</p><p class="mt-2 text-2xl font-bold">KES {{ contact.credit_limit }}</p></div>
+</div>
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <div class="space-y-6 xl:col-span-2">
+    <section class="card p-6"><h2 class="text-lg font-bold">Profile</h2><dl class="mt-5 grid gap-4 sm:grid-cols-2"><div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Tax number</dt><dd class="mt-1">{{ contact.tax_number|default:"Not set" }}</dd></div><div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Payment terms</dt><dd class="mt-1">{{ contact.payment_terms_days }} days</dd></div><div class="sm:col-span-2"><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Address</dt><dd class="mt-1 whitespace-pre-line">{{ contact.address|default:"Not set" }}</dd></div></dl></section>
+    <section class="card p-6"><h2 class="text-lg font-bold">Recent transactions</h2><div class="mt-4 grid gap-6 md:grid-cols-2"><div><h3 class="text-sm font-bold text-slate-500">Sales</h3>{% for sale in recent_sales %}<a href="{% url 'sale-detail' sale.id %}" class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ sale.number }}</span><strong>KES {{ sale.total }}</strong></a>{% empty %}<p class="mt-3 text-sm text-slate-500">No sales.</p>{% endfor %}</div><div><h3 class="text-sm font-bold text-slate-500">Purchases</h3>{% for order in recent_purchases %}<a href="{% url 'purchase-detail' order.id %}" class="mt-3 flex justify-between border-t pt-3 text-sm"><span>{{ order.number }}</span><span>{{ order.get_status_display }}</span></a>{% empty %}<p class="mt-3 text-sm text-slate-500">No purchases.</p>{% endfor %}</div></div></section>
+  </div>
+  {% include "components/activity_timeline.html" %}
+</div>
+{% endblock %}

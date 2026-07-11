@@ -1,47 +1,143 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard | Kipekee Access{% endblock %}
+{% block title %}Dashboard | MobiPOS{% endblock %}
 
 {% block content %}
-  <div class="mb-8">
-    <p class="text-sm font-medium text-red-700">Operational overview</p>
-    <h1 class="text-3xl font-bold">Dashboard</h1>
-    <p class="mt-2 text-slate-600">
-      Live operational overview for {{ active_organization|default:"the platform" }}.
-    </p>
+  <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p class="text-sm font-medium text-red-700">Operational overview</p>
+      <h1 class="text-3xl font-bold">Dashboard</h1>
+      <p class="mt-2 text-slate-600">
+        Live operational overview for {{ active_organization|default:"the platform" }}.
+      </p>
+    </div>
+    <div class="flex flex-wrap gap-3">
+      <a href="{% url 'pos-cart' %}" class="btn-primary">New sale</a>
+      <a href="{% url 'purchase-create' %}" class="btn-secondary">New purchase</a>
+    </div>
   </div>
+
   <section class="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-    <article class="rounded-xl border bg-red-700 p-6 text-white shadow-sm">
-      <p class="text-sm text-red-100">Sales total</p>
-      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.sales_total }}</p>
+    <article class="rounded-2xl bg-slate-950 p-6 text-white shadow-sm">
+      <p class="text-sm text-slate-300">Today’s sales</p>
+      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.todays_sales_total }}</p>
+      <p class="mt-2 text-xs text-slate-400">{{ metrics.todays_sales_count }} completed sale{{ metrics.todays_sales_count|pluralize }}</p>
     </article>
-    <article class="rounded-xl border bg-emerald-700 p-6 text-white shadow-sm">
-      <p class="text-sm text-emerald-100">Available serialized stock</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.stock_units }}</p>
+    <article class="rounded-2xl bg-red-700 p-6 text-white shadow-sm">
+      <p class="text-sm text-red-100">Pending purchase receipts</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.pending_purchase_receipts }}</p>
+      <a class="mt-3 inline-block text-xs font-bold text-red-100" href="{% url 'module-overview' 'purchases' %}">Open purchases</a>
     </article>
-    <article class="rounded-xl border bg-amber-500 p-6 text-slate-950 shadow-sm">
-      <p class="text-sm">Expenses total</p>
-      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.expenses_total }}</p>
+    <article class="rounded-2xl bg-amber-500 p-6 text-slate-950 shadow-sm">
+      <p class="text-sm">Aged stock</p>
+      <p class="mt-3 text-3xl font-semibold">{{ metrics.aged_stock }}</p>
+      <a class="mt-3 inline-block text-xs font-bold" href="{% url 'module-overview' 'aged-stock' %}">Review 5+ day stock</a>
     </article>
-    <article class="rounded-xl border bg-slate-800 p-6 text-white shadow-sm">
-      <p class="text-sm text-slate-300">Integration failures</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.integration_failures }}</p>
-    </article>
-    <article class="rounded-xl border bg-white p-6 shadow-sm">
-      <p class="text-sm text-slate-500">Organizations</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.organizations }}</p>
-    </article>
-    <article class="rounded-xl border bg-white p-6 shadow-sm">
-      <p class="text-sm text-slate-500">Branches</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.branches }}</p>
-    </article>
-    <article class="rounded-xl border bg-white p-6 shadow-sm">
-      <p class="text-sm text-slate-500">Active users</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.active_users }}</p>
-    </article>
-    <article class="rounded-xl border bg-white p-6 shadow-sm">
-      <p class="text-sm text-slate-500">Pending approvals</p>
-      <p class="mt-3 text-3xl font-semibold">{{ metrics.pending_approvals }}</p>
+    <article class="rounded-2xl bg-emerald-700 p-6 text-white shadow-sm">
+      <p class="text-sm text-emerald-100">Unpaid commissions</p>
+      <p class="mt-3 text-3xl font-semibold">KES {{ metrics.unpaid_commissions }}</p>
+      <a class="mt-3 inline-block text-xs font-bold text-emerald-100" href="{% url 'module-overview' 'commissions' %}">Open commissions</a>
     </article>
   </section>
+
+  <section class="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+    <article class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available serialized stock</p>
+      <p class="mt-2 text-2xl font-bold">{{ metrics.stock_units }}</p>
+    </article>
+    <article class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Active users</p>
+      <p class="mt-2 text-2xl font-bold">{{ metrics.active_users }}</p>
+    </article>
+    <article class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Pending transfer receipts</p>
+      <p class="mt-2 text-2xl font-bold">{{ metrics.pending_transfer_receipts }}</p>
+    </article>
+    <article class="card p-5">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Active carts</p>
+      <p class="mt-2 text-2xl font-bold">{{ metrics.active_carts }}</p>
+    </article>
+  </section>
+
+  <div class="mt-6 grid gap-6 xl:grid-cols-3">
+    <section class="card overflow-hidden xl:col-span-2">
+      <div class="flex items-center justify-between border-b p-5">
+        <div>
+          <h2 class="text-lg font-bold">Latest sales</h2>
+          <p class="text-sm text-slate-500">Recent serialized and accessory sales.</p>
+        </div>
+        <a class="text-sm font-bold text-red-700" href="{% url 'module-overview' 'sales' %}">View register</a>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-left text-sm">
+          <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+            <tr>
+              <th class="px-4 py-3">Date</th>
+              <th class="px-4 py-3">Agent</th>
+              <th class="px-4 py-3">Items</th>
+              <th class="px-4 py-3">Serials</th>
+              <th class="px-4 py-3">Total</th>
+              <th class="px-4 py-3">Type</th>
+              <th class="px-4 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for sale in latest_sales %}
+              <tr>
+                <td class="px-4 py-3">{{ sale.created_at|date:"d/m/Y" }}</td>
+                <td class="px-4 py-3">{{ sale.agent|default:"—" }}</td>
+                <td class="px-4 py-3">
+                  {% for line in sale.lines.all %}
+                    <div>{{ line.product.name }} x {{ line.quantity }}</div>
+                  {% empty %}—{% endfor %}
+                </td>
+                <td class="px-4 py-3">
+                  {% for line in sale.lines.all %}
+                    {% if line.stock_unit %}<div>{{ line.stock_unit.serial_number }}</div>{% endif %}
+                  {% empty %}—{% endfor %}
+                </td>
+                <td class="px-4 py-3">KES {{ sale.total }}</td>
+                <td class="px-4 py-3">{{ sale.get_sale_channel_display }}</td>
+                <td class="px-4 py-3 text-right"><a class="font-bold text-red-700" href="{% url 'sale-detail' sale.id %}">Open</a></td>
+              </tr>
+            {% empty %}
+              <tr><td class="px-4 py-8 text-center text-slate-500" colspan="7">No sales yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="space-y-5">
+      <div class="card p-5">
+        <h2 class="text-lg font-bold">Pending receipts</h2>
+        <p class="mt-1 text-sm text-slate-500">Purchases and transfers waiting for receipt.</p>
+        <div class="mt-4 space-y-3">
+          {% for order in pending_actions.purchase_receipts %}
+            <a href="{% url 'purchase-detail' order.id %}" class="block rounded-xl border p-3 text-sm hover:bg-slate-50">
+              <strong>{{ order.number }}</strong>
+              <span class="block text-slate-500">{{ order.supplier }} · {{ order.destination }}</span>
+            </a>
+          {% empty %}
+            <p class="text-sm text-slate-500">No pending purchase receipts.</p>
+          {% endfor %}
+          {% for transfer in pending_actions.transfer_receipts %}
+            <a href="{% url 'transfer-detail' transfer.id %}" class="block rounded-xl border p-3 text-sm hover:bg-slate-50">
+              <strong>{{ transfer.number }}</strong>
+              <span class="block text-slate-500">{{ transfer.source }} → {{ transfer.destination }}</span>
+            </a>
+          {% empty %}
+            <p class="text-sm text-slate-500">No pending transfer receipts.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <form method="get" action="{% url 'imei-history' %}" class="card p-5">
+        <h2 class="text-lg font-bold">IMEI history</h2>
+        <p class="mt-1 text-sm text-slate-500">Find current status, movements, sale, and purchase context.</p>
+        <input name="q" class="mt-4 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Enter IMEI or serial">
+        <button class="btn-primary mt-3 w-full">Search IMEI</button>
+      </form>
+    </section>
+  </div>
 {% endblock %}

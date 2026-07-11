@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Sale cart | Kipekee Access{% endblock %}
+{% block title %}Sale cart | MobiPOS{% endblock %}
 {% block content %}
 <div class="mb-6">
   <p class="text-sm font-medium text-red-700">{{ location }}</p>
@@ -7,14 +7,33 @@
   <p class="mt-2 text-slate-600">Add phones, serialized items, and accessories before completing payment.</p>
 </div>
 <div class="grid gap-6 xl:grid-cols-2">
-  <form method="post" action="{% url 'pos-cart-add' %}" class="space-y-4 rounded-xl border bg-white p-6 shadow-sm">
+  <form method="post" action="{% url 'pos-cart-add' %}" class="card space-y-5 p-6">
     {% csrf_token %}
-    <h2 class="text-xl font-semibold">Add item</h2>
-    {{ item_form.as_p }}
-    <button class="rounded-lg bg-slate-900 px-5 py-3 font-medium text-white" type="submit">Add to cart</button>
+    <div>
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Fast entry</p>
+      <h2 class="mt-1 text-xl font-semibold">Add item</h2>
+      <p class="mt-2 text-sm text-slate-500">Scan an IMEI or barcode, then press Enter. Use the fields below only when the scan does not identify the item.</p>
+    </div>
+    {% include "components/form_field.html" with field=item_form.lookup %}
+    <div class="grid gap-4 md:grid-cols-2">
+      {% include "components/form_field.html" with field=item_form.product %}
+      {% include "components/form_field.html" with field=item_form.stock_unit %}
+      {% include "components/form_field.html" with field=item_form.quantity %}
+      {% include "components/form_field.html" with field=item_form.discount %}
+    </div>
+    <button class="btn-primary" type="submit">Add to cart</button>
   </form>
-  <section class="rounded-xl border bg-white p-6 shadow-sm">
-    <h2 class="text-xl font-semibold">Current cart</h2>
+  <section class="card p-6">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-semibold">Current cart</h2>
+        <p class="mt-1 text-sm text-slate-500">Review items before collecting payment.</p>
+      </div>
+      <div class="rounded-2xl bg-slate-900 px-4 py-3 text-right text-white">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-300">Cart total</p>
+        <p class="text-2xl font-bold">KES {{ cart_total }}</p>
+      </div>
+    </div>
     {% if cart and cart.lines.exists %}
       <div class="mt-4 space-y-3">
         {% for line in cart.lines.all %}
@@ -22,6 +41,7 @@
             <div>
               <p class="font-medium">{{ line.product.name }}</p>
               <p class="text-sm text-slate-500">{{ line.quantity }} × KES {{ line.unit_price }}{% if line.discount %} · Discount KES {{ line.discount }}{% endif %}{% if line.stock_unit %} · {{ line.stock_unit.serial_number }}{% endif %}</p>
+              <p class="mt-1 text-sm font-medium">Tax KES {{ line.tax }} · Line total KES {{ line.total_after_tax }}</p>
             </div>
             <form method="post" action="{% url 'pos-cart-remove' line.id %}">
               {% csrf_token %}<button class="text-sm font-medium text-red-700" type="submit">Remove</button>
@@ -31,9 +51,42 @@
       </div>
       <form method="post" action="{% url 'pos-cart-complete' cart.id %}" class="mt-6 space-y-4 border-t pt-6">
         {% csrf_token %}
-        <h3 class="font-semibold">Payment</h3>
-        {{ complete_form.as_p }}
-        <button class="rounded-lg bg-red-700 px-5 py-3 font-medium text-white" type="submit">Complete sale</button>
+        <div>
+          <h3 class="font-semibold">Payment and customer</h3>
+          <p class="mt-1 text-sm text-slate-500">Allocate across cash, M-Pesa, card, bank transfer, and approved customer credit. Cash over-tender is treated as change due, not extra revenue.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2">
+          {% include "components/form_field.html" with field=complete_form.cash_amount %}
+          {% include "components/form_field.html" with field=complete_form.mpesa_amount %}
+          {% include "components/form_field.html" with field=complete_form.mpesa_reference %}
+          {% include "components/form_field.html" with field=complete_form.card_amount %}
+          {% include "components/form_field.html" with field=complete_form.card_reference %}
+          {% include "components/form_field.html" with field=complete_form.bank_amount %}
+          {% include "components/form_field.html" with field=complete_form.bank_reference %}
+          {% include "components/form_field.html" with field=complete_form.credit_amount %}
+        </div>
+        <div class="rounded-2xl bg-slate-50 p-4">
+          <p class="text-sm font-bold text-slate-700">Customer</p>
+          <p class="mt-1 text-xs text-slate-500">Choose an existing customer for credit sales. For fully paid walk-in sales, you can create a lightweight customer profile inline.</p>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            {% include "components/form_field.html" with field=complete_form.customer %}
+            {% include "components/form_field.html" with field=complete_form.new_customer_name %}
+            {% include "components/form_field.html" with field=complete_form.new_customer_phone %}
+            {% include "components/form_field.html" with field=complete_form.new_customer_email %}
+          </div>
+        </div>
+        <div class="rounded-2xl border border-slate-200 p-4">
+          <p class="text-sm font-bold text-slate-700">Credit sale context</p>
+          <p class="mt-1 text-xs text-slate-500">Use these fields for agency-financed phone sales and customer follow-up.</p>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            {% include "components/form_field.html" with field=complete_form.sale_channel %}
+            {% include "components/form_field.html" with field=complete_form.credit_agency %}
+            {% include "components/form_field.html" with field=complete_form.customer_national_id %}
+            {% include "components/form_field.html" with field=complete_form.next_of_kin_name %}
+            {% include "components/form_field.html" with field=complete_form.next_of_kin_phone %}
+          </div>
+        </div>
+        <button class="btn-danger" type="submit">Complete sale</button>
       </form>
     {% else %}
       <p class="mt-4 text-slate-500">No items have been added.</p>
