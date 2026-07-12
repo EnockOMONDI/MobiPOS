@@ -61,8 +61,8 @@
   }
   .mp-hero {
     display: grid;
-    gap: 70px;
-    grid-template-columns: minmax(0, 1.05fr) minmax(380px, .95fr);
+    gap: 34px;
+    grid-template-columns: 1fr;
     padding-bottom: 58px;
   }
   .mp-pill {
@@ -76,11 +76,11 @@
   }
   .mp-title {
     color: #35353b;
-    font-size: clamp(58px, 7vw, 98px);
+    font-size: clamp(64px, 9vw, 128px);
     font-weight: 950;
-    line-height: 1.02;
+    line-height: 1;
     margin: 26px 0 0;
-    max-width: 840px;
+    max-width: 1120px;
   }
   .mp-title span {
     display: block;
@@ -94,11 +94,11 @@
   }
   .mp-lead {
     color: #565861;
-    font-size: 22px;
+    font-size: clamp(24px, 3vw, 38px);
     font-weight: 750;
-    line-height: 1.6;
+    line-height: 1.28;
     margin: 28px 0 0;
-    max-width: 720px;
+    max-width: 1060px;
   }
   .mp-proof-copy {
     color: #62646d;
@@ -106,7 +106,7 @@
     font-weight: 650;
     line-height: 1.75;
     margin: 18px 0 0;
-    max-width: 730px;
+    max-width: 920px;
   }
   .mp-actions {
     align-items: center;
@@ -138,9 +138,11 @@
     color: #303036;
   }
   .mp-hero-panel {
-    align-self: end;
+    align-self: start;
     display: grid;
     gap: 20px;
+    grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
+    margin-top: 6px;
   }
   .mp-burst-row {
     align-items: center;
@@ -195,10 +197,10 @@
     min-height: 350px;
   }
   .mp-photo-left {
-    background-image: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.08)), url("https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=900&q=85");
+    background-image: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.08)), url("https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=900&q=85");
   }
   .mp-photo-right {
-    background-image: linear-gradient(180deg, rgba(0,0,0,.01), rgba(0,0,0,.06)), url("https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=1300&q=85");
+    background-image: linear-gradient(180deg, rgba(0,0,0,.01), rgba(0,0,0,.06)), url("https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1300&q=85");
     background-position: center 36%;
   }
   .mp-section {
@@ -455,7 +457,7 @@
   }
   @media (max-width: 1060px) {
     .mp-links { display: none; }
-    .mp-hero,
+    .mp-hero-panel,
     .mp-section-head,
     .mp-final {
       grid-template-columns: 1fr;
@@ -519,7 +521,7 @@
         <div>
           <span class="mp-pill">Kenya-first control platform for mobile retail</span>
           <h1 class="mp-title">
-            <span>The Operating</span>
+            <span>Operating</span>
             <span>System for</span>
             <span>Mobile Retail</span>
             <em>Businesses</em>
