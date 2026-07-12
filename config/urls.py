@@ -18,13 +18,13 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from apps.reports.views import dashboard
+from apps.reports.views import activity_report, dashboard, demo_access
 from apps.reports.views import global_search, imei_history, module_overview
-from apps.organizations.views import branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
+from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
 from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, open_session, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
-from apps.transfers.views import transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_receive
+from apps.transfers.views import agent_allocation_create, agent_recall_create, transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_receive
 from apps.sales.views import return_approve_complete, sale_add_payment, sale_detail, sale_request_return
 from apps.expenses.views import expense_approve, expense_create
 from apps.repairs.views import repair_create, repair_detail, repair_update, repair_use_part
@@ -32,7 +32,8 @@ from apps.notifications.views import notification_list, notification_read
 from apps.reports.operational import operational_report
 from apps.reports.advanced import exception_report
 from apps.reports.retail import retail_analytics_report
-from apps.inventory.views import stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
+from apps.reports.agent_network import agent_network_report
+from apps.inventory.views import batch_serial_intake, device_search, stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
 from apps.commissions.views import commission_payout_approve, commission_payout_create, commission_payout_detail, commission_payout_pay
 from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox, approval_policy_create, approval_policy_list, receivable_installment_schedule
 from apps.catalog.views import brand_create, category_create, product_create, product_detail, product_toggle_active, product_update
@@ -41,6 +42,7 @@ from config.views import health_live, health_ready
 
 urlpatterns = [
     path("", dashboard, name="dashboard"),
+    path("demo/", demo_access, name="demo-access"),
     path("overview/<slug:module>/", module_overview, name="module-overview"),
     path("search/", global_search, name="global-search"),
     path("register/", register_organization, name="register-organization"),
@@ -51,6 +53,11 @@ urlpatterns = [
     path("invitations/<uuid:invitation_id>/revoke/", invitation_revoke, name="invitation-revoke"),
     path("users/access/", membership_access_list, name="membership-access-list"),
     path("users/access/<uuid:membership_id>/", membership_access_update, name="membership-access-update"),
+    path("agents/<uuid:profile_id>/", agent_profile_detail, name="agent-profile-detail"),
+    path("agents/<uuid:profile_id>/<slug:decision>/", agent_profile_decide, name="agent-profile-decide"),
+    path("agents/<uuid:profile_id>/documents/upload/", agent_document_upload, name="agent-document-upload"),
+    path("agents/dsas/new/", agent_dsa_create, name="agent-dsa-create"),
+    path("agent-documents/<uuid:document_id>/download/", agent_document_download, name="agent-document-download"),
     path("branches/new/", branch_create, name="branch-create"),
     path("locations/new/", location_create, name="location-create"),
     path("roles/new/", role_create, name="role-create"),
@@ -79,8 +86,11 @@ urlpatterns = [
     path("reports/imei-history/", imei_history, name="imei-history"),
     path("reports/operational/", operational_report, name="operational-report"),
     path("reports/retail-analytics/", retail_analytics_report, name="retail-analytics-report"),
+    path("reports/agent-network/", agent_network_report, name="agent-network-report"),
     path("reports/exceptions/", exception_report, name="exception-report"),
+    path("reports/activity/", activity_report, name="activity-report"),
     path("inventory/adjustments/new/", stock_adjustment_create, name="stock-adjustment-create"),
+    path("inventory/devices/search/", device_search, name="device-search"),
     path("inventory/adjustments/<uuid:adjustment_id>/", stock_adjustment_detail, name="stock-adjustment-detail"),
     path("inventory/adjustments/<uuid:adjustment_id>/complete/", stock_adjustment_complete, name="stock-adjustment-complete"),
     path("inventory/movements/<uuid:movement_id>/reverse/", stock_movement_reverse, name="stock-movement-reverse"),
@@ -115,11 +125,14 @@ urlpatterns = [
     path("supplier-returns/<uuid:return_id>/", supplier_return_detail, name="supplier-return-detail"),
     path("supplier-returns/<uuid:return_id>/complete/", supplier_return_complete, name="supplier-return-complete"),
     path("transfers/new/", transfer_create, name="transfer-create"),
+    path("transfers/agent-allocation/new/", agent_allocation_create, name="agent-allocation-create"),
+    path("transfers/agent-recall/new/", agent_recall_create, name="agent-recall-create"),
     path("transfers/<uuid:transfer_id>/", transfer_detail, name="transfer-detail"),
     path("transfers/<uuid:transfer_id>/approve/", transfer_approve, name="transfer-approve"),
     path("transfers/<uuid:transfer_id>/dispatch/", transfer_dispatch, name="transfer-dispatch"),
     path("transfers/<uuid:transfer_id>/receive/", transfer_receive, name="transfer-receive"),
     path("transfers/discrepancies/<uuid:discrepancy_id>/resolve/", transfer_discrepancy_resolve, name="transfer-discrepancy-resolve"),
+    path("inventory/batch-serial-intake/", batch_serial_intake, name="batch-serial-intake"),
     path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("accounts/password/change/", auth_views.PasswordChangeView.as_view(success_url="/accounts/security/"), name="password-change"),

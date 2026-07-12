@@ -9,6 +9,7 @@ from apps.organizations.models import (
     Membership,
     MembershipStatus,
     Location,
+    LocationType,
     Organization,
 )
 
@@ -63,3 +64,35 @@ def test_organization_owned_models_reject_cross_tenant_foreign_keys():
 
     with pytest.raises(ValidationError):
         order.full_clean()
+
+
+@pytest.mark.django_db
+def test_agent_location_requires_branch_assigned_custodian():
+    organization = Organization.objects.create(name="Agent Org", slug="agent-org", status="active")
+    company = Company.objects.create(organization=organization, name="Company", code="CO")
+    assigned = Branch.objects.create(organization=organization, company=company, name="Assigned", code="A")
+    hidden = Branch.objects.create(organization=organization, company=company, name="Hidden", code="H")
+    user = User.objects.create_user(username="agent-user", email="agent@example.com")
+    membership = Membership.objects.create(organization=organization, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(assigned)
+
+    valid = Location(
+        organization=organization,
+        branch=assigned,
+        name="Agent User Stock",
+        code="AGENT-1",
+        location_type=LocationType.AGENT,
+        custodian_membership=membership,
+    )
+    valid.full_clean()
+
+    invalid = Location(
+        organization=organization,
+        branch=hidden,
+        name="Wrong Branch",
+        code="AGENT-2",
+        location_type=LocationType.AGENT,
+        custodian_membership=membership,
+    )
+    with pytest.raises(ValidationError):
+        invalid.full_clean()

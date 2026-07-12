@@ -134,6 +134,21 @@ def organization_permission_required(permission_codename):
     return decorator
 
 
+def organization_owner_or_permission_required(permission_codename):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            organization = getattr(request, "organization", None)
+            membership = getattr(request, "membership", None)
+            if request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner):
+                return view(request, *args, **kwargs)
+            if organization and user_has_organization_permission(request.user, organization, permission_codename):
+                return view(request, *args, **kwargs)
+            raise PermissionDenied(f"Permission {permission_codename} is required.")
+        return wrapped
+    return decorator
+
+
 def platform_admin_required(view):
     @wraps(view)
     def wrapped(request, *args, **kwargs):

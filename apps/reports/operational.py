@@ -9,10 +9,11 @@ from apps.expenses.models import Expense, ExpenseStatus
 from apps.inventory.models import StockBalance
 from apps.operations.models import Payable, Receivable
 from apps.sales.models import SaleLine
-from apps.organizations.permissions import accessible_branches_for
+from apps.organizations.permissions import accessible_branches_for, organization_owner_or_permission_required
 
 
 @login_required
+@organization_owner_or_permission_required("organizations.view_operational_report")
 def operational_report(request):
     organization = request.organization
     branches = accessible_branches_for(request.user, organization)

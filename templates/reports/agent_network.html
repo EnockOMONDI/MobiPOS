@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Agent network report | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-bold uppercase tracking-wider text-red-700">Owner visibility</p>
+    <h1 class="mt-1 text-3xl font-bold">Agent network report</h1>
+    <p class="mt-2 max-w-3xl text-slate-600">Monitor agents, DSAs, verification status, missing identity records, supervisor relationships, and recent onboarding activity.</p>
+  </div>
+  <a class="btn-secondary" href="?format=csv">Export CSV</a>
+</div>
+
+<section class="mt-6 grid gap-4 md:grid-cols-4 xl:grid-cols-8">
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Profiles</p>
+    <p class="mt-2 text-3xl font-bold">{{ summary.total }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Active agents</p>
+    <p class="mt-2 text-3xl font-bold">{{ summary.active_agents }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">DSAs</p>
+    <p class="mt-2 text-3xl font-bold">{{ summary.dsa_count }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Pending approval</p>
+    <p class="mt-2 text-3xl font-bold text-amber-700">{{ summary.pending }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Missing ID scans</p>
+    <p class="mt-2 text-3xl font-bold text-red-700">{{ summary.missing_national_id }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Stock held</p>
+    <p class="mt-2 text-3xl font-bold">{{ summary.stock_held }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Agent sales</p>
+    <p class="mt-2 text-xl font-bold">KES {{ summary.sales_total }}</p>
+  </article>
+  <article class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Payable commission</p>
+    <p class="mt-2 text-xl font-bold">KES {{ summary.payable_commission }}</p>
+  </article>
+</section>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Status breakdown</h2>
+    <div class="mt-4 space-y-2">
+      {% for row in status_summary %}
+        <div class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+          <span class="font-medium">{{ row.status|title }}</span>
+          <strong>{{ row.total }}</strong>
+        </div>
+      {% empty %}
+        <p class="text-sm text-slate-500">No agent profiles yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Profile types</h2>
+    <div class="mt-4 space-y-2">
+      {% for row in type_summary %}
+        <div class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
+          <span class="font-medium">{{ row.profile_type|upper }}</span>
+          <strong>{{ row.total }}</strong>
+        </div>
+      {% empty %}
+        <p class="text-sm text-slate-500">No agent profiles yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Pending approvals</h2>
+    <div class="mt-4 space-y-3">
+      {% for profile in pending_profiles %}
+        <a class="block rounded-xl border border-slate-100 p-3 hover:bg-slate-50" href="{% url 'agent-profile-detail' profile.id %}">
+          <span class="font-semibold">{{ profile.legal_name }}</span>
+          <span class="block text-xs text-slate-500">{{ profile.get_profile_type_display }} · {{ profile.branch.name }}</span>
+        </a>
+      {% empty %}
+        <p class="text-sm text-slate-500">No pending profiles.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<section class="card mt-6 overflow-hidden">
+  <div class="border-b p-5">
+    <h2 class="text-lg font-bold">Agent and DSA performance</h2>
+    <p class="mt-1 text-sm text-slate-500">Connect people, stock, sales, collections, gross profit, and commissions in one management view.</p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr>
+          <th class="px-4 py-3">Profile</th>
+          <th class="px-4 py-3">Type</th>
+          <th class="px-4 py-3">Stock</th>
+          <th class="px-4 py-3">Sales</th>
+          <th class="px-4 py-3">Collected</th>
+          <th class="px-4 py-3">Gross profit</th>
+          <th class="px-4 py-3">Commission</th>
+          <th class="px-4 py-3">Payable</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for row in profile_rows %}
+          <tr class="align-top hover:bg-slate-50">
+            <td class="px-4 py-3">
+              <a class="font-semibold text-red-700" href="{% url 'agent-profile-detail' row.profile.id %}">{{ row.profile.legal_name }}</a>
+              <span class="block text-xs text-slate-500">{{ row.profile.branch.name }}</span>
+            </td>
+            <td class="px-4 py-3">{{ row.profile.get_profile_type_display }}</td>
+            <td class="px-4 py-3">{{ row.stock_count }}</td>
+            <td class="px-4 py-3">{{ row.sale_count }}<span class="block text-xs text-slate-500">KES {{ row.sales_total }}</span></td>
+            <td class="px-4 py-3">KES {{ row.collected_total }}</td>
+            <td class="px-4 py-3">KES {{ row.gross_profit }}</td>
+            <td class="px-4 py-3">KES {{ row.commission_total }}</td>
+            <td class="px-4 py-3">KES {{ row.payable_commission }}</td>
+          </tr>
+        {% empty %}
+          <tr><td class="px-4 py-8 text-center text-slate-500" colspan="8">No agent profiles yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card mt-6 overflow-hidden">
+  <div class="border-b p-5">
+    <h2 class="text-lg font-bold">DSA hierarchy</h2>
+    <p class="mt-1 text-sm text-slate-500">Each DSA is linked to the supervising agent who registered or manages them.</p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-left text-sm">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr>
+          <th class="px-4 py-3">DSA</th>
+          <th class="px-4 py-3">Supervisor</th>
+          <th class="px-4 py-3">Branch</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">National ID</th>
+          <th class="px-4 py-3">Documents</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y">
+        {% for profile in dsas %}
+          <tr class="align-top hover:bg-slate-50">
+            <td class="px-4 py-3"><a class="font-semibold text-red-700" href="{% url 'agent-profile-detail' profile.id %}">{{ profile.legal_name }}</a></td>
+            <td class="px-4 py-3">{{ profile.supervisor.legal_name|default:"Unassigned" }}</td>
+            <td class="px-4 py-3">{{ profile.branch.name }}</td>
+            <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ profile.get_status_display }}</span></td>
+            <td class="px-4 py-3">{{ profile.national_id_number|default:"Missing" }}</td>
+            <td class="px-4 py-3">{{ profile.documents.count }}</td>
+          </tr>
+        {% empty %}
+          <tr><td class="px-4 py-8 text-center text-slate-500" colspan="6">No DSA profiles yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-2">
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Missing ID documents</h2>
+    <div class="mt-4 space-y-3">
+      {% for profile in missing_documents %}
+        <a class="block rounded-xl border border-red-100 bg-red-50/50 p-3 hover:bg-red-50" href="{% url 'agent-profile-detail' profile.id %}">
+          <span class="font-semibold">{{ profile.legal_name }}</span>
+          <span class="block text-xs text-slate-500">{{ profile.get_profile_type_display }} · {{ profile.branch.name }}</span>
+        </a>
+      {% empty %}
+        <p class="text-sm text-slate-500">All profiles have national ID document records.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card p-5">
+    <h2 class="text-lg font-bold">Recent agent activity</h2>
+    <div class="mt-4 space-y-3">
+      {% for event in recent_activity %}
+        <div class="rounded-xl border border-slate-100 p-3">
+          <div class="flex items-start justify-between gap-3">
+            <p class="font-semibold">{{ event.action }}</p>
+            <time class="whitespace-nowrap text-xs text-slate-500">{{ event.created_at|date:"d M H:i" }}</time>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">
+            {% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}System{% endif %}
+            {% if event.target_id %}· {{ event.target_id }}{% endif %}
+          </p>
+        </div>
+      {% empty %}
+        <p class="text-sm text-slate-500">No agent activity has been recorded yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

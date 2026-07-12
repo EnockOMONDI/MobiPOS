@@ -7,6 +7,10 @@ from apps.sales.models import SaleStatus
 from .models import Payment, PaymentMethod, PaymentStatus
 
 
+IMMEDIATE_CONFIRMATION_METHODS = {PaymentMethod.CASH}
+PROVIDER_CONFIRMED_METHODS = {PaymentMethod.MPESA, PaymentMethod.CARD, PaymentMethod.BANK}
+
+
 @transaction.atomic
 def record_sale_payments(*, sale, allocations, received_by):
     total = sum((allocation["amount"] for allocation in allocations), 0)
@@ -17,6 +21,13 @@ def record_sale_payments(*, sale, allocations, received_by):
     for index, allocation in enumerate(allocations, start=1):
         if allocation["method"] == PaymentMethod.CREDIT:
             raise ValidationError("Customer credit must be recorded as a receivable, not a payment.")
+        provider_reference = allocation.get("provider_reference", "")
+        if provider_reference and Payment.objects.filter(
+            organization=sale.organization,
+            method=allocation["method"],
+            provider_reference=provider_reference,
+        ).exists():
+            raise ValidationError("This payment reference has already been used.")
         payment = Payment.objects.create(
             organization=sale.organization,
             number=f"PAY-{timezone.now():%Y%m%d%H%M%S%f}-{index}",
@@ -25,10 +36,11 @@ def record_sale_payments(*, sale, allocations, received_by):
             method=allocation["method"],
             status=PaymentStatus.PENDING,
             amount=allocation["amount"],
-            provider_reference=allocation.get("provider_reference", ""),
+            provider_reference=provider_reference,
             received_by=received_by,
         )
-        confirm_payment(payment=payment)
+        if payment.method in IMMEDIATE_CONFIRMATION_METHODS:
+            confirm_payment(payment=payment)
         payments.append(payment)
     return payments
 
@@ -70,11 +82,13 @@ def allocate_sale_refund(*, sale, amount, reason, approved_by):
 
 
 @transaction.atomic
-def confirm_payment(*, payment):
+def confirm_payment(*, payment, confirmed_by=None, provider_confirmed=False):
     if payment.status == PaymentStatus.CONFIRMED:
         return payment
     if payment.status != PaymentStatus.PENDING:
         raise ValidationError("Only pending payments can be confirmed.")
+    if payment.method in PROVIDER_CONFIRMED_METHODS and not provider_confirmed:
+        raise ValidationError("This payment must be confirmed by provider callback, reconciliation, or authorized manual confirmation.")
     payment.status = PaymentStatus.CONFIRMED
     payment.save(update_fields=["status", "updated_at"])
     if payment.sale:

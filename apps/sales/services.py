@@ -68,10 +68,10 @@ def complete_sale(*, sale, actor):
 
 
 @transaction.atomic
-def create_credit_receivable(*, sale):
+def create_credit_receivable(*, sale, amount=None):
     if not sale.customer:
         raise ValidationError("Credit sales require a customer.")
-    outstanding = sale.total - sale.paid_total
+    outstanding = Decimal(amount) if amount is not None else sale.total - sale.paid_total
     exposure = Receivable.objects.filter(
         organization=sale.organization,
         customer=sale.customer,
@@ -94,7 +94,7 @@ def create_credit_receivable(*, sale):
             "due_on": sale.due_on,
         },
     )
-    if not receivable.installments.exists():
+    if not receivable.installments.filter(is_current=True).exists():
         from apps.operations.models import ReceivableInstallment
         ReceivableInstallment.objects.create(
             organization=sale.organization,

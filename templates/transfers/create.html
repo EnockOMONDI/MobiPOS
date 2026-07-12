@@ -1,11 +1,44 @@
 {% extends "base.html" %}
 {% block title %}New transfer | MobiPOS{% endblock %}
 {% block content %}
-<p class="text-sm font-semibold text-red-700">Inventory movement</p><h1 class="mt-1 text-3xl font-bold">New multi-line stock transfer</h1><p class="mt-2 text-slate-600">Move up to five product lines between accessible locations. Serialized items require one line per serial.</p>
+<p class="text-sm font-semibold text-red-700">Inventory movement</p><h1 class="mt-1 text-3xl font-bold">New stock transfer</h1><p class="mt-2 text-slate-600">Search existing IMEI records, select devices, or add quantity-based product lines.</p>
 <form method="post" class="mt-6 max-w-4xl space-y-5">{% csrf_token %}
   {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
   <section class="card grid gap-5 p-6 md:grid-cols-2"><div class="md:col-span-2"><h2 class="text-lg font-bold">Transfer route</h2></div>{% include "components/form_field.html" with field=form.source %}{% include "components/form_field.html" with field=form.destination %}<div class="md:col-span-2">{% include "components/form_field.html" with field=form.notes %}</div></section>
-  <section class="card grid gap-5 p-6 md:grid-cols-3"><div class="md:col-span-3"><p class="text-xs font-bold uppercase tracking-wider text-red-700">Required</p><h2 class="mt-1 text-lg font-bold">First transfer line</h2></div>{% include "components/form_field.html" with field=form.product %}{% include "components/form_field.html" with field=form.stock_unit %}{% include "components/form_field.html" with field=form.quantity %}</section>
+  <section
+    class="card p-6"
+    x-data="{ q: '', results: [], selected: {}, loading: false, async search() { const source = document.getElementById('id_source')?.value || ''; if (!source || this.q.length < 2) { this.results = []; return; } this.loading = true; const response = await fetch('{% url 'device-search' %}?source=' + encodeURIComponent(source) + '&q=' + encodeURIComponent(this.q)); const data = await response.json(); this.results = data.results || []; this.loading = false; } }"
+  >
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Serialized devices</p>
+        <h2 class="mt-1 text-lg font-bold">Search and select IMEI records</h2>
+        <p class="mt-1 text-sm text-slate-500">Search by IMEI, secondary IMEI, SKU, model, location, or custodian. Selected devices move as one unit each.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600" x-text="Object.keys(selected).length + ' selected'"></span>
+    </div>
+    {% if form.selected_stock_units.errors %}<div class="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ form.selected_stock_units.errors }}</div>{% endif %}
+    <div class="mt-4 flex gap-3">
+      <input x-model="q" @input.debounce.300ms="search" class="min-w-0 flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" placeholder="Scan or type IMEI, serial, SKU, model...">
+      <button type="button" class="btn-secondary" @click="search">Search</button>
+    </div>
+    <div class="mt-4 overflow-hidden rounded-xl border border-slate-200">
+      <template x-if="loading"><p class="p-4 text-sm text-slate-500">Searching devices...</p></template>
+      <template x-if="!loading && results.length === 0"><p class="p-4 text-sm text-slate-500">Choose a source location, then search for at least two characters.</p></template>
+      <template x-for="unit in results" :key="unit.id">
+        <label class="flex cursor-pointer items-start gap-3 border-t border-slate-100 p-4 first:border-t-0 hover:bg-slate-50">
+          <input type="checkbox" name="selected_stock_units" :value="unit.id" class="mt-1" x-model="selected[unit.id]">
+          <span class="min-w-0 flex-1">
+            <span class="block font-semibold" x-text="unit.product"></span>
+            <span class="mt-1 block text-sm text-slate-500"><span x-text="unit.serial_number"></span><template x-if="unit.secondary_serial"><span> · <span x-text="unit.secondary_serial"></span></span></template></span>
+            <span class="mt-1 block text-xs text-slate-500"><span x-text="unit.location"></span> · <span x-text="unit.branch"></span><template x-if="unit.custodian"><span> · <span x-text="unit.custodian"></span></span></template></span>
+          </span>
+          <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700" x-text="unit.status"></span>
+        </label>
+      </template>
+    </div>
+  </section>
+  <section class="card grid gap-5 p-6 md:grid-cols-3"><div class="md:col-span-3"><p class="text-xs font-bold uppercase tracking-wider text-red-700">Manual line</p><h2 class="mt-1 text-lg font-bold">Product or single serial entry</h2></div>{% include "components/form_field.html" with field=form.product %}{% include "components/form_field.html" with field=form.stock_unit %}{% include "components/form_field.html" with field=form.quantity %}</section>
   <details class="card p-6"><summary class="cursor-pointer font-bold">Add more products or serials</summary><p class="mt-2 text-sm text-slate-500">Use one additional line per serialized device.</p><div class="mt-5 space-y-5">{% for fields in form.additional_line_groups %}<div class="grid gap-4 rounded-xl bg-slate-50 p-4 md:grid-cols-3">{% for field in fields %}{% include "components/form_field.html" with field=field %}{% endfor %}</div>{% endfor %}</div></details>
   <div class="flex gap-3"><button class="btn-primary">Request transfer</button><a href="{% url 'module-overview' 'transfers' %}" class="btn-secondary">Cancel</a></div>
 </form>

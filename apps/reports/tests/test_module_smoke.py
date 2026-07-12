@@ -27,4 +27,8 @@ def test_all_staff_modules_search_and_export_render(client):
     retail_export = client.get(reverse("retail-analytics-report"), {"format": "csv"})
     assert retail_export.status_code == 200
     assert retail_export["Content-Type"] == "text/csv"
+    assert client.get(reverse("agent-network-report")).status_code == 200
+    agent_export = client.get(reverse("agent-network-report"), {"format": "csv"})
+    assert agent_export.status_code == 200
+    assert agent_export["Content-Type"] == "text/csv"
     assert client.get(reverse("exception-report")).status_code == 200

@@ -53,7 +53,8 @@ def approval_decide(request, approval_id):
     approval.status = decision
     approval.decided_by = request.user
     approval.decided_at = timezone.now()
-    approval.save(update_fields=["status", "decided_by", "decided_at", "updated_at"])
+    approval.decision_notes = request.POST.get("decision_notes", "").strip()
+    approval.save(update_fields=["status", "decided_by", "decided_at", "decision_notes", "updated_at"])
     if decision == ApprovalStatus.APPROVED:
         grant_requested_access(approval=approval)
     record_audit_event(action=f"approval.{decision}", actor=request.user, organization=request.organization, target=approval, request=request)

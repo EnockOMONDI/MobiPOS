@@ -7,10 +7,14 @@
   <p><strong>Requested by:</strong> {{ approval.requested_by }}</p>
   {% if approval.request_type == "access_request" %}<p><strong>Requested access:</strong> {{ approval.requested_permission_code }}</p>{% endif %}
   <p><strong>Status:</strong> {{ approval.get_status_display }}</p>
+  {% if approval.decision_notes %}<p><strong>Decision notes:</strong> {{ approval.decision_notes }}</p>{% endif %}
   {% if approval.status == "pending" %}
-  <form method="post" action="{% url 'approval-decide' approval.id %}" class="mt-5 flex gap-3">{% csrf_token %}
-    <button name="decision" value="approved" class="rounded bg-emerald-700 px-4 py-2 text-white">Approve</button>
-    <button name="decision" value="rejected" class="rounded bg-red-700 px-4 py-2 text-white">Reject</button>
+  <form method="post" action="{% url 'approval-decide' approval.id %}" class="mt-5 space-y-3">{% csrf_token %}
+    <label class="block"><span class="text-sm font-semibold text-slate-700">Decision notes</span><textarea name="decision_notes" rows="3" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"></textarea></label>
+    <div class="flex gap-3">
+      <button name="decision" value="approved" class="rounded bg-emerald-700 px-4 py-2 text-white">Approve</button>
+      <button name="decision" value="rejected" class="rounded bg-red-700 px-4 py-2 text-white">Reject</button>
+    </div>
   </form>
   {% endif %}
 </div>

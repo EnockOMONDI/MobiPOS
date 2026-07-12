@@ -46,6 +46,7 @@ def purchase_create(request):
 
 
 @login_required
+@organization_permission_required("purchasing.view_purchaseorder")
 def purchase_detail(request, order_id):
     order = get_object_or_404(
         PurchaseOrder, id=order_id, organization=request.organization,
@@ -130,6 +131,7 @@ def supplier_return_create(request):
 
 
 @login_required
+@organization_permission_required("purchasing.view_supplierreturn")
 def supplier_return_detail(request, return_id):
     supplier_return = get_object_or_404(
         SupplierReturn,

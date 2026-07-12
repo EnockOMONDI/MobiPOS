@@ -1,0 +1,562 @@
+{% extends "base.html" %}
+{% block title %}Access MobiPOS Demo{% endblock %}
+
+{% block anonymous_content %}
+<style>
+  .demo-shell {
+    margin: -3rem -1rem;
+    min-height: 100vh;
+    background: #fbfaf8;
+    color: #2d2d32;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .demo-wrap {
+    margin: 0 auto;
+    max-width: 1160px;
+    padding: 44px 24px 80px;
+  }
+  .demo-nav {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .demo-brand {
+    align-items: center;
+    color: #2d2d32;
+    display: inline-flex;
+    gap: 12px;
+    text-decoration: none;
+  }
+  .demo-mark {
+    align-items: center;
+    background: #dc2626;
+    border-radius: 50%;
+    box-shadow: 0 14px 32px rgba(220, 38, 38, .2);
+    color: #fff;
+    display: inline-flex;
+    height: 44px;
+    justify-content: center;
+    width: 44px;
+  }
+  .demo-brand strong {
+    font-size: 24px;
+    font-weight: 900;
+  }
+  .demo-nav-links {
+    align-items: center;
+    display: flex;
+    gap: 30px;
+    font-size: 14px;
+    font-weight: 800;
+  }
+  .demo-nav-links a {
+    color: #44444a;
+    text-decoration: none;
+  }
+  .demo-nav-cta {
+    background: #2f3034;
+    border-radius: 999px;
+    color: #fff !important;
+    padding: 14px 26px;
+  }
+  .demo-pill {
+    background: #fee2e2;
+    border-radius: 999px;
+    color: #b91c1c;
+    display: inline-flex;
+    font-size: 14px;
+    font-weight: 900;
+    padding: 9px 18px;
+  }
+  .demo-hero {
+    display: grid;
+    gap: 72px;
+    grid-template-columns: minmax(0, 1.06fr) minmax(360px, .94fr);
+    margin-top: 96px;
+  }
+  .demo-title {
+    color: #34343a;
+    font-size: clamp(54px, 8vw, 104px);
+    font-weight: 950;
+    line-height: .98;
+    margin: 26px 0 0;
+  }
+  .demo-title span,
+  .demo-title em {
+    display: block;
+  }
+  .demo-title em {
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-weight: 500;
+    line-height: .93;
+  }
+  .demo-copy {
+    color: #575963;
+    font-size: 18px;
+    line-height: 1.8;
+    margin-top: 28px;
+    max-width: 560px;
+  }
+  .demo-feature-row {
+    align-items: end;
+    display: grid;
+    gap: 34px;
+    grid-template-columns: 120px minmax(0, 1fr);
+    margin-top: 130px;
+  }
+  .demo-burst {
+    height: 104px;
+    position: relative;
+    width: 104px;
+  }
+  .demo-burst span {
+    background: #111;
+    border-radius: 999px;
+    height: 6px;
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform-origin: left center;
+    width: 82px;
+  }
+  .demo-burst span:nth-child(1) { transform: rotate(0deg) translateX(-3px); }
+  .demo-burst span:nth-child(2) { transform: rotate(45deg) translateX(-3px); }
+  .demo-burst span:nth-child(3) { transform: rotate(90deg) translateX(-3px); }
+  .demo-burst span:nth-child(4) { transform: rotate(135deg) translateX(-3px); }
+  .demo-burst span:nth-child(5) { transform: rotate(180deg) translateX(-3px); }
+  .demo-burst span:nth-child(6) { transform: rotate(225deg) translateX(-3px); }
+  .demo-burst span:nth-child(7) { transform: rotate(270deg) translateX(-3px); }
+  .demo-burst span:nth-child(8) { transform: rotate(315deg) translateX(-3px); }
+  .demo-brian {
+    background: #fff;
+    border: 1px solid #ece8e3;
+    border-radius: 22px;
+    box-shadow: 0 24px 70px rgba(43, 43, 48, .12);
+    padding: 24px;
+  }
+  .demo-brian h2 {
+    color: #2f3034;
+    font-size: 36px;
+    font-weight: 950;
+    line-height: 1.05;
+    margin: 10px 0 0;
+  }
+  .demo-brian-grid {
+    background: #f7f7f5;
+    border-radius: 18px;
+    display: grid;
+    gap: 12px;
+    margin-top: 20px;
+    padding: 18px;
+  }
+  .demo-credential {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .demo-credential dt {
+    color: #6d6f78;
+    font-size: 13px;
+    font-weight: 850;
+  }
+  .demo-credential dd {
+    color: #26272b;
+    font-size: 15px;
+    font-weight: 950;
+    margin: 0;
+    text-align: right;
+  }
+  .demo-action-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .demo-primary {
+    align-items: center;
+    background: #2f3034;
+    border-radius: 999px;
+    color: #fff;
+    display: inline-flex;
+    font-size: 14px;
+    font-weight: 950;
+    gap: 10px;
+    justify-content: center;
+    padding: 14px 20px;
+    text-decoration: none;
+  }
+  .demo-round {
+    align-items: center;
+    background: #2f3034;
+    border-radius: 50%;
+    color: #fff;
+    display: inline-flex;
+    font-weight: 950;
+    height: 48px;
+    justify-content: center;
+    text-decoration: none;
+    width: 48px;
+  }
+  .demo-rating {
+    align-items: center;
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+  }
+  .demo-avatar {
+    align-items: center;
+    border-radius: 12px;
+    display: inline-flex;
+    font-size: 13px;
+    font-weight: 950;
+    height: 34px;
+    justify-content: center;
+    width: 34px;
+  }
+  .demo-avatar:nth-child(1) { background: #fee2e2; }
+  .demo-avatar:nth-child(2) { background: #dbeafe; }
+  .demo-avatar:nth-child(3) { background: #dcfce7; }
+  .demo-media {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: .72fr 1.48fr;
+    margin-top: 68px;
+  }
+  .demo-media img {
+    aspect-ratio: 1 / 1.05;
+    border-radius: 16px;
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
+  .demo-media img:last-child {
+    aspect-ratio: 1.9 / 1.05;
+  }
+  .demo-categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 36px;
+    justify-content: center;
+    margin: 54px 0 74px;
+  }
+  .demo-categories span {
+    color: #696a70;
+    font-size: 24px;
+    font-weight: 950;
+  }
+  .demo-accounts {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .demo-account {
+    background: #fff;
+    border: 1px solid #ece8e3;
+    border-radius: 16px;
+    padding: 22px;
+  }
+  .demo-account.is-featured {
+    border-color: #fecaca;
+    box-shadow: inset 0 0 0 2px #fee2e2;
+  }
+  .demo-account-top {
+    align-items: flex-start;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .demo-account h3 {
+    color: #2f3034;
+    font-size: 26px;
+    font-weight: 950;
+    line-height: 1.1;
+    margin: 8px 0 0;
+  }
+  .demo-label {
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+  .demo-start {
+    background: #fee2e2;
+    border-radius: 999px;
+    color: #b91c1c;
+    flex: 0 0 auto;
+    font-size: 12px;
+    font-weight: 950;
+    padding: 7px 10px;
+  }
+  .demo-account p {
+    color: #686b73;
+    font-size: 14px;
+    line-height: 1.65;
+    margin: 16px 0 0;
+  }
+  .demo-account dl {
+    display: grid;
+    gap: 10px;
+    margin: 18px 0 0;
+  }
+  .demo-account .demo-primary {
+    margin-top: 20px;
+    width: 100%;
+  }
+  .demo-path {
+    display: grid;
+    gap: 46px;
+    grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr);
+    margin-top: 88px;
+  }
+  .demo-path h2 {
+    color: #34343a;
+    font-size: clamp(42px, 5.5vw, 76px);
+    font-weight: 950;
+    line-height: 1.08;
+    margin: 0;
+  }
+  .demo-path h2 em {
+    display: block;
+    font-family: Georgia, "Times New Roman", serif;
+    font-style: italic;
+    font-weight: 500;
+  }
+  .demo-steps {
+    display: grid;
+    gap: 12px;
+  }
+  .demo-step {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ece8e3;
+    border-radius: 14px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding: 16px;
+  }
+  .demo-step-num {
+    align-items: center;
+    background: #2f3034;
+    border-radius: 50%;
+    color: #fff;
+    display: inline-flex;
+    font-weight: 950;
+    height: 42px;
+    justify-content: center;
+    width: 42px;
+  }
+  .demo-step strong {
+    color: #2f3034;
+    display: block;
+    font-size: 16px;
+    font-weight: 950;
+  }
+  .demo-step p {
+    color: #666870;
+    font-size: 14px;
+    line-height: 1.55;
+    margin: 4px 0 0;
+  }
+  .demo-signed-in {
+    background: #fff;
+    border: 1px solid #ece8e3;
+    border-radius: 24px;
+    margin-top: 72px;
+    padding: 44px;
+  }
+  .demo-signed-in h1 {
+    color: #34343a;
+    font-size: clamp(42px, 6vw, 72px);
+    font-weight: 950;
+    line-height: 1;
+    margin: 14px 0 0;
+  }
+  .demo-signed-in p {
+    color: #62646d;
+    font-size: 18px;
+    line-height: 1.7;
+    max-width: 660px;
+  }
+  @media (max-width: 920px) {
+    .demo-nav-links a:not(.demo-nav-cta) {
+      display: none;
+    }
+    .demo-hero,
+    .demo-path {
+      grid-template-columns: 1fr;
+    }
+    .demo-feature-row {
+      margin-top: 36px;
+    }
+    .demo-accounts {
+      grid-template-columns: 1fr;
+    }
+  }
+  @media (max-width: 640px) {
+    .demo-shell {
+      margin: -2.5rem -1rem;
+    }
+    .demo-wrap {
+      padding: 28px 18px 56px;
+    }
+    .demo-nav {
+      align-items: flex-start;
+    }
+    .demo-nav-links {
+      gap: 12px;
+    }
+    .demo-nav-cta {
+      padding: 11px 16px;
+    }
+    .demo-hero {
+      gap: 38px;
+      margin-top: 54px;
+    }
+    .demo-title {
+      font-size: 52px;
+    }
+    .demo-feature-row {
+      grid-template-columns: 1fr;
+    }
+    .demo-burst {
+      height: 74px;
+      width: 74px;
+    }
+    .demo-burst span {
+      width: 58px;
+    }
+    .demo-media {
+      grid-template-columns: 1fr;
+      margin-top: 44px;
+    }
+    .demo-categories {
+      gap: 18px;
+      justify-content: flex-start;
+    }
+    .demo-categories span {
+      font-size: 18px;
+    }
+  }
+</style>
+
+<div class="demo-shell">
+  <div class="demo-wrap">
+    <header class="demo-nav">
+      <a href="{% url 'dashboard' %}" class="demo-brand">
+        <span class="demo-mark">
+          <svg width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5v-15h15v15h-15Zm4.5 0v-6h6v6M8 8h.01M12 8h.01M16 8h.01"/></svg>
+        </span>
+        <strong>MobiPOS</strong>
+      </a>
+      <nav class="demo-nav-links" aria-label="Demo navigation">
+        <a href="{% url 'dashboard' %}">Product</a>
+        <a href="{% url 'dashboard' %}">Inventory</a>
+        <a href="{% url 'dashboard' %}">Reports</a>
+        <a href="{% url 'dashboard' %}" class="demo-nav-cta">Back to landing</a>
+      </nav>
+    </header>
+
+    {% if already_signed_in %}
+      <section class="demo-signed-in">
+        <span class="demo-pill">Already signed in</span>
+        <h1>You are already inside MobiPOS.</h1>
+        <p>Open your dashboard to continue exploring the platform with your current account.</p>
+        <a href="{% url 'dashboard' %}" class="demo-primary">Go to dashboard</a>
+      </section>
+    {% else %}
+      <section class="demo-hero">
+        <div>
+          <span class="demo-pill">Demo data for Kenyan mobile retailers</span>
+          <h1 class="demo-title">
+            <span>Access</span>
+            <span>MobiPOS</span>
+            <span>Demo</span>
+            <em>With Real</em>
+            <em>Retail Data</em>
+          </h1>
+          <p class="demo-copy">Start with Brian's owner account to explore sales, IMEI control, warehouse transfers, agent stock, approvals, reports and accountability workflows built for mobile and accessories companies.</p>
+        </div>
+        <div class="demo-feature-row">
+          <div class="demo-burst" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <aside class="demo-brian" aria-label="Recommended Brian demo account">
+            <span class="demo-label">Recommended demo</span>
+            <h2>Login as Brian</h2>
+            <p class="demo-copy" style="font-size:15px;line-height:1.65;margin-top:12px;">Owner-level view for a full Kenyan mobile shop demo company.</p>
+            <dl class="demo-brian-grid">
+              <div class="demo-credential"><dt>Username</dt><dd>brian</dd></div>
+              <div class="demo-credential"><dt>Password</dt><dd>DemoPass123!</dd></div>
+              <div class="demo-credential"><dt>Organization</dt><dd>Nairobi Mobile Hub</dd></div>
+            </dl>
+            <div class="demo-action-row">
+              <a href="{% url 'login' %}?demo=brian" class="demo-primary">Login with Brian demo</a>
+              <a href="{% url 'login' %}?demo=brian" class="demo-round" aria-label="Open Brian demo">↗</a>
+            </div>
+            <div class="demo-rating" aria-label="Demo confidence rating">
+              <span class="demo-avatar">B</span>
+              <span class="demo-avatar">A</span>
+              <span class="demo-avatar">P</span>
+              <strong>5/5</strong>
+              <span style="color:#6b6d75;font-size:14px;">from pilot operators</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <div class="demo-media" aria-hidden="true">
+        <img src="https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=700&q=80" alt="">
+        <img src="https://images.unsplash.com/photo-1551836022-d5d88e9218df?auto=format&fit=crop&w=1100&q=80" alt="">
+      </div>
+
+      <div class="demo-categories" aria-label="MobiPOS demo areas">
+        <span>Sales</span>
+        <span>IMEI Stock</span>
+        <span>Transfers</span>
+        <span>Agents</span>
+        <span>Reports</span>
+        <span>Approvals</span>
+      </div>
+
+      <section class="demo-accounts" aria-label="Available demo accounts">
+        {% for account in demo_accounts %}
+          <article class="demo-account {% if account.username == 'brian' %}is-featured{% endif %}">
+            <div class="demo-account-top">
+              <div>
+                <span class="demo-label">{{ account.role }}</span>
+                <h3>{{ account.username }}</h3>
+              </div>
+              {% if account.username == 'brian' %}<span class="demo-start">Start here</span>{% endif %}
+            </div>
+            <p>{{ account.best_for }}</p>
+            <dl>
+              <div class="demo-credential"><dt>Password</dt><dd>{{ account.password }}</dd></div>
+              <div class="demo-credential"><dt>Organization</dt><dd>{{ account.organization }}</dd></div>
+            </dl>
+            <a href="{% url 'login' %}?demo={{ account.username }}" class="demo-primary">Use this account</a>
+          </article>
+        {% endfor %}
+      </section>
+
+      <section class="demo-path">
+        <h2>
+          Moving beyond simple POS to create a business where
+          <em>stock tells the truth.</em>
+        </h2>
+        <div class="demo-steps">
+          <div class="demo-step"><span class="demo-step-num">1</span><div><strong>Login as Brian</strong><p>Start with the owner dashboard and review the business summary.</p></div></div>
+          <div class="demo-step"><span class="demo-step-num">2</span><div><strong>Search an IMEI</strong><p>Open the inventory workflows and verify how serialized stock is tracked.</p></div></div>
+          <div class="demo-step"><span class="demo-step-num">3</span><div><strong>Review agent stock</strong><p>Check allocation, recall, DSA structure and accountability reports.</p></div></div>
+          <div class="demo-step"><span class="demo-step-num">4</span><div><strong>Open reports</strong><p>See activity history, sales performance, approvals and operational visibility.</p></div></div>
+        </div>
+      </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

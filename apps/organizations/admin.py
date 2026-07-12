@@ -3,6 +3,8 @@ from unfold.admin import ModelAdmin
 
 from .models import (
     Announcement,
+    AgentDocument,
+    AgentProfile,
     Branch,
     Company,
     Location,
@@ -18,6 +20,29 @@ from .models import (
 
 class OrganizationOwnedAdmin(ModelAdmin):
     list_filter = ("organization",)
+    immutable_model_labels = {
+        "inventory.StockBalance",
+        "inventory.StockMovement",
+        "sales.SaleLine",
+        "sales.SaleReturnLine",
+        "payments.Refund",
+        "commissions.CommissionAccrual",
+        "commissions.CommissionPayoutLine",
+        "operations.Payable",
+        "operations.Receivable",
+        "operations.ReceivableInstallment",
+        "integrations.IntegrationEvent",
+    }
+    editable_statuses = {"draft", "requested", "pending", "open"}
+
+    def _authorized_organizations(self, request):
+        if request.user.is_superuser or request.user.is_platform_admin:
+            return Organization.objects.all()
+        return Organization.objects.filter(
+            membership__user=request.user,
+            membership__status="active",
+            membership__is_owner=True,
+        ).distinct()
 
     def _active_membership(self, request, obj=None):
         organization = getattr(obj, "organization", None)
@@ -44,6 +69,8 @@ class OrganizationOwnedAdmin(ModelAdmin):
         return self.has_view_or_change_permission(request, obj)
 
     def has_change_permission(self, request, obj=None):
+        if obj is not None and self._is_immutable_object(obj):
+            return False
         if request.user.is_superuser or request.user.is_platform_admin:
             return True
         if obj is None:
@@ -57,7 +84,52 @@ class OrganizationOwnedAdmin(ModelAdmin):
         return request.user.memberships.filter(status="active", is_owner=True).exists()
 
     def has_delete_permission(self, request, obj=None):
+        if obj is not None and self._is_immutable_object(obj):
+            return False
         return request.user.is_superuser or request.user.is_platform_admin
+
+    def _is_immutable_object(self, obj):
+        if not obj:
+            return False
+        label = obj._meta.label
+        if label in self.immutable_model_labels:
+            return True
+        status = getattr(obj, "status", None)
+        return bool(status and status not in self.editable_statuses)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj is not None and self._is_immutable_object(obj):
+            readonly.extend(field.name for field in obj._meta.fields)
+        return tuple(dict.fromkeys(readonly))
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        related_model = db_field.remote_field.model
+        authorized_orgs = self._authorized_organizations(request)
+        if db_field.name == "organization":
+            kwargs["queryset"] = authorized_orgs
+        elif hasattr(related_model, "organization_id") or any(field.name == "organization" for field in related_model._meta.fields):
+            kwargs["queryset"] = related_model.objects.filter(organization__in=authorized_orgs)
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
+
+    def formfield_for_manytomany(self, db_field, request, **kwargs):
+        related_model = db_field.remote_field.model
+        if hasattr(related_model, "organization_id") or any(field.name == "organization" for field in related_model._meta.fields):
+            kwargs["queryset"] = related_model.objects.filter(organization__in=self._authorized_organizations(request))
+        return super().formfield_for_manytomany(db_field, request, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        obj.full_clean()
+        super().save_model(request, obj, form, change)
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for instance in instances:
+            instance.full_clean()
+            instance.save()
+        formset.save_m2m()
+        for deleted in formset.deleted_objects:
+            deleted.delete()
 
 
 @admin.register(Organization)
@@ -106,6 +178,21 @@ class MembershipAdmin(OrganizationOwnedAdmin):
     list_display = ("user", "organization", "status", "is_owner")
     list_filter = ("organization", "status", "is_owner")
     filter_horizontal = ("roles", "branches")
+
+
+@admin.register(AgentProfile)
+class AgentProfileAdmin(OrganizationOwnedAdmin):
+    list_display = ("legal_name", "profile_type", "status", "branch", "supervisor", "organization")
+    list_filter = ("organization", "profile_type", "status", "branch")
+    search_fields = ("legal_name", "national_id_number", "membership__user__username", "membership__user__email")
+
+
+@admin.register(AgentDocument)
+class AgentDocumentAdmin(OrganizationOwnedAdmin):
+    list_display = ("profile", "document_type", "original_filename", "uploaded_by", "created_at", "organization")
+    list_filter = ("organization", "document_type", "created_at")
+    search_fields = ("profile__legal_name", "original_filename", "notes")
+    readonly_fields = ("original_filename", "content_type", "size", "uploaded_by")
 
 
 @admin.register(Plan)

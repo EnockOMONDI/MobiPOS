@@ -31,16 +31,47 @@ class StockUnit(OrganizationOwnedModel):
     warranty_expires_on = models.DateField(null=True, blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("organization", "serial_number"), name="unique_serial_per_org")]
+        constraints = [
+            models.UniqueConstraint(fields=("organization", "serial_number"), name="unique_serial_per_org"),
+            models.UniqueConstraint(
+                fields=("organization", "secondary_serial"),
+                condition=~models.Q(secondary_serial=""),
+                name="unique_secondary_serial_per_org",
+            ),
+            models.CheckConstraint(
+                check=models.Q(secondary_serial="") | ~models.Q(serial_number=models.F("secondary_serial")),
+                name="stockunit_primary_secondary_differ",
+            ),
+        ]
 
     def clean(self):
         super().clean()
+        self.serial_number = (self.serial_number or "").strip()
+        self.secondary_serial = (self.secondary_serial or "").strip()
         if self.product_id and not self.product.is_serialized:
             raise ValidationError("Stock units require a serialized product.")
         if self.product_id and self.product.organization_id != self.organization_id:
             raise ValidationError("Product and stock unit must belong to the same organization.")
         if self.location_id and self.location.organization_id != self.organization_id:
             raise ValidationError("Location and stock unit must belong to the same organization.")
+        if self.serial_number and self.secondary_serial and self.serial_number == self.secondary_serial:
+            raise ValidationError("Primary and secondary serial numbers must be different.")
+        if self.organization_id and self.serial_number:
+            conflicts = StockUnit.objects.filter(organization_id=self.organization_id).exclude(pk=self.pk)
+            if conflicts.filter(
+                models.Q(serial_number=self.serial_number) | models.Q(secondary_serial=self.serial_number)
+            ).exists():
+                raise ValidationError("This serial / IMEI already exists in inventory.")
+        if self.organization_id and self.secondary_serial:
+            conflicts = StockUnit.objects.filter(organization_id=self.organization_id).exclude(pk=self.pk)
+            if conflicts.filter(
+                models.Q(serial_number=self.secondary_serial) | models.Q(secondary_serial=self.secondary_serial)
+            ).exists():
+                raise ValidationError("This secondary serial / IMEI already exists in inventory.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     def __str__(self):
         return self.serial_number

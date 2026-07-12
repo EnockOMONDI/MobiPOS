@@ -1,10 +1,89 @@
 {% extends "base.html" %}
 {% block title %}Add user | MobiPOS{% endblock %}
 {% block content %}
-<h1 class="text-3xl font-bold">Add organization user</h1>
-<p class="mt-2 text-slate-600">Invite a staff member, assign branches and multiple roles, then let them securely set their own password.</p>
-<form method="post" class="mt-6 max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
-  {% csrf_token %}{{ form.as_p }}
-  <button class="rounded-lg bg-red-700 px-5 py-3 font-medium text-white" type="submit">Send invitation</button>
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Users and access</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">Add organization user</h1>
+    <p class="mt-2 max-w-3xl text-slate-600">Invite a staff member, assign branches and roles, optionally create agent stock custody, and set up an agent or DSA profile in one workflow.</p>
+  </div>
+  <a href="{% url 'membership-access-list' %}" class="btn-secondary">Back to users</a>
+</div>
+
+<form method="post" class="mt-6 max-w-5xl space-y-5">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Profile</p>
+      <h2 class="mt-1 text-lg font-bold">User identity</h2>
+      <p class="mt-1 text-sm text-slate-500">The user receives an invitation and sets their own password securely.</p>
+    </div>
+    {% include "components/form_field.html" with field=form.first_name %}
+    {% include "components/form_field.html" with field=form.last_name %}
+    {% include "components/form_field.html" with field=form.username %}
+    {% include "components/form_field.html" with field=form.email %}
+    {% include "components/form_field.html" with field=form.phone_number %}
+  </section>
+
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Access</p>
+      <h2 class="mt-1 text-lg font-bold">Branches and roles</h2>
+      <p class="mt-1 text-sm text-slate-500">Branch assignment controls where the user works. Multiple roles combine into one effective access profile.</p>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-slate-700">Branches <span class="text-red-700">*</span></p>
+      {% if form.branches.errors %}<div class="mt-2 text-sm font-semibold text-red-700">{{ form.branches.errors }}</div>{% endif %}
+      <div class="mt-3 grid gap-2">
+        {% for choice in form.branches %}
+          <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+        {% empty %}
+          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Create an active branch before inviting users.</p>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <p class="text-sm font-semibold text-slate-700">Roles</p>
+      {% if form.roles.errors %}<div class="mt-2 text-sm font-semibold text-red-700">{{ form.roles.errors }}</div>{% endif %}
+      <div class="mt-3 grid gap-2">
+        {% for choice in form.roles %}
+          <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
+        {% empty %}
+          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Create roles to delegate permissions cleanly.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Stock custody</p>
+      <h2 class="mt-1 text-lg font-bold">Agent stock location</h2>
+      <p class="mt-1 text-sm text-slate-500">Enable this when the user will hold phones, serialized devices, or accessories assigned from warehouse or branch stock.</p>
+    </div>
+    {% include "components/form_field.html" with field=form.enable_stock_custody %}
+    {% include "components/form_field.html" with field=form.custody_branch %}
+  </section>
+
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Agent network</p>
+      <h2 class="mt-1 text-lg font-bold">Agent or DSA profile</h2>
+      <p class="mt-1 text-sm text-slate-500">Create a business profile for agents and direct sales agents so hierarchy, identity, branch, and onboarding activity can be tracked.</p>
+    </div>
+    {% include "components/form_field.html" with field=form.create_agent_profile %}
+    {% include "components/form_field.html" with field=form.agent_profile_type %}
+    {% include "components/form_field.html" with field=form.agent_branch %}
+    {% include "components/form_field.html" with field=form.agent_supervisor %}
+    {% include "components/form_field.html" with field=form.legal_name %}
+    {% include "components/form_field.html" with field=form.national_id_number %}
+    <div class="md:col-span-2">{% include "components/form_field.html" with field=form.registration_notes %}</div>
+  </section>
+
+  <div class="flex flex-wrap gap-3">
+    <button class="btn-primary" type="submit">Send invitation</button>
+    <a href="{% url 'membership-access-list' %}" class="btn-secondary">Cancel</a>
+  </div>
 </form>
 {% endblock %}

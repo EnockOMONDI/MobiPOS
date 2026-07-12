@@ -3,18 +3,145 @@
 {% block title %}Sign in | MobiPOS{% endblock %}
 
 {% block anonymous_content %}
-  <div class="mx-auto max-w-md rounded-xl border bg-white p-8 shadow-sm">
-    <h1 class="text-2xl font-bold">Sign in</h1>
-    <form method="post" class="mt-6 space-y-4">
-      {% csrf_token %}
-      {{ form.as_p }}
-      <button type="submit" class="w-full rounded-lg bg-red-700 px-4 py-3 font-medium text-white">
-        Sign in
-      </button>
-    </form>
-    <div class="mt-6 flex justify-between text-sm">
-      <a class="font-medium text-red-700" href="{% url 'password-reset' %}">Forgot password?</a>
-      <a class="font-medium text-red-700" href="{% url 'register-organization' %}">Register organization</a>
-    </div>
+<style>
+  .login-page {
+    margin: -3rem -1rem;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 18% 18%, rgba(185, 28, 28, .1), transparent 28%),
+      linear-gradient(135deg, #fff 0%, #fff 58%, #fff4f4 100%);
+    color: #35353b;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  @media (min-width: 640px) { .login-page { margin-left: -1.5rem; margin-right: -1.5rem; } }
+  .login-shell { width: min(1120px, calc(100vw - 40px)); min-height: 100vh; margin: 0 auto; display: grid; grid-template-columns: 1.08fr .92fr; gap: 72px; align-items: center; padding: 54px 0; }
+  .login-brand { display: inline-flex; align-items: center; gap: 12px; color: #303036; text-decoration: none; font-size: 24px; font-weight: 950; }
+  .login-mark { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 999px; background: #b91c1c; color: white; box-shadow: 0 18px 34px rgba(185, 28, 28, .18); }
+  .login-pill { display: inline-flex; margin-top: 78px; border-radius: 999px; background: #fff0f0; color: #b91c1c; padding: 10px 18px; font-size: 14px; font-weight: 950; }
+  .login-title { margin: 24px 0 0; max-width: 640px; color: #34343a; font-size: clamp(52px, 5.6vw, 82px); line-height: 1.08; font-weight: 950; }
+  .login-title em { display: block; font-family: Georgia, "Times New Roman", serif; font-size: .82em; font-style: italic; font-weight: 500; line-height: 1.04; }
+  .login-copy { margin: 26px 0 0; max-width: 560px; color: #56565d; font-size: 19px; line-height: 1.65; font-weight: 650; }
+  .login-proof { margin-top: 36px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; max-width: 620px; }
+  .login-proof-card { border-radius: 24px; background: rgba(255,255,255,.72); border: 1px solid rgba(226, 232, 240, .88); padding: 20px; box-shadow: 0 18px 48px rgba(15, 23, 42, .06); }
+  .login-proof-card strong { display: block; color: #303036; font-size: 22px; line-height: 1; font-weight: 950; }
+  .login-proof-card span { display: block; margin-top: 8px; color: #67676e; font-size: 13px; line-height: 1.35; font-weight: 750; }
+  .login-card { border: 1px solid rgba(226, 232, 240, .9); border-radius: 36px; background: rgba(255,255,255,.9); padding: 34px; box-shadow: 0 30px 80px rgba(15, 23, 42, .12); backdrop-filter: blur(18px); }
+  .login-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+  .login-card-kicker { margin: 0; color: #b91c1c; font-size: 12px; text-transform: uppercase; letter-spacing: .16em; font-weight: 950; }
+  .login-card h1 { margin: 10px 0 0; color: #303036; font-size: 36px; line-height: 1.08; font-weight: 950; }
+  .login-status { display: grid; place-items: center; min-width: 54px; height: 54px; border-radius: 18px; background: #fff0f0; color: #b91c1c; font-weight: 950; }
+  .login-demo { margin-top: 24px; border-radius: 24px; background: #fff5f5; border: 1px solid #ffd9d9; padding: 18px; color: #7f1d1d; }
+  .login-demo strong { color: #450a0a; }
+  .login-errors { margin-top: 22px; border-radius: 20px; background: #fef2f2; border: 1px solid #fecaca; padding: 14px 16px; color: #991b1b; font-size: 14px; font-weight: 750; }
+  .login-form { margin-top: 26px; display: grid; gap: 18px; }
+  .login-field label { display: block; margin-bottom: 8px; color: #4b4b52; font-size: 13px; font-weight: 950; }
+  .login-field input { width: 100%; border: 1px solid #e2e8f0; border-radius: 18px; background: #fff; padding: 15px 16px; color: #25252b; font-size: 16px; font-weight: 750; outline: none; transition: border-color .2s ease, box-shadow .2s ease; }
+  .login-field input:focus { border-color: #b91c1c; box-shadow: 0 0 0 4px rgba(185, 28, 28, .1); }
+  .login-help { margin-top: 6px; color: #7a7a82; font-size: 12px; font-weight: 650; }
+  .login-submit { width: 100%; border: 0; border-radius: 999px; background: #35353a; color: #fff; padding: 16px 22px; font-size: 15px; font-weight: 950; cursor: pointer; box-shadow: 0 18px 38px rgba(53, 53, 58, .16); }
+  .login-links { margin-top: 22px; display: flex; justify-content: space-between; gap: 16px; font-size: 14px; font-weight: 850; }
+  .login-links a { color: #b91c1c; text-decoration: none; }
+  .login-secondary { margin-top: 18px; display: inline-flex; width: 100%; justify-content: center; border: 1px solid #e2e8f0; border-radius: 999px; padding: 15px 20px; color: #36363c; text-decoration: none; font-size: 14px; font-weight: 950; }
+  .login-mini { margin-top: 22px; display: flex; align-items: center; gap: 10px; color: #67676e; font-size: 13px; font-weight: 750; }
+  .login-dot { width: 10px; height: 10px; border-radius: 999px; background: #22c55e; box-shadow: 0 0 0 6px rgba(34, 197, 94, .12); }
+  @media (max-width: 920px) {
+    .login-shell { grid-template-columns: 1fr; gap: 38px; }
+    .login-pill { margin-top: 48px; }
+  }
+  @media (max-width: 620px) {
+    .login-shell { padding: 30px 0; }
+    .login-title { font-size: 48px; }
+    .login-proof { grid-template-columns: 1fr; }
+    .login-card { padding: 24px; border-radius: 28px; }
+    .login-links { flex-direction: column; }
+  }
+</style>
+
+<div class="login-page">
+  <div class="login-shell">
+    <section>
+      <a href="{% url 'dashboard' %}" class="login-brand">
+        <span class="login-mark">
+          <svg width="19" height="19" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5v-15h15v15h-15Zm4.5 0v-6h6v6M8 8h.01M12 8h.01M16 8h.01"/></svg>
+        </span>
+        <span>MobiPOS</span>
+      </a>
+      <div class="login-pill">Demo access for Kenyan mobile retail teams</div>
+      <h2 class="login-title">
+        Access the owner demo.
+        <em>See every IMEI, sale and agent action.</em>
+      </h2>
+      <p class="login-copy">Use Brian’s demo account to enter a guided MobiPOS workspace with sample inventory, purchases, transfers, POS sales, commissions, reports and audit visibility.</p>
+      <div class="login-proof" aria-label="Demo highlights">
+        <div class="login-proof-card"><strong>4k</strong><span>sample IMEI-ready stock records</span></div>
+        <div class="login-proof-card"><strong>360°</strong><span>owner visibility across users and branches</span></div>
+        <div class="login-proof-card"><strong>KES</strong><span>Kenya-first sales, credit and reporting</span></div>
+      </div>
+    </section>
+
+    <section class="login-card" aria-label="Sign in form">
+      <div class="login-card-head">
+        <div>
+          <p class="login-card-kicker">Secure workspace</p>
+          <h1>Sign in</h1>
+        </div>
+        <div class="login-status" aria-hidden="true">↗</div>
+      </div>
+
+      {% if request.GET.demo %}
+        <div class="login-demo">
+          <p><strong>Demo account selected:</strong> {{ request.GET.demo }}</p>
+          <p class="mt-1">Password: <strong>{% if request.GET.demo == "platformadmin" %}AdminPass123!{% else %}DemoPass123!{% endif %}</strong></p>
+        </div>
+      {% endif %}
+
+      {% if form.non_field_errors %}
+        <div class="login-errors">
+          {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+        </div>
+      {% endif %}
+
+      <form method="post" class="login-form" novalidate>
+        {% csrf_token %}
+        <div class="login-field">
+          <label for="{{ form.username.id_for_label }}">Username</label>
+          {{ form.username }}
+          {% if form.username.errors %}
+            <p class="login-help text-red-700">{{ form.username.errors|striptags }}</p>
+          {% else %}
+            <p class="login-help">For the guided demo, use <strong>brian</strong>.</p>
+          {% endif %}
+        </div>
+        <div class="login-field">
+          <label for="{{ form.password.id_for_label }}">Password</label>
+          {{ form.password }}
+          {% if form.password.errors %}
+            <p class="login-help text-red-700">{{ form.password.errors|striptags }}</p>
+          {% else %}
+            <p class="login-help">Demo password: <strong>{% if request.GET.demo == "platformadmin" %}AdminPass123!{% else %}DemoPass123!{% endif %}</strong></p>
+          {% endif %}
+        </div>
+        <button type="submit" class="login-submit">Enter MobiPOS demo</button>
+      </form>
+
+      <div class="login-links">
+        <a href="{% url 'password-reset' %}">Forgot password?</a>
+        <a href="{% url 'register-organization' %}">Register organization</a>
+      </div>
+      <a href="{% url 'demo-access' %}" class="login-secondary">View all demo accounts</a>
+      <div class="login-mini"><span class="login-dot"></span><span>Demo data is seeded for safe product exploration.</span></div>
+    </section>
   </div>
+</div>
+
+{% if request.GET.demo %}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const username = document.querySelector("input[name='username']");
+      const password = document.querySelector("input[name='password']");
+      if (username && !username.value) username.value = "{{ request.GET.demo|escapejs }}";
+      if (password && !password.value) password.value = "{% if request.GET.demo == 'platformadmin' %}AdminPass123!{% else %}DemoPass123!{% endif %}";
+    });
+  </script>
+{% endif %}
 {% endblock %}

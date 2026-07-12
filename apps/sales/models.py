@@ -56,7 +56,14 @@ class Sale(OrganizationOwnedModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_sales")
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("organization", "number"), name="unique_sale_number_per_org")]
+        constraints = [
+            models.UniqueConstraint(fields=("organization", "number"), name="unique_sale_number_per_org"),
+            models.UniqueConstraint(
+                fields=("organization", "session", "created_by"),
+                condition=models.Q(status=SaleStatus.DRAFT),
+                name="unique_active_cart_per_session_user",
+            ),
+        ]
 
     @property
     def balance_due(self):

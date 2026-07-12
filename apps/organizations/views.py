@@ -4,17 +4,18 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import send_mail
 from django.db import transaction
-from django.http import Http404
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
-from .forms import BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
-from .permissions import organization_owner_required, platform_admin_required
+from .forms import AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
+from .permissions import organization_owner_required, organization_permission_required, platform_admin_required
 from .models import (
     Membership,
     MembershipStatus,
@@ -28,6 +29,8 @@ from .models import (
     Branch,
     Location,
     Role,
+    AgentProfile,
+    AgentDocument,
 )
 
 
@@ -41,6 +44,21 @@ def _send_invitation(request, invitation):
         from_email=settings.DEFAULT_FROM_EMAIL,
         recipient_list=[invitation.membership.user.email],
     )
+
+
+def _active_supervising_agent_profile(request):
+    membership = getattr(request, "membership", None)
+    if not membership:
+        return None
+    try:
+        profile = membership.agent_profile
+    except AgentProfile.DoesNotExist:
+        return None
+    from .models import AgentProfileStatus, AgentProfileType
+
+    if profile.profile_type != AgentProfileType.AGENT or profile.status != AgentProfileStatus.ACTIVE:
+        return None
+    return profile
 
 
 @transaction.atomic
@@ -118,7 +136,8 @@ def subscription_invoice_activate(request, invoice_id):
 @transaction.atomic
 def tenant_user_create(request):
     from django.core.exceptions import ValidationError
-    from .services import enforce_plan_limit
+    from .models import AgentProfileStatus, AgentProfileType
+    from .services import enforce_plan_limit, provision_agent_custody_location, upsert_agent_profile
 
     form = TenantUserForm(request.POST or None, organization=request.organization)
     if request.method == "POST" and form.is_valid():
@@ -149,6 +168,27 @@ def tenant_user_create(request):
             )
             membership.branches.set(form.cleaned_data["branches"])
             membership.roles.set(form.cleaned_data["roles"])
+            if form.cleaned_data.get("enable_stock_custody"):
+                provision_agent_custody_location(
+                    membership=membership,
+                    branch=form.cleaned_data["custody_branch"],
+                    actor=request.user,
+                    request=request,
+                )
+            if form.cleaned_data.get("create_agent_profile"):
+                upsert_agent_profile(
+                    membership=membership,
+                    profile_type=form.cleaned_data.get("agent_profile_type") or AgentProfileType.AGENT,
+                    branch=form.cleaned_data["agent_branch"],
+                    legal_name=form.cleaned_data["legal_name"],
+                    status=AgentProfileStatus.PENDING,
+                    supervisor=form.cleaned_data.get("agent_supervisor"),
+                    national_id_number=form.cleaned_data.get("national_id_number", ""),
+                    phone_number=form.cleaned_data.get("phone_number", ""),
+                    registration_notes=form.cleaned_data.get("registration_notes", ""),
+                    actor=request.user,
+                    request=request,
+                )
             invitation = Invitation.objects.create(
                 organization=request.organization,
                 membership=membership,
@@ -234,7 +274,7 @@ def invitation_revoke(request, invitation_id):
 def membership_access_list(request):
     memberships = Membership.objects.filter(
         organization=request.organization,
-    ).select_related("user", "invitation").prefetch_related("roles__permissions__content_type", "branches")
+    ).select_related("user", "invitation", "agent_profile__branch").prefetch_related("roles__permissions__content_type", "branches")
     rows = []
     for membership in memberships:
         permissions = sorted({
@@ -250,6 +290,10 @@ def membership_access_list(request):
 @organization_owner_required
 @transaction.atomic
 def membership_access_update(request, membership_id):
+    from django.core.exceptions import ValidationError
+    from .models import AgentProfileStatus, AgentProfileType
+    from .services import provision_agent_custody_location, upsert_agent_profile
+
     membership = get_object_or_404(
         Membership.objects.select_for_update().select_related("user"),
         id=membership_id,
@@ -262,6 +306,43 @@ def membership_access_update(request, membership_id):
     )
     if request.method == "POST" and form.is_valid():
         form.save()
+        if form.cleaned_data.get("enable_stock_custody"):
+            try:
+                provision_agent_custody_location(
+                    membership=membership,
+                    branch=form.cleaned_data["custody_branch"],
+                    actor=request.user,
+                    request=request,
+                )
+            except ValidationError as error:
+                form.add_error("custody_branch", error.message)
+                return render(
+                    request,
+                    "organizations/access_update.html",
+                    {"form": form, "membership": membership},
+                )
+        if form.cleaned_data.get("create_agent_profile"):
+            try:
+                upsert_agent_profile(
+                    membership=membership,
+                    profile_type=form.cleaned_data.get("agent_profile_type") or AgentProfileType.AGENT,
+                    branch=form.cleaned_data["agent_branch"],
+                    legal_name=form.cleaned_data["legal_name"],
+                    status=form.cleaned_data.get("agent_status") or AgentProfileStatus.PENDING,
+                    supervisor=form.cleaned_data.get("agent_supervisor"),
+                    national_id_number=form.cleaned_data.get("national_id_number", ""),
+                    phone_number=membership.user.phone_number,
+                    registration_notes=form.cleaned_data.get("registration_notes", ""),
+                    actor=request.user,
+                    request=request,
+                )
+            except ValidationError as error:
+                form.add_error(None, error.message)
+                return render(
+                    request,
+                    "organizations/access_update.html",
+                    {"form": form, "membership": membership},
+                )
         record_audit_event(
             action="membership.access_updated",
             actor=request.user,
@@ -278,6 +359,223 @@ def membership_access_update(request, membership_id):
         request,
         "organizations/access_update.html",
         {"form": form, "membership": membership},
+    )
+
+
+@login_required
+@organization_owner_required
+def agent_profile_detail(request, profile_id):
+    from apps.audit.models import AuditEvent
+    from apps.inventory.models import StockUnit
+
+    profile = get_object_or_404(
+        AgentProfile.objects.select_related(
+            "membership__user",
+            "branch",
+            "supervisor__membership__user",
+            "registered_by",
+            "verified_by",
+        ).prefetch_related("sub_agents__membership__user"),
+        id=profile_id,
+        organization=request.organization,
+    )
+    custody_locations = profile.membership.custody_locations.filter(
+        organization=request.organization,
+        is_active=True,
+    ).select_related("branch")
+    stock_units = StockUnit.objects.filter(
+        organization=request.organization,
+        location__in=custody_locations,
+    ).select_related("product", "location")
+    audit_events = AuditEvent.objects.filter(
+        organization=request.organization,
+        target_type=profile._meta.label,
+        target_id=str(profile.id),
+    ).select_related("actor").order_by("-created_at")[:10]
+    documents = profile.documents.select_related("uploaded_by").order_by("-created_at")
+    return render(
+        request,
+        "organizations/agent_detail.html",
+        {
+            "profile": profile,
+            "custody_locations": custody_locations,
+            "stock_units": stock_units[:25],
+            "stock_count": stock_units.count(),
+            "documents": documents,
+            "document_form": AgentDocumentUploadForm(),
+            "decision_form": AgentProfileDecisionForm(),
+            "audit_events": audit_events,
+        },
+    )
+
+
+@login_required
+@organization_owner_required
+@require_POST
+@transaction.atomic
+def agent_profile_decide(request, profile_id, decision):
+    from .services import decide_agent_profile
+
+    profile = get_object_or_404(AgentProfile.objects.select_for_update(), id=profile_id, organization=request.organization)
+    form = AgentProfileDecisionForm(request.POST)
+    if form.is_valid():
+        try:
+            decide_agent_profile(
+                profile=profile,
+                decision=decision,
+                actor=request.user,
+                notes=form.cleaned_data["notes"],
+                request=request,
+            )
+            messages.success(request, f"Agent profile {decision} decision recorded.")
+        except ValidationError as error:
+            messages.error(request, error.message)
+    else:
+        messages.error(request, "Decision notes could not be processed.")
+    return redirect("agent-profile-detail", profile_id=profile.id)
+
+
+@login_required
+@organization_owner_required
+@require_POST
+@transaction.atomic
+def agent_document_upload(request, profile_id):
+    profile = get_object_or_404(AgentProfile, id=profile_id, organization=request.organization)
+    form = AgentDocumentUploadForm(request.POST, request.FILES)
+    if form.is_valid():
+        upload = form.cleaned_data["file"]
+        document = AgentDocument(
+            organization=request.organization,
+            profile=profile,
+            document_type=form.cleaned_data["document_type"],
+            file=upload,
+            original_filename=upload.name,
+            content_type=getattr(upload, "content_type", ""),
+            size=upload.size,
+            notes=form.cleaned_data["notes"],
+            uploaded_by=request.user,
+        )
+        document.full_clean()
+        document.save()
+        record_audit_event(
+            action="agent_document.uploaded",
+            actor=request.user,
+            organization=request.organization,
+            target=document,
+            metadata={
+                "profile": str(profile.id),
+                "document_type": document.document_type,
+                "filename": document.original_filename,
+                "size": document.size,
+            },
+            request=request,
+        )
+        messages.success(request, "Agent document uploaded.")
+    else:
+        messages.error(request, "Document upload failed. Check the file type and required fields.")
+    return redirect("agent-profile-detail", profile_id=profile.id)
+
+
+@login_required
+@organization_owner_required
+def agent_document_download(request, document_id):
+    document = get_object_or_404(
+        AgentDocument.objects.select_related("profile"),
+        id=document_id,
+        organization=request.organization,
+    )
+    record_audit_event(
+        action="agent_document.downloaded",
+        actor=request.user,
+        organization=request.organization,
+        target=document,
+        metadata={"profile": str(document.profile_id), "document_type": document.document_type},
+        request=request,
+    )
+    return FileResponse(document.file.open("rb"), as_attachment=True, filename=document.original_filename)
+
+
+@login_required
+@organization_permission_required("organizations.add_agentprofile")
+@transaction.atomic
+def agent_dsa_create(request):
+    from .models import AgentProfileStatus, AgentProfileType
+    from .services import (
+        ALLOW_AGENT_DSA_REGISTRATION_SETTING,
+        organization_setting_enabled,
+        upsert_agent_profile,
+    )
+
+    supervisor = _active_supervising_agent_profile(request)
+    if not supervisor:
+        raise PermissionDenied("Only active supervising agents can register DSAs.")
+    if not organization_setting_enabled(
+        request.organization,
+        ALLOW_AGENT_DSA_REGISTRATION_SETTING,
+        default=False,
+    ):
+        raise PermissionDenied("DSA self-registration is disabled for this organization.")
+
+    form = AgentDSARegistrationForm(
+        request.POST or None,
+        organization=request.organization,
+        supervising_membership=request.membership,
+    )
+    if request.method == "POST" and form.is_valid():
+        user = get_user_model().objects.create_user(
+            username=form.cleaned_data["username"],
+            email=form.cleaned_data["email"],
+            first_name=form.cleaned_data["first_name"],
+            last_name=form.cleaned_data["last_name"],
+            phone_number=form.cleaned_data["phone_number"],
+            is_active=False,
+        )
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        membership = Membership.objects.create(
+            organization=request.organization,
+            user=user,
+            status=MembershipStatus.INVITED,
+        )
+        membership.branches.add(form.cleaned_data["branch"])
+        profile = upsert_agent_profile(
+            membership=membership,
+            profile_type=AgentProfileType.DSA,
+            branch=form.cleaned_data["branch"],
+            legal_name=form.cleaned_data["legal_name"],
+            status=AgentProfileStatus.PENDING,
+            supervisor=supervisor,
+            national_id_number=form.cleaned_data.get("national_id_number", ""),
+            phone_number=form.cleaned_data.get("phone_number", ""),
+            registration_notes=form.cleaned_data.get("registration_notes", ""),
+            actor=request.user,
+            request=request,
+        )
+        invitation = Invitation.objects.create(
+            organization=request.organization,
+            membership=membership,
+            invited_by=request.user,
+            expires_at=timezone.now() + timedelta(days=7),
+        )
+        _send_invitation(request, invitation)
+        record_audit_event(
+            action="agent_profile.dsa_registered",
+            actor=request.user,
+            organization=request.organization,
+            target=profile,
+            metadata={
+                "supervisor": str(supervisor.id),
+                "branch": form.cleaned_data["branch"].code,
+                "membership": str(membership.id),
+            },
+            request=request,
+        )
+        messages.success(request, f"DSA profile created for {profile.legal_name}. Invitation sent to {user.email}.")
+        return redirect("dashboard")
+    return render(
+        request,
+        "organizations/dsa_create.html",
+        {"form": form, "supervisor": supervisor},
     )
 
 

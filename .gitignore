@@ -13,6 +13,8 @@ staticfiles/
 node_modules/
 venv/
 *.md
+!SYSCO_PARITY_IMPLEMENTATION_PLAN.md
+!BUSINESS_ADOPTION_AND_AGENT_DSA_PLAN.md
 *.log
 *.pem
 *.key
