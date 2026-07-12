@@ -17,14 +17,24 @@
         <div class="flex items-center gap-2">
           <h2 class="font-bold text-slate-950">{{ row.membership.user.get_full_name|default:row.membership.user.username }}</h2>
           {% if row.membership.is_owner %}<span class="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">Owner</span>{% endif %}
+          {% if row.membership.agent_profile %}<span class="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{{ row.membership.agent_profile.get_profile_type_display }}</span>{% endif %}
         </div>
         <p class="mt-1 text-sm text-slate-500">{{ row.membership.user.email }} · {{ row.membership.get_status_display }}</p>
       </div>
       <a href="{% url 'membership-access-update' row.membership.id %}" class="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700">Manage access</a>
     </div>
-    <div class="mt-4 grid gap-4 md:grid-cols-3">
+    <div class="mt-4 grid gap-4 md:grid-cols-4">
       <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Roles</p><p class="mt-1 text-sm text-slate-700">{% for role in row.membership.roles.all %}{{ role.name }}{% if not forloop.last %}, {% endif %}{% empty %}No roles assigned{% endfor %}</p></div>
       <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Branches</p><p class="mt-1 text-sm text-slate-700">{% for branch in row.membership.branches.all %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% empty %}No branches assigned{% endfor %}</p></div>
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Agent profile</p>
+        {% if row.membership.agent_profile %}
+          <p class="mt-1 text-sm text-slate-700">{{ row.membership.agent_profile.get_status_display }} · {{ row.membership.agent_profile.branch }}</p>
+          <a href="{% url 'agent-profile-detail' row.membership.agent_profile.id %}" class="mt-1 inline-block text-sm font-semibold text-red-700">View profile</a>
+        {% else %}
+          <p class="mt-1 text-sm text-slate-700">Not configured</p>
+        {% endif %}
+      </div>
       <div><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Effective permissions</p><p class="mt-1 text-sm text-slate-700">{{ row.permissions|length }} combined permissions</p></div>
     </div>
     {% if row.membership.status == "invited" and row.membership.invitation %}

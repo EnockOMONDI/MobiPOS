@@ -31,17 +31,20 @@ class ReceivableInstallment(OrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     receivable = models.ForeignKey(Receivable, on_delete=models.CASCADE, related_name="installments")
     sequence = models.PositiveIntegerField()
+    schedule_version = models.PositiveIntegerField(default=1)
+    is_current = models.BooleanField(default=True)
+    replaced_at = models.DateTimeField(null=True, blank=True)
     due_on = models.DateField()
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     paid_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=InstallmentStatus.choices, default=InstallmentStatus.PENDING)
 
     class Meta:
-        ordering = ("sequence",)
+        ordering = ("schedule_version", "sequence")
         constraints = [
             models.UniqueConstraint(
-                fields=("receivable", "sequence"),
-                name="unique_receivable_installment_sequence",
+                fields=("receivable", "schedule_version", "sequence"),
+                name="unique_receivable_installment_version_sequence",
             )
         ]
 
@@ -94,18 +97,16 @@ class ApprovalRequest(OrganizationOwnedModel):
     branch = models.ForeignKey(Branch, on_delete=models.PROTECT, null=True, blank=True, related_name="approval_requests")
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     policy = models.ForeignKey(ApprovalPolicy, on_delete=models.PROTECT, null=True, blank=True, related_name="requests")
+    policy_snapshot = models.JSONField(default=dict, blank=True)
+    previous_request = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="newer_requests")
     status = models.CharField(max_length=20, choices=ApprovalStatus.choices, default=ApprovalStatus.PENDING)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="approval_requests")
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True, related_name="approval_decisions")
     decided_at = models.DateTimeField(null=True, blank=True)
+    decision_notes = models.TextField(blank=True)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=("organization", "request_type", "target_type", "target_id"),
-                name="unique_approval_request_target",
-            )
-        ]
+        ordering = ("-created_at",)
 
     @property
     def display_type(self):

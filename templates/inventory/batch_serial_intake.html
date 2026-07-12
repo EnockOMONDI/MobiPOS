@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Batch IMEI intake | MobiPOS{% endblock %}
+{% block content %}
+<p class="text-sm font-semibold text-red-700">Serialized inventory</p>
+<h1 class="mt-1 text-3xl font-bold">Batch IMEI intake</h1>
+<p class="mt-2 max-w-3xl text-slate-600">Receive serialized devices quickly using scanner paste, CSV upload, or Excel upload. Valid rows are posted to the stock ledger and duplicate or invalid rows are reported for correction.</p>
+
+<form method="post" enctype="multipart/form-data" class="mt-6 max-w-5xl space-y-5">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Destination</p>
+      <h2 class="mt-1 text-lg font-bold">What stock is being received</h2>
+    </div>
+    {% include "components/form_field.html" with field=form.product %}
+    {% include "components/form_field.html" with field=form.location %}
+    {% include "components/form_field.html" with field=form.unit_cost %}
+    <div class="md:col-span-2">{% include "components/form_field.html" with field=form.reason %}</div>
+  </section>
+
+  <section class="card grid gap-5 p-6 md:grid-cols-2">
+    <div class="md:col-span-2">
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Input</p>
+      <h2 class="mt-1 text-lg font-bold">Scan, paste, or upload devices</h2>
+      <p class="mt-1 text-sm text-slate-500">CSV and Excel files should use columns named <code>serial_number</code> and optional <code>secondary_serial</code>. If there is no header, column A is primary and column B is secondary.</p>
+    </div>
+    <div>{% include "components/form_field.html" with field=form.serial_numbers %}</div>
+    <div class="space-y-4">
+      {% include "components/form_field.html" with field=form.csv_file %}
+      <div class="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+        <p class="font-semibold text-slate-900">Accepted formats</p>
+        <p class="mt-1">Paste text, <code>.csv</code>, <code>.xlsx</code>, or <code>.xlsm</code>.</p>
+        <p class="mt-2">Rows that already exist or repeat inside the upload are rejected before posting.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="flex flex-wrap gap-3">
+    <button class="btn-primary">Receive devices</button>
+    <a href="{% url 'module-overview' 'inventory' %}" class="btn-secondary">View serialized inventory</a>
+  </div>
+</form>
+
+{% if result %}
+<section class="card mt-6 p-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Import result</p>
+      <h2 class="mt-1 text-lg font-bold">{{ result.created_units|length }} devices created</h2>
+    </div>
+    {% if result.failures %}<span class="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">{{ result.failures|length }} rows need correction</span>{% else %}<span class="rounded-full bg-emerald-50 px-3 py-1 text-sm font-bold text-emerald-700">All rows accepted</span>{% endif %}
+  </div>
+  {% if result.created_units %}
+  <div class="mt-4 overflow-hidden rounded-xl border border-slate-200">
+    {% for unit in result.created_units %}
+      <p class="border-t border-slate-100 p-3 text-sm first:border-t-0"><strong>{{ unit.serial_number }}</strong>{% if unit.secondary_serial %} · {{ unit.secondary_serial }}{% endif %} · {{ unit.product }} · {{ unit.location }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if result.failures %}
+  <div class="mt-5 overflow-hidden rounded-xl border border-amber-200">
+    <table class="min-w-full divide-y divide-amber-100 text-sm">
+      <thead class="bg-amber-50 text-left text-xs font-bold uppercase tracking-wider text-amber-700"><tr><th class="px-4 py-3">Row</th><th class="px-4 py-3">Serial</th><th class="px-4 py-3">Issue</th></tr></thead>
+      <tbody class="divide-y divide-amber-100">
+        {% for failure in result.failures %}
+        <tr><td class="px-4 py-3">{{ failure.line }}</td><td class="px-4 py-3">{{ failure.serial_number }}</td><td class="px-4 py-3">{{ failure.error }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

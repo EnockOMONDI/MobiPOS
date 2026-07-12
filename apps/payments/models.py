@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from apps.contacts.models import Contact
 from apps.organizations.models import OrganizationOwnedModel
@@ -36,7 +37,14 @@ class Payment(OrganizationOwnedModel):
     received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("organization", "number"), name="unique_payment_number_per_org")]
+        constraints = [
+            models.UniqueConstraint(fields=("organization", "number"), name="unique_payment_number_per_org"),
+            models.UniqueConstraint(
+                fields=("organization", "method", "provider_reference"),
+                condition=~Q(provider_reference=""),
+                name="unique_payment_provider_reference_per_org_method",
+            ),
+        ]
 
     def __str__(self):
         return self.number

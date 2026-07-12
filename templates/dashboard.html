@@ -140,4 +140,38 @@
       </form>
     </section>
   </div>
+
+  {% if latest_activity %}
+  <section class="card mt-6 overflow-hidden">
+    <div class="flex items-center justify-between border-b p-5">
+      <div>
+        <h2 class="text-lg font-bold">Recent activity</h2>
+        <p class="text-sm text-slate-500">Latest owner-visible events across users and operations.</p>
+      </div>
+      <a class="text-sm font-bold text-red-700" href="{% url 'activity-report' %}">Open activity report</a>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+          <tr>
+            <th class="px-4 py-3">Time</th>
+            <th class="px-4 py-3">User</th>
+            <th class="px-4 py-3">Action</th>
+            <th class="px-4 py-3">Target</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          {% for event in latest_activity %}
+            <tr>
+              <td class="whitespace-nowrap px-4 py-3">{{ event.created_at|date:"d M H:i" }}</td>
+              <td class="px-4 py-3">{% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}System{% endif %}</td>
+              <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ event.action }}</span></td>
+              <td class="px-4 py-3 text-slate-500">{{ event.target_type|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
 {% endblock %}

@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.auth.models import Permission
+from django.db import IntegrityError
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -8,7 +9,7 @@ from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
 from apps.inventory.services import post_stock_movement
 from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization, Role
 from apps.sales.models import Sale
-from apps.payments.models import Payment
+from apps.payments.models import Payment, PaymentStatus
 from apps.contacts.models import Contact
 from apps.operations.models import Receivable
 from apps.operations.models import ApprovalRequest
@@ -20,6 +21,33 @@ def grant_sale_permission(membership):
     role = Role.objects.create(organization=membership.organization, name="Cashier", code=f"cashier-{membership.user.username}")
     role.permissions.add(permission)
     membership.roles.add(role)
+
+
+@pytest.mark.django_db
+def test_duplicate_open_session_for_same_cashier_location_is_rejected():
+    user = User.objects.create_user(username="session-unique", email="session-unique@example.com")
+    org = Organization.objects.create(name="Session Unique", slug="session-unique", status="active")
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="MAIN")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="POS", location_type="pos")
+    POSSession.objects.create(organization=org, number="S1", location=location, cashier=user)
+
+    with pytest.raises(IntegrityError):
+        POSSession.objects.create(organization=org, number="S2", location=location, cashier=user)
+
+
+@pytest.mark.django_db
+def test_duplicate_active_cart_for_same_session_user_is_rejected():
+    user = User.objects.create_user(username="cart-unique", email="cart-unique@example.com")
+    org = Organization.objects.create(name="Cart Unique", slug="cart-unique", status="active")
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="MAIN")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="POS", location_type="pos")
+    session = POSSession.objects.create(organization=org, number="S1", location=location, cashier=user)
+    Sale.objects.create(organization=org, number="CART1", session=session, location=location, created_by=user)
+
+    with pytest.raises(IntegrityError):
+        Sale.objects.create(organization=org, number="CART2", session=session, location=location, created_by=user)
 
 
 @pytest.mark.django_db
@@ -464,11 +492,14 @@ def test_cart_accepts_true_split_payment_with_references(client):
 
     cart.refresh_from_db()
     assert response.status_code == 302
-    assert cart.status == "paid"
-    assert cart.paid_total == 2000
+    assert cart.status == "part_paid"
+    assert cart.paid_total == 500
     assert set(Payment.objects.filter(sale=cart).values_list("method", "amount")) == {
         ("cash", 500), ("mpesa", 1000), ("card", 500),
     }
+    assert Payment.objects.get(sale=cart, method="cash").status == PaymentStatus.CONFIRMED
+    assert Payment.objects.get(sale=cart, method="mpesa").status == PaymentStatus.PENDING
+    assert Payment.objects.get(sale=cart, method="card").status == PaymentStatus.PENDING
 
 
 @pytest.mark.django_db

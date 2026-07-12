@@ -10,7 +10,7 @@ from apps.audit.services import record_audit_event
 from apps.operations.forms import InstallmentScheduleForm
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from apps.payments.forms import AdditionalPaymentForm
-from apps.payments.models import Payment
+from apps.payments.models import Payment, PaymentMethod, PaymentStatus
 from apps.payments.services import allocate_sale_refund, confirm_payment
 from .forms import ReturnRequestForm
 from .models import ReturnStatus, Sale, SaleReturn, SaleReturnLine
@@ -18,16 +18,19 @@ from .services import complete_return
 
 
 @login_required
+@organization_permission_required("sales.view_sale")
 def sale_detail(request, sale_id):
     sale = get_object_or_404(
         Sale, id=sale_id, organization=request.organization,
         location__in=accessible_locations_for(request.user, request.organization),
     )
+    receivable = getattr(sale, "receivable", None)
     return render(request, "sales/detail.html", {
         "sale": sale,
         "payment_form": AdditionalPaymentForm(),
         "return_form": ReturnRequestForm(sale=sale),
-        "installment_form": InstallmentScheduleForm(receivable=getattr(sale, "receivable", None)),
+        "installment_form": InstallmentScheduleForm(receivable=receivable),
+        "current_installments": receivable.installments.filter(is_current=True) if receivable else [],
     })
 
 
@@ -42,6 +45,14 @@ def sale_add_payment(request, sale_id):
     )
     form = AdditionalPaymentForm(request.POST)
     if form.is_valid():
+        provider_reference = form.cleaned_data["provider_reference"]
+        if provider_reference and Payment.objects.filter(
+            organization=request.organization,
+            method=form.cleaned_data["method"],
+            provider_reference=provider_reference,
+        ).exists():
+            messages.error(request, "This payment reference has already been used.")
+            return redirect("sale-detail", sale_id=sale.id)
         payment = Payment.objects.create(
             organization=request.organization,
             number=f"PAY-{timezone.now():%Y%m%d%H%M%S%f}",
@@ -49,15 +60,18 @@ def sale_add_payment(request, sale_id):
             sale=sale,
             method=form.cleaned_data["method"],
             amount=form.cleaned_data["amount"],
-            provider_reference=form.cleaned_data["provider_reference"],
+            provider_reference=provider_reference,
             received_by=request.user,
         )
-        try:
-            confirm_payment(payment=payment)
-            messages.success(request, "Payment confirmed.")
-        except ValidationError as error:
-            messages.error(request, error.message)
-            transaction.set_rollback(True)
+        if payment.method == PaymentMethod.CASH:
+            try:
+                confirm_payment(payment=payment)
+                messages.success(request, "Cash payment confirmed.")
+            except ValidationError as error:
+                messages.error(request, error.message)
+                transaction.set_rollback(True)
+        elif payment.status == PaymentStatus.PENDING:
+            messages.success(request, "Payment recorded as pending confirmation.")
     return redirect("sale-detail", sale_id=sale.id)
 
 

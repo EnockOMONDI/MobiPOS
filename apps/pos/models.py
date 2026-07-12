@@ -27,7 +27,14 @@ class POSSession(OrganizationOwnedModel):
     closing_note = models.TextField(blank=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=("organization", "number"), name="unique_pos_session_number_per_org")]
+        constraints = [
+            models.UniqueConstraint(fields=("organization", "number"), name="unique_pos_session_number_per_org"),
+            models.UniqueConstraint(
+                fields=("organization", "cashier", "location"),
+                condition=models.Q(status=SessionStatus.OPEN),
+                name="unique_open_pos_session_per_cashier_location",
+            ),
+        ]
 
     def __str__(self):
         return self.number

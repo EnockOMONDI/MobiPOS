@@ -16,7 +16,7 @@ def test_repair_ticket_workflow(client):
     user = User.objects.get(username="alice")
     organization = Organization.objects.get(slug="mobipos-electronics")
     branch = Branch.objects.get(organization=organization)
-    customer = Contact.objects.get(organization=organization, contact_type="customer")
+    customer = Contact.objects.get(organization=organization, name="Demo Credit Customer")
     client.force_login(user)
 
     response = client.post(reverse("repair-create"), {

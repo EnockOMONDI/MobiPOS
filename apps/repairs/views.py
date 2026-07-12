@@ -28,6 +28,7 @@ def repair_create(request):
 
 
 @login_required
+@organization_permission_required("repairs.view_repairticket")
 def repair_detail(request, ticket_id):
     ticket = get_object_or_404(
         RepairTicket, id=ticket_id, organization=request.organization,

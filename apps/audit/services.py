@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from .models import AuditEvent
 
 
@@ -36,5 +38,7 @@ def record_audit_event(
 def _client_ip(request):
     if not request:
         return None
-    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    return forwarded_for.split(",", maxsplit=1)[0].strip() or request.META.get("REMOTE_ADDR")
+    if getattr(settings, "TRUST_PROXY_IP_HEADERS", False):
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        return forwarded_for.split(",", maxsplit=1)[0].strip() or request.META.get("REMOTE_ADDR")
+    return request.META.get("REMOTE_ADDR")

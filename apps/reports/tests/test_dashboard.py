@@ -1,21 +1,35 @@
+from decimal import Decimal
+
 import pytest
 from django.urls import reverse
 
 from apps.accounts.models import User
+from apps.commissions.models import CommissionAccrual, CommissionRule
 from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
 from apps.inventory.services import post_stock_movement
-from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization
+from apps.organizations.models import AgentProfile, AgentProfileStatus, AgentProfileType, Branch, Company, Location, LocationType, Membership, MembershipStatus, Organization
 from apps.catalog.models import Category, Product
 from apps.pos.models import POSSession
-from apps.sales.models import Sale, SaleLine
+from apps.sales.models import Sale, SaleLine, SaleStatus
 
 
 @pytest.mark.django_db
-def test_dashboard_requires_authentication(client):
+def test_dashboard_serves_public_landing_for_anonymous_users(client):
     response = client.get(reverse("dashboard"))
 
-    assert response.status_code == 302
-    assert reverse("login") in response.url
+    assert response.status_code == 200
+    assert b"Run your mobile business" in response.content
+    assert b"Try Demo Version Now" in response.content
+
+
+@pytest.mark.django_db
+def test_demo_access_page_lists_brian_demo_credentials(client):
+    response = client.get(reverse("demo-access"))
+
+    assert response.status_code == 200
+    assert b"Login as Brian" in response.content
+    assert b"brian" in response.content
+    assert b"DemoPass123!" in response.content
 
 
 @pytest.mark.django_db
@@ -77,6 +91,59 @@ def test_module_overview_is_paginated(client):
     assert len(first_page.context["rows"]) == 25
     assert len(second_page.context["rows"]) == 5
     assert first_page.context["page_obj"].paginator.count == 30
+
+
+@pytest.mark.django_db
+def test_agent_stock_module_only_shows_agent_custody_units(client):
+    user = User.objects.create_user(username="agent-stock-owner", email="agent-stock@example.com")
+    organization = Organization.objects.create(name="Agent Stock Org", slug="agent-stock-org", status="active")
+    company = Company.objects.create(organization=organization, name="Agent Stock Ltd", code="ASL")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main", code="MAIN")
+    membership = Membership.objects.create(
+        user=user,
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(branch)
+    agent_location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="Agent Custody",
+        code="AGENT",
+        location_type=LocationType.AGENT,
+        custodian_membership=membership,
+    )
+    warehouse_location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="Warehouse",
+        code="WH",
+        location_type=LocationType.WAREHOUSE,
+    )
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    product = Product.objects.create(organization=organization, category=category, name="A07", sku="A07", is_serialized=True)
+    StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=agent_location,
+        serial_number="AGENT-IMEI-001",
+        status=SerialStatus.AVAILABLE,
+    )
+    StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=warehouse_location,
+        serial_number="WAREHOUSE-IMEI-001",
+        status=SerialStatus.AVAILABLE,
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("module-overview", args=["agent-stock"]))
+
+    assert response.status_code == 200
+    assert b"AGENT-IMEI-001" in response.content
+    assert b"WAREHOUSE-IMEI-001" not in response.content
 
 
 @pytest.mark.django_db
@@ -213,3 +280,121 @@ def test_imei_history_finds_serial_and_links_to_sale(client):
     assert response.status_code == 200
     assert b"350584199018200" in response.content
     assert b"Movement timeline" in response.content
+
+
+@pytest.mark.django_db
+def test_agent_network_report_aggregates_stock_sales_profit_and_commissions(client):
+    owner = User.objects.create_user(username="agent-report-owner", email="agent-report-owner@example.com")
+    agent = User.objects.create_user(username="agent-report-user", email="agent-report-user@example.com", first_name="Report", last_name="Agent")
+    organization = Organization.objects.create(name="Agent Report Org", slug="agent-report-org", status="active")
+    company = Company.objects.create(organization=organization, name="Agent Report Ltd", code="ARL")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main", code="MAIN")
+    owner_membership = Membership.objects.create(
+        user=owner,
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    owner_membership.branches.add(branch)
+    agent_membership = Membership.objects.create(
+        user=agent,
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+    )
+    agent_membership.branches.add(branch)
+    pos_location = Location.objects.create(organization=organization, branch=branch, name="Main POS", code="POS", location_type=LocationType.POS)
+    agent_location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="Report Agent Custody",
+        code="AG-REPORT",
+        location_type=LocationType.AGENT,
+        custodian_membership=agent_membership,
+    )
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    product = Product.objects.create(
+        organization=organization,
+        category=category,
+        name="Report Phone",
+        sku="REPORT-PHONE",
+        is_serialized=True,
+        selling_price=Decimal("20000.00"),
+        cost_price=Decimal("15000.00"),
+    )
+    StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=agent_location,
+        serial_number="AGENT-REPORT-STOCK",
+        status=SerialStatus.AVAILABLE,
+    )
+    sold_unit = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=pos_location,
+        serial_number="AGENT-REPORT-SOLD",
+        status=SerialStatus.SOLD,
+    )
+    profile = AgentProfile.objects.create(
+        organization=organization,
+        membership=agent_membership,
+        profile_type=AgentProfileType.AGENT,
+        status=AgentProfileStatus.ACTIVE,
+        branch=branch,
+        legal_name="Report Agent",
+    )
+    session = POSSession.objects.create(organization=organization, number="SES-AGENT-REPORT", location=pos_location, cashier=owner)
+    sale = Sale.objects.create(
+        organization=organization,
+        number="SALE-AGENT-REPORT",
+        session=session,
+        location=pos_location,
+        agent=agent,
+        status=SaleStatus.PAID,
+        subtotal=Decimal("20000.00"),
+        total=Decimal("20000.00"),
+        paid_total=Decimal("20000.00"),
+        created_by=owner,
+    )
+    SaleLine.objects.create(
+        organization=organization,
+        sale=sale,
+        product=product,
+        stock_unit=sold_unit,
+        quantity=1,
+        unit_price=Decimal("20000.00"),
+        unit_cost=Decimal("15000.00"),
+        line_total=Decimal("20000.00"),
+    )
+    rule = CommissionRule.objects.create(
+        organization=organization,
+        name="Phone commission",
+        product=product,
+        fixed_amount=Decimal("1000.00"),
+    )
+    CommissionAccrual.objects.create(
+        organization=organization,
+        sale=sale,
+        agent=agent,
+        rule=rule,
+        amount=Decimal("1000.00"),
+        is_payable=True,
+    )
+    client.force_login(owner)
+
+    response = client.get(reverse("agent-network-report"))
+    csv_response = client.get(reverse("agent-network-report"), {"format": "csv"})
+
+    assert response.status_code == 200
+    assert response.context["summary"]["sales_total"] == Decimal("20000.00")
+    assert response.context["summary"]["payable_commission"] == Decimal("1000.00")
+    assert response.context["summary"]["stock_held"] == 1
+    row = next(row for row in response.context["profile_rows"] if row["profile"] == profile)
+    assert row["sale_count"] == 1
+    assert row["gross_profit"] == Decimal("5000.00")
+    assert row["stock_count"] == 1
+    assert b"Report Agent" in response.content
+    assert b"KES 5000" in response.content
+    assert csv_response.status_code == 200
+    assert b"Report Agent" in csv_response.content
+    assert b"20000" in csv_response.content

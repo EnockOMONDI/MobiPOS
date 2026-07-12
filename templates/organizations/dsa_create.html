@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Register DSA | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Agent network</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">Register direct sales agent</h1>
+    <p class="mt-2 max-w-3xl text-slate-600">Create a DSA under your agent profile. The DSA remains pending until an administrator verifies the identity records and approves the profile.</p>
+  </div>
+  <a href="{% url 'dashboard' %}" class="btn-secondary">Back to dashboard</a>
+</div>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-[1fr_20rem]">
+  <form method="post" class="space-y-5">{% csrf_token %}
+    {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
+
+    <section class="card grid gap-5 p-6 md:grid-cols-2">
+      <div class="md:col-span-2">
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Identity</p>
+        <h2 class="mt-1 text-lg font-bold">DSA account details</h2>
+        <p class="mt-1 text-sm text-slate-500">The DSA receives an invitation and sets their password securely.</p>
+      </div>
+      {% include "components/form_field.html" with field=form.first_name %}
+      {% include "components/form_field.html" with field=form.last_name %}
+      {% include "components/form_field.html" with field=form.username %}
+      {% include "components/form_field.html" with field=form.email %}
+      {% include "components/form_field.html" with field=form.phone_number %}
+      {% include "components/form_field.html" with field=form.branch %}
+    </section>
+
+    <section class="card grid gap-5 p-6 md:grid-cols-2">
+      <div class="md:col-span-2">
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Verification</p>
+        <h2 class="mt-1 text-lg font-bold">Registration records</h2>
+        <p class="mt-1 text-sm text-slate-500">Capture the legal identity details now. Administrators can upload scanned ID documents and approve the profile from Agent profiles.</p>
+      </div>
+      {% include "components/form_field.html" with field=form.legal_name %}
+      {% include "components/form_field.html" with field=form.national_id_number %}
+      <div class="md:col-span-2">{% include "components/form_field.html" with field=form.registration_notes %}</div>
+    </section>
+
+    <div class="flex flex-wrap gap-3">
+      <button class="btn-primary" type="submit">Create DSA invitation</button>
+      <a href="{% url 'dashboard' %}" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <aside class="card h-fit p-6">
+    <p class="text-xs font-bold uppercase tracking-wider text-red-700">Supervisor</p>
+    <h2 class="mt-2 text-xl font-bold">{{ supervisor.legal_name }}</h2>
+    <dl class="mt-4 space-y-3 text-sm">
+      <div>
+        <dt class="font-semibold text-slate-500">Branch</dt>
+        <dd>{{ supervisor.branch.name }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-slate-500">Status</dt>
+        <dd>{{ supervisor.get_status_display }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold text-slate-500">Policy</dt>
+        <dd>Each DSA is linked to this supervising agent and is pending until owner approval.</dd>
+      </div>
+    </dl>
+  </aside>
+</div>
+{% endblock %}

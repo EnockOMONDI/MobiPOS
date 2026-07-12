@@ -1,7 +1,10 @@
 import pytest
+from io import BytesIO
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.urls import reverse
+from openpyxl import Workbook
 
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
@@ -55,6 +58,36 @@ def test_stock_ledger_rejects_serial_from_another_product_or_location():
 
 
 @pytest.mark.django_db
+def test_stock_unit_rejects_primary_secondary_imei_conflicts():
+    org = Organization.objects.create(name="Serial Unique Org", slug="serial-unique-org", status="active")
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Branch", code="BR")
+    location = Location.objects.create(organization=org, branch=branch, name="Source", code="SRC", location_type="warehouse")
+    category = Category.objects.create(organization=org, name="Phones", code="phones")
+    phone = Product.objects.create(organization=org, category=category, name="Phone", sku="PH", is_serialized=True)
+    StockUnit.objects.create(
+        organization=org, product=phone, serial_number="IMEI-1", secondary_serial="IMEI-2",
+        location=location, status=SerialStatus.AVAILABLE,
+    )
+
+    with pytest.raises(ValidationError, match="already exists"):
+        StockUnit.objects.create(
+            organization=org, product=phone, serial_number="IMEI-2",
+            location=location, status=SerialStatus.AVAILABLE,
+        )
+    with pytest.raises(ValidationError, match="already exists"):
+        StockUnit.objects.create(
+            organization=org, product=phone, serial_number="IMEI-3", secondary_serial="IMEI-1",
+            location=location, status=SerialStatus.AVAILABLE,
+        )
+    with pytest.raises(ValidationError, match="must be different"):
+        StockUnit.objects.create(
+            organization=org, product=phone, serial_number="IMEI-4", secondary_serial="IMEI-4",
+            location=location, status=SerialStatus.AVAILABLE,
+        )
+
+
+@pytest.mark.django_db
 def test_owner_approved_adjustment_posts_ledger_movement(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")
@@ -77,6 +110,111 @@ def test_owner_approved_adjustment_posts_ledger_movement(client):
 
 
 @pytest.mark.django_db
+def test_batch_serial_intake_accepts_pasted_scanner_lines(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    org = Organization.objects.get(slug="mobipos-electronics")
+    product = Product.objects.filter(organization=org, is_serialized=True).first()
+    location = Location.objects.get(organization=org, location_type="warehouse")
+    client.force_login(user)
+
+    response = client.post(reverse("batch-serial-intake"), {
+        "product": product.id,
+        "location": location.id,
+        "unit_cost": "12000.00",
+        "serial_numbers": "BATCH-IMEI-001\nBATCH-IMEI-002",
+        "reason": "Opening warehouse intake",
+    })
+
+    assert response.status_code == 200
+    assert StockUnit.objects.filter(organization=org, serial_number__in=["BATCH-IMEI-001", "BATCH-IMEI-002"]).count() == 2
+    assert StockBalance.objects.get(organization=org, product=product, location=location).quantity >= 2
+    assert StockMovement.objects.filter(organization=org, reference_type="batch_serial_intake").count() == 2
+
+
+@pytest.mark.django_db
+def test_batch_serial_intake_reports_duplicate_rows_without_blocking_valid_rows(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    org = Organization.objects.get(slug="mobipos-electronics")
+    product = Product.objects.filter(organization=org, is_serialized=True).first()
+    location = Location.objects.get(organization=org, location_type="warehouse")
+    existing = StockUnit.objects.filter(organization=org).first()
+    client.force_login(user)
+
+    response = client.post(reverse("batch-serial-intake"), {
+        "product": product.id,
+        "location": location.id,
+        "serial_numbers": f"VALID-BATCH-001\nVALID-BATCH-001\n{existing.serial_number}",
+        "reason": "Mixed quality intake",
+    })
+
+    assert response.status_code == 200
+    assert StockUnit.objects.filter(organization=org, serial_number="VALID-BATCH-001").exists()
+    assert response.context["result"]["failures"]
+    assert len(response.context["result"]["created_units"]) == 1
+
+
+@pytest.mark.django_db
+def test_batch_serial_intake_accepts_csv_upload(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    org = Organization.objects.get(slug="mobipos-electronics")
+    product = Product.objects.filter(organization=org, is_serialized=True).first()
+    location = Location.objects.get(organization=org, location_type="warehouse")
+    upload = SimpleUploadedFile(
+        "serials.csv",
+        b"serial_number,secondary_serial\nCSV-IMEI-001,CSV-IMEI-001B\nCSV-IMEI-002,\n",
+        content_type="text/csv",
+    )
+    client.force_login(user)
+
+    response = client.post(reverse("batch-serial-intake"), {
+        "product": product.id,
+        "location": location.id,
+        "csv_file": upload,
+        "reason": "CSV intake",
+    })
+
+    assert response.status_code == 200
+    assert StockUnit.objects.filter(organization=org, serial_number__in=["CSV-IMEI-001", "CSV-IMEI-002"]).count() == 2
+    assert StockUnit.objects.get(organization=org, serial_number="CSV-IMEI-001").secondary_serial == "CSV-IMEI-001B"
+
+
+@pytest.mark.django_db
+def test_batch_serial_intake_accepts_excel_upload(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    org = Organization.objects.get(slug="mobipos-electronics")
+    product = Product.objects.filter(organization=org, is_serialized=True).first()
+    location = Location.objects.get(organization=org, location_type="warehouse")
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.append(["serial_number", "secondary_serial"])
+    worksheet.append(["XLSX-IMEI-001", "XLSX-IMEI-001B"])
+    worksheet.append(["XLSX-IMEI-002", ""])
+    buffer = BytesIO()
+    workbook.save(buffer)
+    upload = SimpleUploadedFile(
+        "serials.xlsx",
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    client.force_login(user)
+
+    response = client.post(reverse("batch-serial-intake"), {
+        "product": product.id,
+        "location": location.id,
+        "csv_file": upload,
+        "reason": "Excel intake",
+    })
+
+    assert response.status_code == 200
+    assert StockUnit.objects.filter(organization=org, serial_number__in=["XLSX-IMEI-001", "XLSX-IMEI-002"]).count() == 2
+    assert StockUnit.objects.get(organization=org, serial_number="XLSX-IMEI-001").secondary_serial == "XLSX-IMEI-001B"
+
+
+@pytest.mark.django_db
 def test_stock_movement_reversal_is_linked_and_cannot_repeat():
     user = User.objects.create_user(username="reverser", email="reverser@example.com")
     org = Organization.objects.create(name="Reverse Org", slug="reverse-org", status="active")
@@ -96,5 +234,27 @@ def test_stock_movement_reversal_is_linked_and_cannot_repeat():
     assert StockBalance.objects.get(organization=org, product=product, location=location).quantity == 0
     with pytest.raises(ValidationError):
         reverse_stock_movement(movement=movement, actor=user, reason="Repeat")
+
+
+@pytest.mark.django_db
+def test_domain_owned_stock_movement_cannot_be_reversed_generically():
+    user = User.objects.create_user(username="domain-reverser", email="domain-reverser@example.com")
+    org = Organization.objects.create(name="Domain Reverse Org", slug="domain-reverse-org", status="active")
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Branch", code="BR")
+    location = Location.objects.create(organization=org, branch=branch, name="Warehouse", code="WH", location_type="warehouse")
+    category = Category.objects.create(organization=org, name="Items", code="items")
+    product = Product.objects.create(organization=org, category=category, name="Item", sku="ITEM")
+    post_stock_movement(
+        organization=org, product=product, location=location, quantity=5,
+        movement_type=StockMovementType.OPENING, actor=user,
+    )
+    movement = post_stock_movement(
+        organization=org, product=product, location=location, quantity=-1,
+        movement_type=StockMovementType.SALE, actor=user, reference_type="sale", reference_id="sale-1",
+    )
+
+    with pytest.raises(ValidationError, match="source workflow"):
+        reverse_stock_movement(movement=movement, actor=user, reason="Wrong sale")
 
 # Create your tests here.

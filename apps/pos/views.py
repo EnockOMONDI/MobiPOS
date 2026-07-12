@@ -196,15 +196,15 @@ def checkout(request):
         if allocated_total < sale_total and credit_amount:
             form.add_error(None, "Explicit payment and credit allocations must equal the sale total.")
             return render(request, "pos/checkout.html", {"form": form, "location": location})
-        balance = sale_total - paid_amount
-        if balance > 0:
+        credit_balance = credit_amount or max(sale_total - paid_amount, Decimal("0"))
+        if credit_balance > 0:
             if not customer:
                 form.add_error("customer", "A customer is required when a balance remains.")
                 return render(request, "pos/checkout.html", {"form": form, "location": location})
             exposure = Receivable.objects.filter(
                 organization=organization, customer=customer, outstanding_amount__gt=0
             ).aggregate(total=Sum("outstanding_amount"))["total"] or Decimal("0")
-            if exposure + balance > customer.credit_limit:
+            if exposure + credit_balance > customer.credit_limit:
                 form.add_error("customer", "Customer credit limit would be exceeded.")
                 return render(request, "pos/checkout.html", {"form": form, "location": location})
             if not (
@@ -227,7 +227,7 @@ def checkout(request):
             customer=customer,
             agent=request.user,
             created_by=request.user,
-            **_sale_context_from_form(form, is_credit=balance > 0),
+            **_sale_context_from_form(form, is_credit=credit_balance > 0),
         )
         SaleLine.objects.create(
             organization=organization,
@@ -247,8 +247,8 @@ def checkout(request):
             received_by=request.user,
         )
         sale.refresh_from_db()
-        if sale.balance_due > 0:
-            create_credit_receivable(sale=sale)
+        if credit_balance > 0:
+            create_credit_receivable(sale=sale, amount=credit_balance)
         message = f"Sale {sale.number} completed."
         if change_due:
             message += f" Change due: KES {change_due}."
@@ -401,8 +401,8 @@ def cart_complete(request, sale_id):
     if allocated_total < total and credit_amount:
         messages.error(request, "Explicit payment and credit allocations must equal the sale total.")
         return redirect("pos-cart")
-    balance = total - paid_amount
-    if balance > 0:
+    credit_balance = credit_amount or max(total - paid_amount, Decimal("0"))
+    if credit_balance > 0:
         if pending_customer_name and not customer:
             messages.error(request, "Create the customer profile before using customer credit.")
             return redirect("pos-cart")
@@ -412,10 +412,10 @@ def cart_complete(request, sale_id):
         exposure = Receivable.objects.filter(
             organization=request.organization, customer=customer, outstanding_amount__gt=0
         ).aggregate(total=Sum("outstanding_amount"))["total"] or Decimal("0")
-        if exposure + balance > customer.credit_limit:
+        if exposure + credit_balance > customer.credit_limit:
             messages.error(request, "Customer credit limit would be exceeded.")
             return redirect("pos-cart")
-        if not _credit_sale_is_approved(request, sale, balance):
+        if not _credit_sale_is_approved(request, sale, credit_balance):
             messages.error(request, "Credit approval is required before completing this sale.")
             return redirect("pos-cart")
     if pending_customer_name:
@@ -426,7 +426,7 @@ def cart_complete(request, sale_id):
             request=request,
         )
     sale.customer = customer
-    for field, value in _sale_context_from_form(form, is_credit=balance > 0).items():
+    for field, value in _sale_context_from_form(form, is_credit=credit_balance > 0).items():
         setattr(sale, field, value)
     sale.save(update_fields=[
         "customer",
@@ -444,8 +444,8 @@ def cart_complete(request, sale_id):
         received_by=request.user,
     )
     sale.refresh_from_db()
-    if sale.balance_due > 0:
-        create_credit_receivable(sale=sale)
+    if credit_balance > 0:
+        create_credit_receivable(sale=sale, amount=credit_balance)
     message = f"Sale {sale.number} completed."
     if change_due:
         message += f" Change due: KES {change_due}."
@@ -454,6 +454,7 @@ def cart_complete(request, sale_id):
 
 
 @login_required
+@organization_permission_required("pos.view_possession")
 def session_detail(request, session_id):
     session = get_object_or_404(
         POSSession, id=session_id, organization=request.organization,

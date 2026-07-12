@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -65,7 +66,14 @@ def mfa_verify(request):
                 otp_login(request, device)
             request.session["mfa_recovery_verified"] = True
             record_audit_event(action="identity.mfa_verified", actor=request.user, request=request)
-            return redirect(request.GET.get("next") or "dashboard")
+            next_url = request.GET.get("next") or ""
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect("dashboard")
     return render(
         request,
         "accounts/mfa_verify.html",

@@ -12,10 +12,11 @@ from django.utils.dateparse import parse_date
 from apps.commissions.models import CommissionAccrual
 from apps.expenses.models import Expense
 from apps.inventory.models import StockUnit
-from apps.organizations.permissions import accessible_branches_for
+from apps.organizations.permissions import accessible_branches_for, organization_owner_or_permission_required
 from apps.payments.models import Payment, PaymentStatus
 from apps.purchasing.models import PurchaseOrder
 from apps.sales.models import Sale, SaleLine
+from .exporting import safe_csv_row
 
 
 def _date_range_from_request(request):
@@ -28,6 +29,7 @@ def _date_range_from_request(request):
 
 
 @login_required
+@organization_owner_or_permission_required("organizations.view_retail_analytics")
 def retail_analytics_report(request):
     organization = request.organization
     if not organization:
@@ -120,11 +122,11 @@ def retail_analytics_report(request):
         writer = csv.writer(response)
         writer.writerow(["Metric", "Value"])
         for label, value in context["summary"].items():
-            writer.writerow([label.replace("_", " ").title(), value])
+            writer.writerow(safe_csv_row([label.replace("_", " ").title(), value]))
         writer.writerow([])
         writer.writerow(["Sales By Branch", "Count", "Total"])
         for row in context["sales_by_branch"]:
-            writer.writerow([row["location__branch__name"], row["count"], row["total"]])
+            writer.writerow(safe_csv_row([row["location__branch__name"], row["count"], row["total"]]))
         return response
 
     return render(request, "reports/retail_analytics.html", context)

@@ -8,6 +8,7 @@ django-js-asset==3.1.2
 django-otp==1.7.0
 django-unfold==0.63.0
 gunicorn==23.0.0
+openpyxl==3.1.2
 pillow==11.2.1
 psycopg[binary]==3.3.4
 redis==8.0.0

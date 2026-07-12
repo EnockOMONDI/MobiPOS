@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth.models import Permission
@@ -38,6 +39,11 @@ class Organization(TimestampedModel):
 
     class Meta:
         ordering = ("name",)
+        permissions = [
+            ("view_operational_report", "Can view operational report"),
+            ("view_retail_analytics", "Can view retail analytics report"),
+            ("view_activity_report", "Can view activity report"),
+        ]
 
     def __str__(self):
         return self.name
@@ -116,6 +122,7 @@ class Branch(OrganizationOwnedModel):
 class LocationType(models.TextChoices):
     WAREHOUSE = "warehouse", "Warehouse"
     POS = "pos", "POS location"
+    AGENT = "agent", "Agent custody"
     IN_TRANSIT = "in_transit", "In transit"
     REPAIR = "repair", "Repair"
 
@@ -126,6 +133,13 @@ class Location(OrganizationOwnedModel):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=32)
     location_type = models.CharField(max_length=20, choices=LocationType.choices)
+    custodian_membership = models.ForeignKey(
+        "Membership",
+        on_delete=models.PROTECT,
+        related_name="custody_locations",
+        null=True,
+        blank=True,
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -133,13 +147,25 @@ class Location(OrganizationOwnedModel):
         constraints = [
             models.UniqueConstraint(
                 fields=("organization", "code"), name="unique_location_code_per_org"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=("organization", "custodian_membership"),
+                condition=models.Q(location_type=LocationType.AGENT, is_active=True, custodian_membership__isnull=False),
+                name="unique_active_agent_location_per_membership",
+            ),
         ]
 
     def clean(self):
         super().clean()
         if self.branch_id and self.branch.organization_id != self.organization_id:
             raise ValidationError("Location and branch must belong to the same organization.")
+        if self.custodian_membership_id:
+            if self.custodian_membership.organization_id != self.organization_id:
+                raise ValidationError("Custodian membership must belong to the same organization.")
+            if self.branch_id and not self.custodian_membership.branches.filter(id=self.branch_id).exists():
+                raise ValidationError("Custodian must be assigned to the location branch.")
+            if self.location_type != LocationType.AGENT:
+                raise ValidationError("Custodian membership is only valid for agent custody locations.")
 
     def __str__(self):
         return self.name
@@ -192,6 +218,123 @@ class Membership(OrganizationOwnedModel):
 
     def __str__(self):
         return f"{self.user} at {self.organization}"
+
+
+class AgentProfileType(models.TextChoices):
+    AGENT = "agent", "Agent"
+    DSA = "dsa", "Direct Sales Agent"
+
+
+class AgentProfileStatus(models.TextChoices):
+    PENDING = "pending", "Pending verification"
+    ACTIVE = "active", "Active"
+    SUSPENDED = "suspended", "Suspended"
+    REJECTED = "rejected", "Rejected"
+    ARCHIVED = "archived", "Archived"
+
+
+class AgentProfile(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    membership = models.OneToOneField(Membership, on_delete=models.PROTECT, related_name="agent_profile")
+    profile_type = models.CharField(max_length=20, choices=AgentProfileType.choices, default=AgentProfileType.AGENT)
+    status = models.CharField(max_length=20, choices=AgentProfileStatus.choices, default=AgentProfileStatus.PENDING)
+    branch = models.ForeignKey(Branch, on_delete=models.PROTECT, related_name="agent_profiles")
+    supervisor = models.ForeignKey(
+        "self",
+        on_delete=models.PROTECT,
+        related_name="sub_agents",
+        null=True,
+        blank=True,
+    )
+    legal_name = models.CharField(max_length=255)
+    national_id_number = models.CharField(max_length=80, blank=True)
+    phone_number = models.CharField(max_length=32, blank=True)
+    registration_notes = models.TextField(blank=True)
+    verification_notes = models.TextField(blank=True)
+    registered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="registered_agent_profiles",
+        null=True,
+        blank=True,
+    )
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="verified_agent_profiles",
+        null=True,
+        blank=True,
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("legal_name",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "national_id_number"),
+                condition=~models.Q(national_id_number=""),
+                name="unique_agent_national_id_per_org",
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.membership_id and self.membership.organization_id != self.organization_id:
+            raise ValidationError("Agent membership must belong to the same organization.")
+        if self.branch_id:
+            if self.branch.organization_id != self.organization_id:
+                raise ValidationError("Agent branch must belong to the same organization.")
+            if self.membership_id and not self.membership.branches.filter(id=self.branch_id).exists():
+                raise ValidationError("Agent must be assigned to the selected branch.")
+        if self.supervisor_id:
+            if self.supervisor.organization_id != self.organization_id:
+                raise ValidationError("Supervisor must belong to the same organization.")
+            if self.supervisor_id == self.id:
+                raise ValidationError("An agent cannot supervise their own profile.")
+            if self.profile_type == AgentProfileType.AGENT:
+                raise ValidationError("Only DSA profiles can have a supervising agent.")
+
+    def __str__(self):
+        return self.legal_name
+
+
+class AgentDocumentType(models.TextChoices):
+    NATIONAL_ID = "national_id", "National ID"
+    AGENT_PHOTO = "agent_photo", "Agent photo"
+    CONTRACT = "contract", "Contract"
+    SUPPORTING = "supporting", "Supporting document"
+
+
+def agent_document_upload_path(instance, filename):
+    extension = Path(filename).suffix.lower()
+    return f"organizations/{instance.organization_id}/agents/{instance.profile_id}/{uuid.uuid4()}{extension}"
+
+
+class AgentDocument(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    profile = models.ForeignKey(AgentProfile, on_delete=models.PROTECT, related_name="documents")
+    document_type = models.CharField(max_length=30, choices=AgentDocumentType.choices)
+    file = models.FileField(upload_to=agent_document_upload_path, max_length=500)
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120, blank=True)
+    size = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="uploaded_agent_documents",
+    )
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def clean(self):
+        super().clean()
+        if self.profile_id and self.profile.organization_id != self.organization_id:
+            raise ValidationError("Agent document must belong to the same organization as the profile.")
+
+    def __str__(self):
+        return f"{self.get_document_type_display()} for {self.profile}"
 
 
 class InvitationStatus(models.TextChoices):

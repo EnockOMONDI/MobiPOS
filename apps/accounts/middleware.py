@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.utils import timezone
 
 from .models import UserSession
@@ -14,8 +15,11 @@ class UserSessionTrackingMiddleware:
         if request.user.is_authenticated:
             if not request.session.session_key:
                 request.session.save()
-            forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-            ip_address = forwarded.split(",", 1)[0].strip() or request.META.get("REMOTE_ADDR")
+            if getattr(settings, "TRUST_PROXY_IP_HEADERS", False):
+                forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+                ip_address = forwarded.split(",", 1)[0].strip() or request.META.get("REMOTE_ADDR")
+            else:
+                ip_address = request.META.get("REMOTE_ADDR")
             tracked, created = UserSession.objects.get_or_create(
                 session_key=request.session.session_key,
                 defaults={

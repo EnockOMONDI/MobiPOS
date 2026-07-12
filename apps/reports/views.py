@@ -3,14 +3,16 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Q, Sum
+from django.db.models import Count, F, Q, Sum
 from django.http import Http404, HttpResponse
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 
 from apps.accounts.models import User
+from apps.audit.models import AuditEvent
 from apps.catalog.models import Product
 from apps.contacts.models import Contact
 from apps.commissions.models import CommissionAccrual, CommissionPayout
@@ -18,18 +20,20 @@ from apps.expenses.models import Expense
 from apps.integrations.models import IntegrationEvent
 from apps.inventory.models import SerialStatus, StockAdjustment, StockBalance, StockMovement, StockUnit
 from apps.operations.models import ApprovalRequest, Payable, Receivable
-from apps.organizations.models import Branch, Location, Membership, Organization, Role, SubscriptionInvoice
-from apps.organizations.permissions import accessible_branches_for
+from apps.organizations.models import AgentProfile, Branch, Location, LocationType, Membership, Organization, Role, SubscriptionInvoice
+from apps.organizations.permissions import accessible_branches_for, organization_permission_required, user_has_organization_permission
 from apps.payments.models import Payment, Refund
 from apps.pos.models import POSSession
 from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, PurchaseStatus, SupplierReturn
 from apps.repairs.models import RepairTicket
 from apps.sales.models import Sale, SaleReturn
 from apps.transfers.models import StockTransfer, TransferStatus
+from .exporting import safe_csv_row
 
 
 BRANCH_LOOKUPS = {
     Branch: "id",
+    AgentProfile: "branch",
     Location: "branch",
     StockUnit: "location__branch",
     StockBalance: "location__branch",
@@ -50,6 +54,34 @@ BRANCH_LOOKUPS = {
     POSSession: "location__branch",
 }
 
+LANDING_FEATURE_CARDS = [
+    "POS sales",
+    "IMEI inventory",
+    "Batch Excel intake",
+    "Warehouse transfers",
+    "Agent allocation",
+    "Stock recall",
+    "Credit sales",
+    "Commissions",
+    "Repairs and warranty",
+    "Activity reports",
+    "Role permissions",
+    "Operational dashboards",
+]
+
+LANDING_ROADMAP_ITEMS = [
+    "M-Pesa reconciliation",
+    "eTIMS invoicing",
+    "BI dashboards",
+    "Stock forecasting",
+    "Mobile apps",
+    "Accounting APIs",
+    "AI insights",
+    "Barcode and QR",
+    "Franchise control",
+    "CRM loyalty",
+]
+
 
 def _scope_to_user_branches(queryset, model, request):
     branches = accessible_branches_for(request.user, request.organization)
@@ -59,9 +91,49 @@ def _scope_to_user_branches(queryset, model, request):
     return queryset.filter(**{f"{lookup}__in": branches}) if lookup else queryset
 
 
-@login_required
+def _can_view_module(request, module):
+    if module in SENSITIVE_MODULES and request.organization:
+        membership = request.membership
+        if request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner):
+            return True
+        return False
+    permission = MODULE_PERMISSIONS.get(module)
+    if permission and request.organization:
+        from apps.organizations.permissions import user_has_organization_permission
+        return user_has_organization_permission(request.user, request.organization, permission)
+    return True
+
+
+def _owner_activity_queryset(request):
+    if request.user.is_superuser or request.user.is_platform_admin:
+        return AuditEvent.objects.all()
+
+    organization = getattr(request, "organization", None)
+    membership = getattr(request, "membership", None)
+    if not organization or not membership:
+        raise PermissionDenied("Organization owner access is required.")
+    if not membership.is_owner and not user_has_organization_permission(
+        request.user, organization, "organizations.view_activity_report"
+    ):
+        raise PermissionDenied("Organization owner access is required.")
+
+    member_user_ids = Membership.objects.filter(
+        organization=organization,
+        status="active",
+    ).values("user_id")
+    return AuditEvent.objects.filter(
+        Q(organization=organization) | Q(organization__isnull=True, actor_id__in=member_user_ids)
+    )
+
+
 def dashboard(request):
+    if not request.user.is_authenticated:
+        return render(request, "marketing/landing.html", {
+            "feature_cards": LANDING_FEATURE_CARDS,
+            "roadmap_items": LANDING_ROADMAP_ITEMS,
+        })
     organization = request.organization
+    latest_activity = []
     if organization:
         branches = accessible_branches_for(request.user, organization)
         today = timezone.localdate()
@@ -83,7 +155,7 @@ def dashboard(request):
                 organization=organization,
                 destination__branch__in=branches,
                 created_at__date=today,
-            ).aggregate(total=Sum("lines__quantity"))["total"] or 0,
+            ).aggregate(total=Sum(F("lines__quantity") * F("lines__unit_cost")))["total"] or 0,
             "pending_purchase_receipts": PurchaseOrder.objects.filter(
                 organization=organization,
                 destination__branch__in=branches,
@@ -119,6 +191,9 @@ def dashboard(request):
                 status=TransferStatus.IN_TRANSIT,
             ).select_related("source", "destination")[:5],
         }
+        membership = getattr(request, "membership", None)
+        if request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner):
+            latest_activity = _owner_activity_queryset(request).select_related("actor", "organization")[:8]
     elif request.user.is_platform_admin or request.user.is_superuser:
         metrics = {
             "organizations": Organization.objects.filter(status="active").count(),
@@ -140,6 +215,7 @@ def dashboard(request):
         }
         latest_sales = Sale.objects.select_related("customer", "agent").prefetch_related("lines__product", "lines__stock_unit").order_by("-created_at")[:8]
         pending_actions = {"purchase_receipts": [], "transfer_receipts": []}
+        latest_activity = _owner_activity_queryset(request).select_related("actor", "organization")[:8]
     else:
         metrics = dict.fromkeys(
             (
@@ -158,6 +234,123 @@ def dashboard(request):
         "metrics": metrics,
         "latest_sales": latest_sales,
         "pending_actions": pending_actions,
+        "latest_activity": latest_activity,
+    })
+
+
+def demo_access(request):
+    if request.user.is_authenticated:
+        return render(request, "marketing/demo.html", {"already_signed_in": True})
+    demo_accounts = [
+        {
+            "username": "brian",
+            "password": "DemoPass123!",
+            "role": "Owner demo",
+            "organization": "Nairobi Mobile Hub",
+            "best_for": "Full business owner view with Kenyan mobile retail demo data.",
+        },
+        {
+            "username": "alice",
+            "password": "DemoPass123!",
+            "role": "Owner demo",
+            "organization": "MobiPOS Electronics",
+            "best_for": "Testing dashboards, inventory, sales, transfers, users, and reports.",
+        },
+        {
+            "username": "platformadmin",
+            "password": "AdminPass123!",
+            "role": "Platform administrator",
+            "organization": "Platform-wide",
+            "best_for": "Platform administration and Django admin access.",
+        },
+    ]
+    return render(request, "marketing/demo.html", {"demo_accounts": demo_accounts})
+
+
+@login_required
+def activity_report(request):
+    queryset = _owner_activity_queryset(request).select_related("actor", "organization")
+
+    query = request.GET.get("q", "").strip()
+    action = request.GET.get("action", "").strip()
+    actor = request.GET.get("actor", "").strip()
+    start = parse_date(request.GET.get("start", ""))
+    end = parse_date(request.GET.get("end", ""))
+
+    if query:
+        queryset = queryset.filter(
+            Q(action__icontains=query)
+            | Q(message__icontains=query)
+            | Q(target_type__icontains=query)
+            | Q(target_id__icontains=query)
+            | Q(actor__username__icontains=query)
+            | Q(actor__email__icontains=query)
+            | Q(actor__first_name__icontains=query)
+            | Q(actor__last_name__icontains=query)
+        )
+    if action:
+        queryset = queryset.filter(action=action)
+    if actor:
+        queryset = queryset.filter(actor_id=actor)
+    if start:
+        queryset = queryset.filter(created_at__date__gte=start)
+    if end:
+        queryset = queryset.filter(created_at__date__lte=end)
+
+    if request.GET.get("format") == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="activity-report.csv"'
+        writer = csv.writer(response)
+        writer.writerow(["Time", "Actor", "Organization", "Action", "Target", "Message", "IP address"])
+        for event in queryset.order_by("-created_at"):
+            writer.writerow(safe_csv_row([
+                event.created_at.isoformat(),
+                event.actor.get_username() if event.actor else "System",
+                event.organization.name if event.organization else "Platform",
+                event.action,
+                f"{event.target_type} {event.target_id}".strip(),
+                event.message,
+                event.ip_address or "",
+            ]))
+        return response
+
+    scoped = queryset.order_by("-created_at")
+    page_obj = Paginator(scoped, 25).get_page(request.GET.get("page"))
+    available_actions = (
+        _owner_activity_queryset(request)
+        .exclude(action="")
+        .values_list("action", flat=True)
+        .distinct()
+        .order_by("action")
+    )
+    available_actors = User.objects.filter(
+        id__in=_owner_activity_queryset(request).exclude(actor__isnull=True).values("actor_id")
+    ).order_by("first_name", "last_name", "username")
+    actor_summary = (
+        queryset.exclude(actor__isnull=True)
+        .values("actor_id", "actor__first_name", "actor__last_name", "actor__username", "actor__email")
+        .annotate(total=Count("id"), logins=Count("id", filter=Q(action="auth.login")))
+        .order_by("-total")[:10]
+    )
+    action_summary = (
+        queryset.values("action")
+        .annotate(total=Count("id"))
+        .order_by("-total", "action")[:12]
+    )
+
+    return render(request, "reports/activity.html", {
+        "page_obj": page_obj,
+        "events": page_obj.object_list,
+        "query": query,
+        "selected_action": action,
+        "selected_actor": actor,
+        "start": start,
+        "end": end,
+        "available_actions": available_actions,
+        "available_actors": available_actors,
+        "actor_summary": actor_summary,
+        "action_summary": action_summary,
+        "total_events": queryset.count(),
     })
 
 
@@ -165,6 +358,7 @@ MODULES = {
     "products": ("Products", Product, ("name", "sku", "selling_price", "is_serialized")),
     "contacts": ("Customers and suppliers", Contact, ("name", "contact_type", "phone_number", "credit_limit", "is_active")),
     "inventory": ("Serialized inventory", StockUnit, ("serial_number", "product", "status", "location")),
+    "agent-stock": ("Agent stock custody", StockUnit, ("serial_number", "secondary_serial", "product", "status", "location")),
     "stock": ("Stock balances", StockBalance, ("product", "location", "quantity")),
     "movements": ("Stock movements", StockMovement, ("movement_type", "product", "location", "quantity", "reason")),
     "adjustments": ("Stock adjustments", StockAdjustment, ("number", "product", "location", "quantity", "status")),
@@ -187,6 +381,7 @@ MODULES = {
     "subscriptions": ("Subscription invoices", SubscriptionInvoice, ("number", "subscription", "status", "amount", "due_on")),
     "sessions": ("Cashier sessions", POSSession, ("number", "location", "cashier", "status", "expected_cash", "variance")),
     "users": ("Organization users", Membership, ("user", "status", "is_owner")),
+    "agents": ("Agent profiles", AgentProfile, ("legal_name", "profile_type", "status", "branch", "supervisor")),
     "branches": ("Branches", Branch, ("name", "code", "company", "is_active")),
     "locations": ("Locations", Location, ("name", "code", "branch", "location_type", "is_active")),
     "roles": ("Roles", Role, ("name", "code", "description", "is_active")),
@@ -194,12 +389,13 @@ MODULES = {
 }
 SENSITIVE_MODULES = {
     "approvals", "branches", "commission-payouts", "integrations", "locations",
-    "roles", "subscriptions", "users",
+    "roles", "subscriptions", "users", "agents",
 }
 MODULE_PERMISSIONS = {
     "products": "catalog.view_product",
     "contacts": "contacts.view_contact",
     "inventory": "inventory.view_stockunit",
+    "agent-stock": "inventory.view_stockunit",
     "stock": "inventory.view_stockbalance",
     "movements": "inventory.view_stockmovement",
     "adjustments": "inventory.view_stockadjustment",
@@ -230,6 +426,7 @@ MODULE_DETAIL_URLS = {
     "commission-payouts": "commission-payout-detail",
     "repairs": "repair-detail",
     "sessions": "session-detail",
+    "agents": "agent-profile-detail",
 }
 
 
@@ -276,13 +473,15 @@ def module_overview(request, module):
         queryset = queryset.filter(is_active=status == "active")
     if module == "aged-stock":
         queryset = queryset.filter(status=SerialStatus.AVAILABLE, created_at__lte=timezone.now() - timedelta(days=5))
+    if module == "agent-stock":
+        queryset = queryset.filter(location__location_type=LocationType.AGENT)
     headers = [field.replace("_", " ").title() for field in fields]
     if request.GET.get("format") == "csv":
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{module}.csv"'
         writer = csv.writer(response)
         writer.writerow(headers)
-        writer.writerows([getattr(item, field) for field in fields] for item in queryset)
+        writer.writerows(safe_csv_row(getattr(item, field) for field in fields) for item in queryset)
         return response
     page_obj = Paginator(queryset, 25).get_page(request.GET.get("page"))
     detail_url_name = MODULE_DETAIL_URLS.get(module)
@@ -313,17 +512,21 @@ def global_search(request):
     if query and (request.organization or request.user.is_platform_admin or request.user.is_superuser):
         organization_filter = {"organization": request.organization} if request.organization else {}
         branches = accessible_branches_for(request.user, request.organization) if request.organization else Branch.objects.all()
-        searches = (
-            ("Product", Product.objects.filter(**organization_filter).filter(Q(name__icontains=query) | Q(sku__icontains=query) | Q(barcode__icontains=query)), "product-detail"),
-            ("Contact", Contact.objects.filter(**organization_filter).filter(Q(name__icontains=query) | Q(phone_number__icontains=query) | Q(email__icontains=query) | Q(tax_number__icontains=query)), "contact-detail"),
-            ("Serial / IMEI", StockUnit.objects.filter(**organization_filter).filter(
+        searches = []
+        if _can_view_module(request, "products"):
+            searches.append(("Product", Product.objects.filter(**organization_filter).filter(Q(name__icontains=query) | Q(sku__icontains=query) | Q(barcode__icontains=query)), "product-detail"))
+        if _can_view_module(request, "contacts"):
+            searches.append(("Contact", Contact.objects.filter(**organization_filter).filter(Q(name__icontains=query) | Q(phone_number__icontains=query) | Q(email__icontains=query) | Q(tax_number__icontains=query)), "contact-detail"))
+        if _can_view_module(request, "inventory"):
+            searches.append(("Serial / IMEI", StockUnit.objects.filter(**organization_filter).filter(
                 Q(location__branch__in=branches)
                 | Q(saleline__sale__location__branch__in=branches)
                 | Q(movements__location__branch__in=branches)
-            ).filter(Q(serial_number__icontains=query) | Q(secondary_serial__icontains=query)).distinct(), "imei-history"),
-            ("Sale", Sale.objects.filter(**organization_filter, location__branch__in=branches, number__icontains=query), "sale-detail"),
-            ("Repair", RepairTicket.objects.filter(**organization_filter, branch__in=branches, number__icontains=query), "repair-detail"),
-        )
+            ).filter(Q(serial_number__icontains=query) | Q(secondary_serial__icontains=query)).distinct(), "imei-history"))
+        if _can_view_module(request, "sales"):
+            searches.append(("Sale", Sale.objects.filter(**organization_filter, location__branch__in=branches, number__icontains=query), "sale-detail"))
+        if _can_view_module(request, "repairs"):
+            searches.append(("Repair", RepairTicket.objects.filter(**organization_filter, branch__in=branches, number__icontains=query), "repair-detail"))
         for label, queryset, url_name in searches:
             results.extend({
                 "type": label,
@@ -336,6 +539,7 @@ def global_search(request):
 
 
 @login_required
+@organization_permission_required("inventory.view_stockunit")
 def imei_history(request):
     query = request.GET.get("q", "").strip()
     branches = accessible_branches_for(request.user, request.organization)

@@ -8,8 +8,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
-from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
-from .forms import TransferForm
+from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required, user_has_organization_permission
+from .forms import AgentAllocationForm, AgentRecallForm, TransferForm
 from .models import StockTransfer, StockTransferLine, TransferDiscrepancy
 from .services import approve_transfer, dispatch_transfer, receive_transfer, resolve_transfer_discrepancy
 
@@ -40,6 +40,137 @@ def transfer_create(request):
 
 
 @login_required
+@organization_permission_required("transfers.add_stocktransfer")
+@transaction.atomic
+def agent_allocation_create(request):
+    if not request.organization:
+        return redirect("dashboard")
+    membership = getattr(request, "membership", None)
+    can_complete = bool(
+        request.user.is_superuser
+        or request.user.is_platform_admin
+        or (membership and membership.is_owner)
+        or user_has_organization_permission(request.user, request.organization, "transfers.change_stocktransfer")
+    )
+    form = AgentAllocationForm(
+        request.POST or None,
+        organization=request.organization,
+        user=request.user,
+        can_complete=can_complete,
+    )
+    if request.method == "POST" and form.is_valid():
+        transfer = StockTransfer.objects.create(
+            organization=request.organization,
+            number=f"AGT-{timezone.now():%Y%m%d%H%M%S%f}",
+            source=form.cleaned_data["source"],
+            destination=form.cleaned_data["agent_location"],
+            requested_by=request.user,
+            notes=form.cleaned_data["notes"],
+        )
+        StockTransferLine.objects.bulk_create([
+            StockTransferLine(organization=request.organization, transfer=transfer, **line)
+            for line in form.cleaned_data["lines"]
+        ])
+        record_audit_event(
+            action="agent_stock.allocation_requested",
+            actor=request.user,
+            organization=request.organization,
+            target=transfer,
+            metadata={
+                "source": str(transfer.source_id),
+                "agent_location": str(transfer.destination_id),
+                "devices": [str(line["stock_unit"].id) for line in form.cleaned_data["lines"]],
+            },
+            request=request,
+        )
+        if form.cleaned_data.get("complete_now"):
+            try:
+                approve_transfer(transfer=transfer, actor=request.user)
+                dispatch_transfer(transfer=transfer, actor=request.user)
+                receive_transfer(transfer=transfer, actor=request.user)
+                record_audit_event(
+                    action="agent_stock.allocation_completed",
+                    actor=request.user,
+                    organization=request.organization,
+                    target=transfer,
+                    request=request,
+                )
+                messages.success(request, "Agent stock allocation completed.")
+            except ValidationError as error:
+                messages.error(request, error.message)
+        else:
+            messages.success(request, "Agent stock allocation request created.")
+        return redirect("transfer-detail", transfer_id=transfer.id)
+    return render(request, "transfers/agent_allocate.html", {"form": form, "can_complete": can_complete})
+
+
+@login_required
+@organization_permission_required("transfers.add_stocktransfer")
+@transaction.atomic
+def agent_recall_create(request):
+    if not request.organization:
+        return redirect("dashboard")
+    membership = getattr(request, "membership", None)
+    can_complete = bool(
+        request.user.is_superuser
+        or request.user.is_platform_admin
+        or (membership and membership.is_owner)
+        or user_has_organization_permission(request.user, request.organization, "transfers.change_stocktransfer")
+    )
+    form = AgentRecallForm(
+        request.POST or None,
+        organization=request.organization,
+        user=request.user,
+        can_complete=can_complete,
+    )
+    if request.method == "POST" and form.is_valid():
+        transfer = StockTransfer.objects.create(
+            organization=request.organization,
+            number=f"RCL-{timezone.now():%Y%m%d%H%M%S%f}",
+            source=form.cleaned_data["agent_location"],
+            destination=form.cleaned_data["destination"],
+            requested_by=request.user,
+            notes=form.cleaned_data["notes"],
+        )
+        StockTransferLine.objects.bulk_create([
+            StockTransferLine(organization=request.organization, transfer=transfer, **line)
+            for line in form.cleaned_data["lines"]
+        ])
+        record_audit_event(
+            action="agent_stock.recall_requested",
+            actor=request.user,
+            organization=request.organization,
+            target=transfer,
+            metadata={
+                "agent_location": str(transfer.source_id),
+                "destination": str(transfer.destination_id),
+                "devices": [str(line["stock_unit"].id) for line in form.cleaned_data["lines"]],
+            },
+            request=request,
+        )
+        if form.cleaned_data.get("complete_now"):
+            try:
+                approve_transfer(transfer=transfer, actor=request.user)
+                dispatch_transfer(transfer=transfer, actor=request.user)
+                receive_transfer(transfer=transfer, actor=request.user)
+                record_audit_event(
+                    action="agent_stock.recall_completed",
+                    actor=request.user,
+                    organization=request.organization,
+                    target=transfer,
+                    request=request,
+                )
+                messages.success(request, "Agent stock recall completed.")
+            except ValidationError as error:
+                messages.error(request, error.message)
+        else:
+            messages.success(request, "Agent stock recall request created.")
+        return redirect("transfer-detail", transfer_id=transfer.id)
+    return render(request, "transfers/agent_recall.html", {"form": form, "can_complete": can_complete})
+
+
+@login_required
+@organization_permission_required("transfers.view_stocktransfer")
 def transfer_detail(request, transfer_id):
     locations = accessible_locations_for(request.user, request.organization)
     transfers = StockTransfer.objects.filter(
