@@ -1,11 +1,17 @@
 import uuid
 
+from django import VERSION as DJANGO_VERSION
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.catalog.models import Product
 from apps.organizations.models import Location, OrganizationOwnedModel
+
+
+def check_constraint_kwargs(expression):
+    keyword = "condition" if DJANGO_VERSION >= (5, 1) else "check"
+    return {keyword: expression}
 
 
 class SerialStatus(models.TextChoices):
@@ -39,7 +45,9 @@ class StockUnit(OrganizationOwnedModel):
                 name="unique_secondary_serial_per_org",
             ),
             models.CheckConstraint(
-                check=models.Q(secondary_serial="") | ~models.Q(serial_number=models.F("secondary_serial")),
+                **check_constraint_kwargs(
+                    models.Q(secondary_serial="") | ~models.Q(serial_number=models.F("secondary_serial"))
+                ),
                 name="stockunit_primary_secondary_differ",
             ),
         ]
