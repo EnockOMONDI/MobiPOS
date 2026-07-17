@@ -33,6 +33,21 @@ def test_demo_access_page_lists_brian_demo_credentials(client):
 
 
 @pytest.mark.django_db
+def test_product_features_page_explains_completion_statuses_and_scenarios(client):
+    response = client.get(reverse("product-features"))
+
+    assert response.status_code == 200
+    assert b"What MobiPOS" in response.content
+    assert b"does today." in response.content
+    assert b"Complete" in response.content
+    assert b"Partially complete" in response.content
+    assert b"Planned" in response.content
+    assert b"Business scenario" in response.content
+    assert b"IMEI and serial lifecycle tracking" in response.content
+    assert b"Live M-Pesa confirmation and reconciliation" in response.content
+
+
+@pytest.mark.django_db
 def test_dashboard_resolves_active_organization(client):
     user = User.objects.create_user(
         username="owner", email="owner@example.com", password="password"

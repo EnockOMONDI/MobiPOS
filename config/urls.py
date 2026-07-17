@@ -18,7 +18,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from apps.reports.views import activity_report, dashboard, demo_access
+from apps.reports.views import activity_report, dashboard, demo_access, product_features
 from apps.reports.views import global_search, imei_history, module_overview
 from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
@@ -42,6 +42,7 @@ from config.views import health_live, health_ready
 
 urlpatterns = [
     path("", dashboard, name="dashboard"),
+    path("features/", product_features, name="product-features"),
     path("demo/", demo_access, name="demo-access"),
     path("overview/<slug:module>/", module_overview, name="module-overview"),
     path("search/", global_search, name="global-search"),

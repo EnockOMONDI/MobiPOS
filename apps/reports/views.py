@@ -83,6 +83,191 @@ LANDING_ROADMAP_ITEMS = [
 ]
 
 
+PRODUCT_FEATURE_GROUPS = [
+    {
+        "title": "Business structure and access",
+        "summary": "Give each company, branch, location and staff member a clear place in the business, without exposing another organization’s data.",
+        "features": [
+            {
+                "name": "Multi-tenant business structure",
+                "status": "complete",
+                "what": "One platform can serve separate organizations, companies, branches and stock locations.",
+                "how": "Every operational record is attached to an organization and, where relevant, a branch and location. Users only work inside the organization and branches assigned to them.",
+                "scenario": "A retailer with Nairobi and Kisumu branches can review each branch separately while the owner sees the combined business picture.",
+            },
+            {
+                "name": "Users, multiple roles and branch access",
+                "status": "complete",
+                "what": "A user can hold more than one role and receive access only to the branches they need.",
+                "how": "Memberships link users to an organization, roles contribute permissions, and branch assignments limit operational data. Locked actions remain visible and open an access-request flow.",
+                "scenario": "A branch manager can approve a transfer at their branch and also sell at the POS, without gaining access to another branch’s stock.",
+            },
+            {
+                "name": "Grouped navigation and operational dashboards",
+                "status": "complete",
+                "what": "The working interface organizes stock, sales, people, money, repairs, approvals and reports into clear groups.",
+                "how": "Navigation is role-aware while keeping unavailable actions visible. The dashboard changes its metrics and recent activity to the signed-in user’s permitted scope.",
+                "scenario": "A cashier starts a sale quickly, while an owner opens the same system and sees sales, stock, approvals and activity summaries.",
+            },
+        ],
+    },
+    {
+        "title": "Catalog, contacts and serialized inventory",
+        "summary": "Create one reliable source for products, customers, suppliers and every tracked device.",
+        "features": [
+            {
+                "name": "Products, brands and categories",
+                "status": "complete",
+                "what": "A product master holds the selling, cost, barcode, warranty, tax and tracking rules used across operations.",
+                "how": "Products are created once, then selected in purchasing, intake, transfers, POS, repairs and reports. Products can be serialized for phones or quantity-based for accessories.",
+                "scenario": "A Samsung phone is marked as serialized while a screen protector is sold by quantity, each following the correct workflow automatically.",
+            },
+            {
+                "name": "Customers and suppliers",
+                "status": "complete",
+                "what": "Customer and supplier records provide the commercial identity behind sales, credit, purchasing and statements.",
+                "how": "Contact profiles record type, contact details and active status; customer transactions feed receivables and supplier purchases feed payables and returns.",
+                "scenario": "A repeat customer’s credit balance is visible before the cashier creates another credit sale, while purchasing can select the supplier for a new stock order.",
+            },
+            {
+                "name": "IMEI and serial lifecycle tracking",
+                "status": "complete",
+                "what": "Each phone or tracked device has one central stock-unit record from receipt through transfer, allocation, sale, return or repair.",
+                "how": "The system validates serial and IMEI values within the organization, prevents duplicates, stores current location and status, and provides IMEI history search.",
+                "scenario": "An owner searches an IMEI and sees the device, its current or last location, movement history and related sale context instead of checking multiple spreadsheets.",
+            },
+            {
+                "name": "Immutable stock movement ledger",
+                "status": "complete",
+                "what": "Completed stock movements are permanent business evidence rather than editable balances.",
+                "how": "Purchases, transfers, allocations, sales, returns and adjustments post movement records. Completed entries cannot be edited or deleted; corrections are made as reversing movements.",
+                "scenario": "When a transfer was posted to the wrong location, the manager records a reversal and the trail still shows both the original action and the correction.",
+            },
+            {
+                "name": "Batch serial and IMEI intake",
+                "status": "complete",
+                "what": "Teams can add many serialized devices without creating one record at a time.",
+                "how": "The intake screen accepts pasted serial or IMEI lines, CSV files and Excel workbooks. Each row is validated before stock is received, with valid items created and row-level issues reported.",
+                "scenario": "A warehouse receives 120 phones, uploads the supplier spreadsheet, and immediately sees which IMEIs were accepted and which duplicates need attention.",
+            },
+            {
+                "name": "Barcode and QR camera scanning",
+                "status": "partial",
+                "what": "Current forms are scanner-friendly and accept barcode, serial and IMEI text from hardware scanners.",
+                "how": "A USB or Bluetooth scanner can type into focused identifier fields just like a keyboard. A dedicated in-browser phone-camera scanner is not yet built.",
+                "scenario": "A warehouse operator can scan with a handheld scanner today; a field user cannot yet use the phone camera to scan a QR code directly inside MobiPOS.",
+            },
+        ],
+    },
+    {
+        "title": "Purchasing, transfers and custody",
+        "summary": "Move stock through the business with clear custody, confirmation and discrepancy control.",
+        "features": [
+            {
+                "name": "Purchases, receiving and supplier returns",
+                "status": "complete",
+                "what": "Teams can order stock, approve an order, receive it, manage receiving differences and return items to suppliers.",
+                "how": "Purchase lines retain ordered and received quantities. Receiving can flag a discrepancy, and supplier returns are linked back to the original purchase line.",
+                "scenario": "A supplier delivers 48 phones against an order for 50. The receiver records 48, logs the shortfall and finance retains the correct payable context.",
+            },
+            {
+                "name": "Warehouse, branch and agent transfers",
+                "status": "complete",
+                "what": "Existing stock can be searched and selected for controlled movement between locations, branches and agent custody.",
+                "how": "Transfers use approval, dispatch and receipt stages. The receiving side confirms quantities, and discrepancies remain visible until resolved. Agent allocation and recall use the same controlled movement model.",
+                "scenario": "A warehouse sends selected IMEIs to a branch, then allocates a subset to an agent. The owner can see the exact custodian at every stage.",
+            },
+            {
+                "name": "Agent and DSA hierarchy",
+                "status": "complete",
+                "what": "Businesses can register agents and direct sales agents under their supervising agent when company policy allows it.",
+                "how": "Agent profiles capture the hierarchy, verification state, documents and onboarding activity. Authorized users can approve, reject, allocate stock and recall stock.",
+                "scenario": "A regional agent onboards a DSA, uploads ID evidence, waits for approval and then receives inventory only after the profile is approved.",
+            },
+            {
+                "name": "National ID and onboarding documents",
+                "status": "complete",
+                "what": "Agent records can hold identification numbers, an image or document scan, photographs and supporting onboarding documents.",
+                "how": "Documents are uploaded against the agent profile, and the audit trail records who created or changed the onboarding record. Direct camera capture is not a separate native scanning module.",
+                "scenario": "A manager photographs an agent’s ID using the device camera upload control, attaches it to the profile and later downloads it during a compliance review.",
+            },
+        ],
+    },
+    {
+        "title": "Sales, money and customer care",
+        "summary": "Sell serialized and quantity stock, accept the payment mix customers use, and retain control after the sale.",
+        "features": [
+            {
+                "name": "POS cart, checkout and payment methods",
+                "status": "complete",
+                "what": "The POS supports cart building, serialized items, accessories, receipts and recorded cash, M-Pesa, card, bank and credit payments.",
+                "how": "Cashiers open a session, add product lines, complete the cart and record one or more payments. Split payment totals are tracked against the sale and the session can be reviewed and closed.",
+                "scenario": "A customer pays KES 10,000 by M-Pesa and KES 2,500 in cash. The cashier records both methods against one phone sale and the session totals reconcile later.",
+            },
+            {
+                "name": "Customer credit, receivables and installments",
+                "status": "complete",
+                "what": "Credit sales can be controlled by customer limits, then followed as outstanding receivables with scheduled installments.",
+                "how": "A credit sale creates a receivable. Staff can record and schedule installments, while operational reports surface aging and outstanding balances.",
+                "scenario": "A trusted customer takes a phone on credit. The business records the limit, schedules three monthly payments and checks overdue balances before approving new credit.",
+            },
+            {
+                "name": "Returns, refunds, warranties and repairs",
+                "status": "complete",
+                "what": "The business can request and approve a line-level return, record refunds, track warranty cases and manage repair tickets with parts usage.",
+                "how": "Returns remain tied to the original sale line. Repair tickets hold customer/device context and can record parts taken from stock, maintaining a traceable after-sales path.",
+                "scenario": "A customer returns a faulty phone. Staff locate the sale, request the return, route it to warranty or repair, and retain the financial and stock history.",
+            },
+            {
+                "name": "Live M-Pesa confirmation and reconciliation",
+                "status": "partial",
+                "what": "M-Pesa can be recorded as a payment method today, but live Daraja callbacks and automated confirmation are not connected.",
+                "how": "The integration outbox and adapter foundation exist, but live credentials, callback handling, reconciliation and production monitoring must be implemented before M-Pesa is treated as automatically confirmed.",
+                "scenario": "A cashier can record an M-Pesa reference now; the future live connection will validate the payment and reconcile it without manual checking.",
+            },
+        ],
+    },
+    {
+        "title": "Control, reporting and scale",
+        "summary": "Give owners a reliable view of actions, exceptions and the areas that require attention.",
+        "features": [
+            {
+                "name": "Expenses, commissions and approvals",
+                "status": "complete",
+                "what": "Expenses, commission accruals and payout workflows have approval and payment controls.",
+                "how": "The approval inbox handles configured approvals, while commission records connect to sales and payout status. Expenses and operational money movements appear in reports.",
+                "scenario": "A salesperson earns commission from a paid sale, a manager approves the payout, and the owner can later see the approval and payment history.",
+            },
+            {
+                "name": "Owner activity reporting and audit trail",
+                "status": "complete",
+                "what": "Authorized owners and platform administrators can review platform or organization activity, including actor summaries and login activity.",
+                "how": "Audit events capture login, stock, user, transfer, sale, payment, approval, repair and integration events when they occur. The activity report filters and summarizes the recorded history.",
+                "scenario": "An owner filters activity for Renny and sees login events, stock changes and access-related actions with time and organizational context.",
+            },
+            {
+                "name": "Operational, retail, exception, IMEI and agent reports",
+                "status": "complete",
+                "what": "Reports cover operational totals, sales and retail signals, aging and exceptions, device history and agent-network performance.",
+                "how": "Each report scopes data to the active organization and permitted branches, so managers see relevant data while owners maintain broader visibility.",
+                "scenario": "Before a weekly meeting, the owner reviews aging stock, outstanding credit, pending receipts, agent stock and the IMEI history of an escalated device.",
+            },
+            {
+                "name": "eTIMS, advanced BI, forecasting, loyalty and mobile apps",
+                "status": "planned",
+                "what": "These are important growth capabilities, but they are not production-complete features in the current release.",
+                "how": "The platform has a foundation for integration events and background work, but live eTIMS invoicing, forecasting, CRM loyalty, native mobile apps and AI recommendations need dedicated delivery and validation.",
+                "scenario": "A future owner dashboard will recommend purchase quantities using demand trends; today the team uses operational and retail reports to make that decision.",
+            },
+        ],
+    },
+]
+
+
+def product_features(request):
+    return render(request, "marketing/features.html", {"feature_groups": PRODUCT_FEATURE_GROUPS})
+
+
 def _scope_to_user_branches(queryset, model, request):
     branches = accessible_branches_for(request.user, request.organization)
     if model is StockTransfer:

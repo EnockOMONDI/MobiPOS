@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}MobiPOS Product Features{% endblock %}
+
+{% block anonymous_content %}
+<style>
+  .feature-page { margin: -3rem -1rem; min-height: 100vh; background: #fbfaf8; color: #303036; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .feature-shell { max-width: 1220px; margin: 0 auto; padding: 34px 28px 82px; }
+  .feature-nav { display:flex; align-items:center; justify-content:space-between; gap:24px; }
+  .feature-brand { display:inline-flex; align-items:center; gap:11px; color:#303036; font-weight:900; font-size:23px; text-decoration:none; }
+  .feature-brand-mark { display:inline-flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:50%; background:#dc2626; color:#fff; box-shadow:0 12px 28px rgba(220,38,38,.2); }
+  .feature-links { display:flex; gap:25px; align-items:center; font-weight:800; font-size:14px; }
+  .feature-links a { color:#4a4a50; text-decoration:none; }
+  .feature-demo { background:#303036; color:#fff; border-radius:999px; padding:13px 22px; text-decoration:none; font-size:14px; font-weight:850; }
+  .feature-hero { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(300px,.75fr); gap:68px; padding:96px 0 65px; align-items:end; }
+  .feature-eyebrow { display:inline-flex; padding:8px 15px; border-radius:999px; background:#fee2e2; color:#b91c1c; font-size:13px; font-weight:900; }
+  .feature-title { margin:22px 0 0; letter-spacing:-.075em; max-width:760px; font-size:clamp(50px,7.2vw,96px); font-weight:950; line-height:.91; }
+  .feature-title em { display:block; font-family:Georgia,"Times New Roman",serif; font-size:.72em; font-style:italic; font-weight:500; letter-spacing:-.06em; line-height:1; }
+  .feature-lead { max-width:740px; color:#5b5b63; font-size:19px; line-height:1.68; margin:28px 0 0; }
+  .feature-side { border-left:1px solid #e6e2de; padding:8px 0 8px 35px; }
+  .feature-side p { color:#5b5b63; font-size:16px; line-height:1.72; margin:0; }
+  .feature-side strong { display:block; font-size:16px; margin-bottom:14px; }
+  .feature-statuses { display:flex; flex-wrap:wrap; gap:9px; margin-top:26px; }
+  .status { display:inline-flex; align-items:center; gap:7px; border-radius:999px; padding:8px 11px; font-size:12px; font-weight:900; }
+  .status::before { content:""; width:7px; height:7px; border-radius:999px; background:currentColor; }
+  .status-complete { background:#e5f7ee; color:#087443; }
+  .status-partial { background:#fff4d8; color:#9a5d00; }
+  .status-planned { background:#ede9fe; color:#6844c4; }
+  .feature-truth { background:#303036; color:#fff; border-radius:28px; padding:28px 30px; }
+  .feature-truth h2 { margin:0; font-size:20px; letter-spacing:-.03em; }
+  .feature-truth p { color:#d8d8dc; line-height:1.65; margin:10px 0 0; }
+  .feature-groups { display:grid; gap:54px; padding:38px 0 0; }
+  .feature-group { border-top:1px solid #e5e2dd; padding-top:28px; }
+  .feature-group-head { display:grid; grid-template-columns:310px 1fr; gap:36px; margin-bottom:24px; }
+  .feature-number { color:#c41f2a; font-size:12px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+  .feature-group h2 { font-size:32px; letter-spacing:-.045em; line-height:1.05; margin:8px 0 0; }
+  .feature-group-head p { color:#5b5b63; font-size:16px; line-height:1.7; margin:0; max-width:700px; }
+  .feature-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .feature-card { background:#fff; border:1px solid #e9e6e1; border-radius:20px; padding:24px; box-shadow:0 8px 25px rgba(41,41,48,.035); }
+  .feature-card-top { display:flex; justify-content:space-between; align-items:start; gap:14px; }
+  .feature-card h3 { font-size:20px; letter-spacing:-.035em; line-height:1.15; margin:0; }
+  .feature-card dl { margin:20px 0 0; }
+  .feature-card dt { color:#9a9aa1; font-size:10px; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+  .feature-card dd { color:#505058; font-size:14px; line-height:1.62; margin:5px 0 15px; }
+  .feature-card dd:last-child { margin-bottom:0; }
+  .feature-card .scenario { border-top:1px solid #eeeae5; color:#37373d; padding-top:16px; }
+  .feature-card .scenario strong { color:#bd2029; }
+  .feature-bottom { display:flex; justify-content:space-between; align-items:center; gap:20px; margin-top:70px; padding:34px; background:#fee2e2; border-radius:26px; }
+  .feature-bottom h2 { letter-spacing:-.045em; font-size:28px; margin:0; }
+  .feature-bottom p { color:#6d3a3e; margin:8px 0 0; }
+  .feature-actions { display:flex; flex-wrap:wrap; gap:10px; }
+  .feature-primary, .feature-secondary { border-radius:999px; padding:14px 20px; text-decoration:none; font-size:14px; font-weight:900; white-space:nowrap; }
+  .feature-primary { background:#303036; color:#fff; }
+  .feature-secondary { border:1px solid #8c575c; color:#4d3437; }
+  @media (max-width:800px) { .feature-shell { padding:25px 18px 58px; } .feature-links { display:none; } .feature-hero, .feature-group-head { grid-template-columns:1fr; gap:28px; } .feature-hero { padding:70px 0 42px; } .feature-side { border-left:0; border-top:1px solid #e6e2de; padding:24px 0 0; } .feature-list { grid-template-columns:1fr; } .feature-bottom { align-items:flex-start; flex-direction:column; } }
+</style>
+
+<div class="feature-page">
+  <div class="feature-shell">
+    <header class="feature-nav">
+      <a href="{% url 'dashboard' %}" class="feature-brand">
+        <span class="feature-brand-mark" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5v-15h15v15h-15Zm4.5 0v-6h6v6M8 8h.01M12 8h.01M16 8h.01"/></svg></span>
+        MobiPOS
+      </a>
+      <nav class="feature-links" aria-label="Product navigation">
+        <a href="{% url 'dashboard' %}">Home</a>
+        <a href="#capabilities">Capabilities</a>
+        <a href="#status">Product status</a>
+      </nav>
+      <a class="feature-demo" href="{% url 'demo-access' %}">Access Demo</a>
+    </header>
+
+    <main>
+      <section class="feature-hero">
+        <div>
+          <span class="feature-eyebrow">MobiPOS product guide</span>
+          <h1 class="feature-title">What MobiPOS <em>does today.</em></h1>
+          <p class="feature-lead">A clear guide to the workflows already available in MobiPOS, how your teams use them, and what remains on the delivery roadmap. It is designed to help owners, operations managers and implementation teams make informed decisions without overselling the current product.</p>
+        </div>
+        <aside class="feature-side" id="status">
+          <strong>How to read this page</strong>
+          <p>Complete means the workflow has an implemented interface, business rules and automated tests. Partially complete means the foundation works but a meaningful capability remains. Planned means it is not ready for production use yet.</p>
+          <div class="feature-statuses" aria-label="Feature completion statuses">
+            <span class="status status-complete">Complete</span>
+            <span class="status status-partial">Partially complete</span>
+            <span class="status status-planned">Planned</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="feature-truth">
+        <h2>From supplier purchase to after-sales accountability.</h2>
+        <p>MobiPOS is built around the real journey of a phone or accessory: product setup, supplier purchase, warehouse receipt, branch or agent transfer, sale, payment, credit follow-up, return, warranty, repair, audit and reporting.</p>
+      </section>
+
+      <section class="feature-groups" id="capabilities" aria-label="MobiPOS capabilities">
+        {% for group in feature_groups %}
+          <section class="feature-group">
+            <div class="feature-group-head">
+              <div>
+                <span class="feature-number">Area {{ forloop.counter|stringformat:"02d" }}</span>
+                <h2>{{ group.title }}</h2>
+              </div>
+              <p>{{ group.summary }}</p>
+            </div>
+            <div class="feature-list">
+              {% for feature in group.features %}
+                <article class="feature-card">
+                  <div class="feature-card-top">
+                    <h3>{{ feature.name }}</h3>
+                    <span class="status status-{{ feature.status }}">{% if feature.status == "complete" %}Complete{% elif feature.status == "partial" %}Partially complete{% else %}Planned{% endif %}</span>
+                  </div>
+                  <dl>
+                    <dt>What it is</dt><dd>{{ feature.what }}</dd>
+                    <dt>How it works</dt><dd>{{ feature.how }}</dd>
+                    <dt>Business scenario</dt><dd class="scenario"><strong>Scenario:</strong> {{ feature.scenario }}</dd>
+                  </dl>
+                </article>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      </section>
+
+      <section class="feature-bottom">
+        <div>
+          <h2>See the workflow with real demo data.</h2>
+          <p>Use the demo accounts to explore roles, stock, transfers, sales, reports and controls in a safe environment.</p>
+        </div>
+        <div class="feature-actions">
+          <a href="{% url 'demo-access' %}" class="feature-primary">Access Demo</a>
+          <a href="{% url 'dashboard' %}" class="feature-secondary">Back to home</a>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+{% endblock %}
