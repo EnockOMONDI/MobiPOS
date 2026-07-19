@@ -1,3 +1,4 @@
+import json
 from decimal import Decimal
 
 from django.conf import settings
@@ -5,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Sum
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -14,12 +16,14 @@ from apps.payments.services import record_sale_payments
 from apps.operations.models import ApprovalRequest, ApprovalStatus, Receivable
 from apps.operations.services import request_approval, user_can_decide_approval
 from apps.audit.services import record_audit_event
+from apps.catalog.models import Category, Product
 from apps.contacts.models import Contact
+from apps.inventory.models import SerialStatus, StockBalance, StockUnit
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from apps.sales.models import Sale, SaleChannel, SaleLine
 from apps.sales.services import calculate_sale_line_amounts, complete_sale, create_credit_receivable
 from .forms import CartCompleteForm, CartItemForm, CashMovementForm, CheckoutForm, CloseSessionForm, OpenSessionForm
-from .models import CashMovement, CashMovementType, POSSession, SessionStatus
+from .models import CashMovement, CashMovementType, OfflineInvoiceQueue, POSSession, SessionStatus
 
 
 def _apply_cash_change(*, allocations, paid_amount, total):
@@ -274,13 +278,105 @@ def cart_detail(request):
     cart_total = Decimal("0")
     if cart:
         cart_total = sum((line.total_after_tax for line in cart.lines.all()), Decimal("0"))
+    tile_products = (
+        Product.objects.filter(
+            organization=request.organization,
+            is_sellable=True,
+            is_active=True,
+        )
+        .select_related("category", "brand")
+        .order_by("category__name", "name")
+    )
+    product_tiles = []
+    for product in tile_products[:24]:
+        stock_total = StockBalance.objects.filter(
+            organization=request.organization,
+            product=product,
+            location=location,
+        ).aggregate(total=Sum("quantity"))["total"] or Decimal("0")
+        available_serials = 0
+        if product.is_serialized:
+            available_serials = StockUnit.objects.filter(
+                organization=request.organization,
+                product=product,
+                location=location,
+                status=SerialStatus.AVAILABLE,
+            ).count()
+        product_tiles.append({
+            "product": product,
+            "stock_total": stock_total,
+            "available_serials": available_serials,
+        })
+    recent_sales = Sale.objects.filter(
+        organization=request.organization,
+        location=location,
+        created_by=request.user,
+    ).exclude(status="draft").select_related("customer").order_by("-created_at")[:10]
+    queued_offline_count = OfflineInvoiceQueue.objects.filter(
+        organization=request.organization,
+        location=location,
+        cashier=request.user,
+        status__in=("queued", "failed"),
+    ).count()
     return render(request, "pos/cart.html", {
         "cart": cart,
         "cart_total": cart_total,
         "location": location,
         "item_form": CartItemForm(organization=request.organization, location=location),
         "complete_form": CartCompleteForm(organization=request.organization),
+        "product_tiles": product_tiles,
+        "categories": Category.objects.filter(
+            organization=request.organization,
+            products__is_sellable=True,
+            products__is_active=True,
+        ).distinct().order_by("name"),
+        "recent_sales": recent_sales,
+        "queued_offline_count": queued_offline_count,
     })
+
+
+@login_required
+@organization_permission_required("sales.add_sale")
+@require_POST
+@transaction.atomic
+def offline_invoice_sync(request):
+    location = _assigned_pos_location(request)
+    if not location:
+        return JsonResponse({"ok": False, "error": "Your account has no assigned POS location."}, status=400)
+    session = _open_session(request, location)
+    if not session:
+        return JsonResponse({"ok": False, "error": "Open your register before syncing offline invoices."}, status=400)
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "Offline invoice payload is not valid JSON."}, status=400)
+    invoices = payload.get("invoices")
+    if not isinstance(invoices, list):
+        return JsonResponse({"ok": False, "error": "Expected an invoices list."}, status=400)
+    queued = 0
+    for invoice in invoices[:50]:
+        if not isinstance(invoice, dict):
+            continue
+        client_reference = str(invoice.get("client_reference") or invoice.get("clientReference") or "").strip()
+        if not client_reference:
+            continue
+        queue, created = OfflineInvoiceQueue.objects.update_or_create(
+            organization=request.organization,
+            client_reference=client_reference[:120],
+            defaults={
+                "session": session,
+                "location": location,
+                "cashier": request.user,
+                "payload": invoice,
+                "status": "queued",
+                "error_message": "",
+                "synced_at": timezone.now(),
+            },
+        )
+        if created:
+            record_audit_event(action="pos.offline_invoice_queued", actor=request.user, organization=request.organization, target=queue, request=request)
+        queued += 1
+    return JsonResponse({"ok": True, "queued": queued})
 
 
 @login_required

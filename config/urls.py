@@ -15,6 +15,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
@@ -22,8 +24,8 @@ from apps.reports.views import activity_report, dashboard, demo_access, product_
 from apps.reports.views import global_search, imei_history, module_overview
 from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
-from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, open_session, review_session, session_detail
-from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
+from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, review_session, session_detail
+from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_extract_document, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
 from apps.transfers.views import agent_allocation_create, agent_recall_create, transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_receive
 from apps.sales.views import return_approve_complete, sale_add_payment, sale_detail, sale_request_return
 from apps.expenses.views import expense_approve, expense_create
@@ -68,6 +70,7 @@ urlpatterns = [
     path("pos/cart/add/", cart_add, name="pos-cart-add"),
     path("pos/cart/lines/<uuid:line_id>/remove/", cart_remove, name="pos-cart-remove"),
     path("pos/cart/<uuid:sale_id>/complete/", cart_complete, name="pos-cart-complete"),
+    path("pos/offline-queue/sync/", offline_invoice_sync, name="pos-offline-sync"),
     path("pos/sessions/<uuid:session_id>/", session_detail, name="session-detail"),
     path("pos/sessions/<uuid:session_id>/close/", close_session, name="session-close"),
     path("pos/sessions/<uuid:session_id>/cash-movements/", cash_movement_create, name="cash-movement-create"),
@@ -119,6 +122,7 @@ urlpatterns = [
     path("contacts/<uuid:contact_id>/toggle-active/", contact_toggle_active, name="contact-toggle-active"),
     path("purchases/new/", purchase_create, name="purchase-create"),
     path("purchases/<uuid:order_id>/", purchase_detail, name="purchase-detail"),
+    path("purchases/<uuid:order_id>/extract-document/", purchase_extract_document, name="purchase-extract-document"),
     path("purchases/<uuid:order_id>/approve/", purchase_approve, name="purchase-approve"),
     path("purchases/lines/<uuid:line_id>/receive/", purchase_receive, name="purchase-receive"),
     path("purchases/discrepancies/<uuid:discrepancy_id>/resolve/", purchase_discrepancy_resolve, name="purchase-discrepancy-resolve"),
@@ -152,3 +156,6 @@ urlpatterns = [
     path("health/live/", health_live, name="health-live"),
     path("health/ready/", health_ready, name="health-ready"),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,6 +1,8 @@
 import pytest
 from django.contrib.auth.models import Permission
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -59,6 +61,139 @@ def test_purchase_create_supports_multiple_lines(client):
     assert response.status_code == 302
     assert order.lines.count() == 2
     assert set(order.lines.values_list("product_id", flat=True)) == {product.id for product in products}
+
+
+@pytest.mark.django_db
+def test_purchase_create_stores_supplier_reference_and_attachment(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "supplier-invoice.pdf",
+        b"%PDF-1.4 demo supplier invoice",
+        content_type="application/pdf",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        response = client.post(reverse("purchase-create"), {
+            "supplier": supplier.id,
+            "destination": destination.id,
+            "supplier_reference": "SUP-INV-9001",
+            "attachment": upload,
+            "product": product.id,
+            "quantity": "2",
+            "unit_cost": "800",
+            "notes": "Invoice attached",
+        })
+        order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+        detail_response = client.get(reverse("purchase-detail", args=[order.id]))
+
+    assert response.status_code == 302
+    assert order.supplier_reference == "SUP-INV-9001"
+    assert order.attachment.name.endswith("supplier-invoice.pdf")
+    assert detail_response.status_code == 200
+    assert b"SUP-INV-9001" in detail_response.content
+    assert b"Open attachment" in detail_response.content
+
+
+@pytest.mark.django_db
+def test_purchase_create_rejects_unsupported_supplier_attachment(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "supplier-invoice.exe",
+        b"not a document",
+        content_type="application/octet-stream",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        response = client.post(reverse("purchase-create"), {
+            "supplier": supplier.id,
+            "destination": destination.id,
+            "supplier_reference": "BAD-FILE-9001",
+            "attachment": upload,
+            "product": product.id,
+            "quantity": "2",
+            "unit_cost": "800",
+        })
+
+    assert response.status_code == 200
+    assert b"Unsupported supplier document type" in response.content
+    assert not PurchaseOrder.objects.filter(organization=organization, supplier_reference="BAD-FILE-9001").exists()
+
+
+@pytest.mark.django_db
+def test_purchase_create_rejects_oversized_supplier_attachment(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "supplier-invoice.pdf",
+        b"x" * (5 * 1024 * 1024 + 1),
+        content_type="application/pdf",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        response = client.post(reverse("purchase-create"), {
+            "supplier": supplier.id,
+            "destination": destination.id,
+            "supplier_reference": "BIG-FILE-9001",
+            "attachment": upload,
+            "product": product.id,
+            "quantity": "2",
+            "unit_cost": "800",
+        })
+
+    assert response.status_code == 200
+    assert b"Supplier document must be 5 MB or smaller" in response.content
+    assert not PurchaseOrder.objects.filter(organization=organization, supplier_reference="BIG-FILE-9001").exists()
+
+
+@pytest.mark.django_db
+def test_purchase_document_extraction_reads_csv_attachment(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "supplier-invoice.csv",
+        b"sku,qty,unit_cost\nCHG-20W,4,800\n",
+        content_type="text/csv",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        client.post(reverse("purchase-create"), {
+            "supplier": supplier.id,
+            "destination": destination.id,
+            "supplier_reference": "CSV-9001",
+            "attachment": upload,
+            "product": product.id,
+            "quantity": "4",
+            "unit_cost": "800",
+        })
+        order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+        response = client.post(reverse("purchase-extract-document", args=[order.id]))
+        order.refresh_from_db()
+
+    assert response.status_code == 302
+    assert order.extraction_status == "extracted"
+    assert "CHG-20W | 4 | 800" in order.extracted_text
 
 
 @pytest.mark.django_db

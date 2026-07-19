@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="S24 Ultra smartphone">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#7f1d1d"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#fbbf24"/>
+      <stop offset=".45" stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#111827"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="48" fill="url(#bg)"/>
+  <rect x="250" y="58" width="300" height="484" rx="24" fill="#020617"/>
+  <rect x="272" y="82" width="256" height="436" rx="16" fill="url(#screen)"/>
+  <circle cx="400" cy="104" r="8" fill="#111827"/>
+  <path d="M312 380c58-64 120-64 176 0" fill="none" stroke="#fff7ed" stroke-width="18" stroke-linecap="round" opacity=".65"/>
+  <text x="400" y="562" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="800" fill="#ffffff">S24 Ultra</text>
+</svg>

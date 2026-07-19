@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
+from .document_extraction import extract_purchase_document_text
 from .forms import PurchaseOrderForm, ReceivePurchaseLineForm, SupplierReturnForm
 from .models import PurchaseDiscrepancy, PurchaseOrder, PurchaseOrderLine, SupplierReturn
 from .services import (
@@ -24,7 +25,7 @@ from .services import (
 def purchase_create(request):
     if not request.organization:
         return redirect("dashboard")
-    form = PurchaseOrderForm(request.POST or None, organization=request.organization, user=request.user)
+    form = PurchaseOrderForm(request.POST or None, request.FILES or None, organization=request.organization, user=request.user)
     if request.method == "POST" and form.is_valid():
         order = PurchaseOrder.objects.create(
             organization=request.organization,
@@ -32,6 +33,8 @@ def purchase_create(request):
             supplier=form.cleaned_data["supplier"],
             destination=form.cleaned_data["destination"],
             ordered_on=timezone.localdate(),
+            supplier_reference=form.cleaned_data["supplier_reference"],
+            attachment=form.cleaned_data["attachment"],
             notes=form.cleaned_data["notes"],
             created_by=request.user,
         )
@@ -53,6 +56,33 @@ def purchase_detail(request, order_id):
         destination__in=accessible_locations_for(request.user, request.organization),
     )
     return render(request, "purchasing/detail.html", {"order": order, "receive_form": ReceivePurchaseLineForm()})
+
+
+@login_required
+@organization_permission_required("purchasing.change_purchaseorder")
+@require_POST
+def purchase_extract_document(request, order_id):
+    order = get_object_or_404(
+        PurchaseOrder,
+        id=order_id,
+        organization=request.organization,
+        destination__in=accessible_locations_for(request.user, request.organization),
+    )
+    try:
+        status, text = extract_purchase_document_text(order.attachment)
+        order.extraction_status = status
+        order.extracted_text = text
+        order.save(update_fields=["extraction_status", "extracted_text", "updated_at"])
+        record_audit_event(action="purchase.document_extracted", actor=request.user, organization=request.organization, target=order, request=request)
+        if status == "extracted":
+            messages.success(request, "Supplier document text extracted for review.")
+        elif status == "manual_review":
+            messages.error(request, "Supplier document needs manual review; scanned files require a configured OCR provider.")
+        else:
+            messages.error(request, text)
+    except ValidationError as error:
+        messages.error(request, error.message)
+    return redirect("purchase-detail", order_id=order.id)
 
 
 @login_required

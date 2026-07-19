@@ -5,6 +5,10 @@ from django.db import models
 from apps.organizations.models import OrganizationOwnedModel
 
 
+def product_image_upload_path(instance, filename):
+    return f"organizations/{instance.organization_id}/products/{instance.id}/{filename}"
+
+
 class Category(OrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=120)
@@ -38,6 +42,8 @@ class Product(OrganizationOwnedModel):
     name = models.CharField(max_length=200)
     sku = models.CharField(max_length=80)
     barcode = models.CharField(max_length=120, blank=True)
+    image = models.ImageField(upload_to=product_image_upload_path, blank=True, max_length=500)
+    image_url = models.CharField(max_length=500, blank=True)
     description = models.TextField(blank=True)
     is_serialized = models.BooleanField(default=False)
     is_stocked = models.BooleanField(default=True)
@@ -56,5 +62,11 @@ class Product(OrganizationOwnedModel):
 
     def __str__(self):
         return f"{self.name} ({self.sku})"
+
+    @property
+    def display_image_url(self):
+        if self.image:
+            return self.image.url
+        return self.image_url
 
 # Create your models here.

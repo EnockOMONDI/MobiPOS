@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="20W fast charger">
+  <rect width="800" height="600" rx="48" fill="#f1f5f9"/>
+  <circle cx="210" cy="140" r="90" fill="#fecaca"/>
+  <circle cx="610" cy="450" r="130" fill="#fee2e2"/>
+  <rect x="300" y="180" width="200" height="230" rx="34" fill="#ffffff" stroke="#cbd5e1" stroke-width="10"/>
+  <rect x="344" y="128" width="24" height="72" rx="10" fill="#334155"/>
+  <rect x="432" y="128" width="24" height="72" rx="10" fill="#334155"/>
+  <path d="M410 238l-58 102h64l-28 82 74-120h-68z" fill="#ef4444"/>
+  <text x="400" y="510" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="800" fill="#0f172a">20W Fast Charger</text>
+</svg>

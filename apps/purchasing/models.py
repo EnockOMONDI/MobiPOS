@@ -9,6 +9,10 @@ from apps.organizations.models import Location, OrganizationOwnedModel
 from apps.inventory.models import StockUnit
 
 
+def purchase_attachment_upload_path(instance, filename):
+    return f"organizations/{instance.organization_id}/purchases/{instance.id}/{filename}"
+
+
 class PurchaseStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
     APPROVED = "approved", "Approved"
@@ -19,6 +23,13 @@ class PurchaseStatus(models.TextChoices):
     CANCELLED = "cancelled", "Cancelled"
 
 
+class PurchaseDocumentExtractionStatus(models.TextChoices):
+    NOT_REQUESTED = "not_requested", "Not requested"
+    EXTRACTED = "extracted", "Extracted"
+    MANUAL_REVIEW = "manual_review", "Manual review required"
+    FAILED = "failed", "Failed"
+
+
 class PurchaseOrder(OrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     number = models.CharField(max_length=40)
@@ -26,6 +37,14 @@ class PurchaseOrder(OrganizationOwnedModel):
     destination = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="purchase_orders")
     status = models.CharField(max_length=24, choices=PurchaseStatus.choices, default=PurchaseStatus.DRAFT)
     ordered_on = models.DateField()
+    supplier_reference = models.CharField(max_length=80, blank=True)
+    attachment = models.FileField(upload_to=purchase_attachment_upload_path, blank=True, max_length=500)
+    extraction_status = models.CharField(
+        max_length=24,
+        choices=PurchaseDocumentExtractionStatus.choices,
+        default=PurchaseDocumentExtractionStatus.NOT_REQUESTED,
+    )
+    extracted_text = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 

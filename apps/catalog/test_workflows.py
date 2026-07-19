@@ -1,4 +1,5 @@
 import pytest
+from django.contrib.auth.models import Permission
 from django.core.management import call_command
 from django.urls import reverse
 
@@ -6,7 +7,11 @@ from apps.accounts.models import User
 from apps.catalog.models import Category, Product
 from apps.audit.models import AuditEvent
 from apps.contacts.models import Contact
-from apps.organizations.models import Organization
+from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
+from apps.inventory.services import post_stock_movement
+from apps.organizations.models import Branch, Company, Location, LocationType, Membership, MembershipStatus, Organization, Role
+from apps.pos.models import POSSession
+from apps.sales.models import Sale, SaleLine, SaleStatus
 
 
 @pytest.mark.django_db
@@ -96,3 +101,191 @@ def test_product_lifecycle_is_tenant_scoped_and_audited(client):
     assert not product.is_active
     assert AuditEvent.objects.filter(target_id=str(product.id), action="product.updated").exists()
     assert AuditEvent.objects.filter(target_id=str(product.id), action="product.archived").exists()
+
+
+def _create_product_visibility_fixture():
+    owner = User.objects.create_user(username="product-owner", email="product-owner@example.com")
+    viewer = User.objects.create_user(username="product-viewer", email="product-viewer@example.com")
+    organization = Organization.objects.create(name="Product Scope", slug="product-scope", status="active")
+    company = Company.objects.create(organization=organization, name="Product Scope Ltd", code="PSL")
+    branch_a = Branch.objects.create(organization=organization, company=company, name="Nairobi", code="NBO")
+    branch_b = Branch.objects.create(organization=organization, company=company, name="Mombasa", code="MBA")
+    location_a = Location.objects.create(
+        organization=organization,
+        branch=branch_a,
+        name="Nairobi Warehouse",
+        code="NBO-WH",
+        location_type=LocationType.WAREHOUSE,
+    )
+    location_b = Location.objects.create(
+        organization=organization,
+        branch=branch_b,
+        name="Mombasa Warehouse",
+        code="MBA-WH",
+        location_type=LocationType.WAREHOUSE,
+    )
+    owner_membership = Membership.objects.create(
+        user=owner,
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    owner_membership.branches.add(branch_a, branch_b)
+    view_role = Role.objects.create(organization=organization, name="Product Viewer", code="product-viewer")
+    view_role.permissions.add(Permission.objects.get(codename="view_product", content_type__app_label="catalog"))
+    viewer_membership = Membership.objects.create(
+        user=viewer,
+        organization=organization,
+        status=MembershipStatus.ACTIVE,
+    )
+    viewer_membership.roles.add(view_role)
+    viewer_membership.branches.add(branch_a)
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    product = Product.objects.create(
+        organization=organization,
+        category=category,
+        name="Galaxy Trace",
+        sku="TRACE-001",
+        barcode="BAR-TRACE-001",
+        is_serialized=True,
+        reorder_level=2,
+        cost_price="501.00",
+        selling_price="799.00",
+    )
+    unit_a = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location_a,
+        serial_number="NBO-IMEI-001",
+        status=SerialStatus.AVAILABLE,
+        unit_cost="501.00",
+    )
+    unit_b = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location_b,
+        serial_number="MBA-IMEI-001",
+        status=SerialStatus.AVAILABLE,
+        unit_cost="501.00",
+    )
+    post_stock_movement(
+        organization=organization,
+        product=product,
+        location=location_a,
+        quantity=1,
+        movement_type=StockMovementType.OPENING,
+        actor=owner,
+        stock_unit=unit_a,
+        unit_cost="501.00",
+    )
+    post_stock_movement(
+        organization=organization,
+        product=product,
+        location=location_b,
+        quantity=1,
+        movement_type=StockMovementType.OPENING,
+        actor=owner,
+        stock_unit=unit_b,
+        unit_cost="501.00",
+    )
+    sold_unit = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location_a,
+        serial_number="NBO-IMEI-SOLD",
+        status=SerialStatus.SOLD,
+        unit_cost="501.00",
+    )
+    session = POSSession.objects.create(organization=organization, number="SES-PROD", location=location_a, cashier=owner)
+    sale = Sale.objects.create(
+        organization=organization,
+        number="SALE-PROD",
+        session=session,
+        location=location_a,
+        agent=owner,
+        status=SaleStatus.PAID,
+        total="799.00",
+        paid_total="799.00",
+        created_by=owner,
+    )
+    SaleLine.objects.create(
+        organization=organization,
+        sale=sale,
+        product=product,
+        stock_unit=sold_unit,
+        quantity=1,
+        unit_price="799.00",
+        unit_cost="501.00",
+        line_total="799.00",
+    )
+    return owner, viewer, product, branch_a, branch_b
+
+
+@pytest.mark.django_db
+def test_product_register_uses_scoped_stock_and_imei_workflow_data(client):
+    owner, viewer, product, _branch_a, _branch_b = _create_product_visibility_fixture()
+
+    client.force_login(owner)
+    owner_response = client.get(reverse("module-overview", args=["products"]), {"q": "TRACE"})
+
+    assert owner_response.status_code == 200
+    assert owner_response.context["rows"][0]["stock_total"] == 2
+    assert owner_response.context["rows"][0]["available_serial_count"] == 2
+    assert owner_response.context["rows"][0]["sold_serial_count"] == 1
+    assert b"Margin" in owner_response.content
+    assert reverse("product-detail", args=[product.id]) == owner_response.context["rows"][0]["detail_url"]
+
+    client.force_login(viewer)
+    viewer_response = client.get(reverse("module-overview", args=["products"]), {"q": "TRACE"})
+
+    assert viewer_response.status_code == 200
+    assert viewer_response.context["rows"][0]["stock_total"] == 1
+    assert viewer_response.context["rows"][0]["available_serial_count"] == 1
+    assert viewer_response.context["rows"][0]["sold_serial_count"] == 1
+    assert b"Margin" not in viewer_response.content
+    assert b"Cost visibility" in viewer_response.content
+    assert b"Restricted" in viewer_response.content
+
+
+@pytest.mark.django_db
+def test_product_detail_hides_costs_and_limits_locations_for_product_only_users(client):
+    owner, viewer, product, _branch_a, _branch_b = _create_product_visibility_fixture()
+
+    client.force_login(viewer)
+    viewer_response = client.get(reverse("product-detail", args=[product.id]))
+
+    assert viewer_response.status_code == 200
+    assert b"Nairobi Warehouse" in viewer_response.content
+    assert b"NBO-IMEI-001" in viewer_response.content
+    assert b"Mombasa Warehouse" not in viewer_response.content
+    assert b"MBA-IMEI-001" not in viewer_response.content
+    assert b"Cost restricted" in viewer_response.content
+    assert b"Cost price" not in viewer_response.content
+    assert b"501.00" not in viewer_response.content
+
+    client.force_login(owner)
+    owner_response = client.get(reverse("product-detail", args=[product.id]))
+
+    assert owner_response.status_code == 200
+    assert b"Nairobi Warehouse" in owner_response.content
+    assert b"Mombasa Warehouse" in owner_response.content
+    assert b"Cost price" in owner_response.content
+    assert b"501.00" in owner_response.content
+
+
+@pytest.mark.django_db
+def test_seeded_product_images_render_on_register_and_detail(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    product = Product.objects.get(organization=organization, sku="MP-A07-64")
+    client.force_login(owner)
+
+    register_response = client.get(reverse("module-overview", args=["products"]), {"q": "A07"})
+    detail_response = client.get(reverse("product-detail", args=[product.id]))
+
+    assert product.image_url == "/static/img/products/a07-phone.svg"
+    assert register_response.status_code == 200
+    assert detail_response.status_code == 200
+    assert b"/static/img/products/a07-phone.svg" in register_response.content
+    assert b"/static/img/products/a07-phone.svg" in detail_response.content

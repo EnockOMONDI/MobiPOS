@@ -5,9 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}MobiPOS{% endblock %}</title>
+  <meta name="csrf-token" content="{{ csrf_token }}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}?v=20260613-p0">
   <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script defer src="{% static 'js/table_controls.js' %}?v=20260719"></script>
 </head>
 <body
   class="min-h-screen bg-slate-50 text-slate-900"
@@ -159,5 +161,6 @@
   {% else %}
     <main class="min-h-screen px-4 py-12 sm:px-6">{% block anonymous_content %}{% endblock %}</main>
   {% endif %}
+  {% block scripts %}{% endblock %}
 </body>
 </html>

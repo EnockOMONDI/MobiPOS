@@ -56,3 +56,36 @@ class CashMovement(OrganizationOwnedModel):
 
     class Meta:
         ordering = ("-created_at",)
+
+
+class OfflineInvoiceQueueStatus(models.TextChoices):
+    QUEUED = "queued", "Queued"
+    PROCESSING = "processing", "Processing"
+    COMPLETED = "completed", "Completed"
+    FAILED = "failed", "Failed"
+
+
+class OfflineInvoiceQueue(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client_reference = models.CharField(max_length=120)
+    session = models.ForeignKey(POSSession, on_delete=models.PROTECT, related_name="offline_invoices")
+    location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="offline_invoices")
+    cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="offline_invoices")
+    payload = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=20,
+        choices=OfflineInvoiceQueueStatus.choices,
+        default=OfflineInvoiceQueueStatus.QUEUED,
+    )
+    error_message = models.TextField(blank=True)
+    sale_number = models.CharField(max_length=40, blank=True)
+    synced_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "client_reference"),
+                name="unique_offline_invoice_client_reference_per_org",
+            )
+        ]

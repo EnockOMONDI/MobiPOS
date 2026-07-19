@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}Products | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Inventory control</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">Products</h1>
+    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Manage product masters, branch stock, IMEI availability, sales tracking and margin visibility from one register.</p>
+  </div>
+  <div class="flex flex-wrap gap-3">
+    {% if can_add_product %}
+      <a href="{% url 'product-create' %}" class="btn-primary">Add product</a>
+    {% else %}
+      <button class="btn-secondary opacity-60" type="button" data-locked-action="catalog.add_product">Add product</button>
+    {% endif %}
+    <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}format=csv" class="btn-secondary">Export CSV</a>
+    <a href="?{% if request.GET.urlencode %}{{ request.GET.urlencode }}&{% endif %}format=pdf" class="btn-secondary">Export PDF</a>
+    <button type="button" class="btn-secondary" onclick="window.print()">Print</button>
+  </div>
+</div>
+
+<section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Filtered products</p>
+    <p class="mt-2 text-2xl font-bold">{{ metrics.products }}</p>
+    <p class="mt-1 text-xs text-slate-500">of {{ metrics.all_products }} product masters</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available stock</p>
+    <p class="mt-2 text-2xl font-bold">{{ metrics.available_stock }}</p>
+    <p class="mt-1 text-xs text-slate-500">within your branch scope</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available IMEIs</p>
+    <p class="mt-2 text-2xl font-bold">{{ metrics.available_serials }}</p>
+    <p class="mt-1 text-xs text-slate-500">ready for transfer or sale</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Low stock</p>
+    <p class="mt-2 text-2xl font-bold">{{ metrics.low_stock }}</p>
+    <p class="mt-1 text-xs text-slate-500">below reorder level</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Cost visibility</p>
+    <p class="mt-2 text-lg font-bold">{% if can_view_costs %}Enabled{% else %}Restricted{% endif %}</p>
+    <p class="mt-1 text-xs text-slate-500">owners and finance roles only</p>
+  </div>
+</section>
+
+<section class="card mt-6 p-5">
+  <div class="flex items-center gap-2">
+    <span class="text-xl">⌕</span>
+    <h2 class="text-lg font-bold">Filters</h2>
+  </div>
+  <form class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-6" method="get">
+    <label class="xl:col-span-2">
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Search product, SKU, barcode or IMEI</span>
+      <input type="search" name="q" value="{{ query }}" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-red-500 focus:ring-4 focus:ring-red-100" placeholder="Search product, SKU, barcode or IMEI">
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Status</span>
+      <select name="status" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+        <option value="">All</option>
+        <option value="active" {% if status == "active" %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status == "inactive" %}selected{% endif %}>Archived</option>
+      </select>
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Tracking</span>
+      <select name="tracking" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+        <option value="">All</option>
+        <option value="serialized" {% if tracking == "serialized" %}selected{% endif %}>Serialized / IMEI</option>
+        <option value="quantity" {% if tracking == "quantity" %}selected{% endif %}>Quantity based</option>
+      </select>
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Stock</span>
+      <select name="stock_status" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+        <option value="">All</option>
+        <option value="in_stock" {% if stock_status == "in_stock" %}selected{% endif %}>In stock</option>
+        <option value="low_stock" {% if stock_status == "low_stock" %}selected{% endif %}>Low stock</option>
+        <option value="out_of_stock" {% if stock_status == "out_of_stock" %}selected{% endif %}>Out of stock</option>
+      </select>
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Category</span>
+      <select name="category" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+        <option value="">All categories</option>
+        {% for category in category_options %}
+          <option value="{{ category.id }}" {% if selected_category == category.id|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Brand</span>
+      <select name="brand" class="mt-1 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm">
+        <option value="">All brands</option>
+        {% for brand in brand_options %}
+          <option value="{{ brand.id }}" {% if selected_brand == brand.id|stringformat:"s" %}selected{% endif %}>{{ brand.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="flex items-end gap-2 xl:col-span-6">
+      <button class="btn-primary" type="submit">Apply filters</button>
+      <a href="{% url 'module-overview' 'products' %}" class="btn-secondary">Clear</a>
+    </div>
+  </form>
+</section>
+
+<details class="card mt-6 p-5">
+  <summary class="cursor-pointer text-sm font-bold text-slate-700">Column visibility</summary>
+  <div class="mt-3 flex flex-wrap gap-3" data-column-controls="product-register">
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="0" checked> Product</label>
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="1" checked> Category</label>
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="2" checked> Tracking</label>
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="3" checked> Branch stock</label>
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="4" checked> IMEIs</label>
+    <label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="5" checked> Selling price</label>
+    {% if can_view_costs %}<label class="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600"><input type="checkbox" data-column-index="6" checked> Margin</label>{% endif %}
+  </div>
+</details>
+
+<section class="card mt-6 overflow-hidden">
+  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+    <div>
+      <h2 class="text-lg font-bold">All products</h2>
+      <p class="text-xs text-slate-500">Stock and IMEI counts are scoped to branches you can access.</p>
+    </div>
+    <p class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</p>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-left text-sm" data-column-table="product-register">
+      <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500">
+        <tr>
+          <th class="px-5 py-3">Product</th>
+          <th class="px-5 py-3">Category</th>
+          <th class="px-5 py-3">Tracking</th>
+          <th class="px-5 py-3">Branch stock</th>
+          <th class="px-5 py-3">IMEIs</th>
+          <th class="px-5 py-3">Selling price</th>
+          {% if can_view_costs %}<th class="px-5 py-3">Margin</th>{% endif %}
+          <th class="px-5 py-3">Status</th>
+          <th class="px-5 py-3">Action</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        {% for row in rows %}
+          <tr class="align-top hover:bg-slate-50">
+            <td class="px-5 py-4">
+              <div class="flex items-start gap-3">
+                {% if row.product.display_image_url %}
+                  <img src="{{ row.product.display_image_url }}" alt="{{ row.product.name }}" class="h-12 w-12 shrink-0 rounded-2xl object-cover ring-1 ring-slate-200">
+                {% else %}
+                  <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-900 to-red-700 text-sm font-black text-white">{{ row.product.name|slice:":2"|upper }}</div>
+                {% endif %}
+                <div>
+                  <a href="{{ row.detail_url }}" class="font-bold text-slate-950 hover:text-red-700">{{ row.product.name }}</a>
+                  <p class="mt-1 text-xs text-slate-500">SKU {{ row.product.sku }}{% if row.product.barcode %} · Barcode {{ row.product.barcode }}{% endif %}</p>
+                  {% if row.is_low_stock %}<span class="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-700">Low stock</span>{% endif %}
+                  {% if row.is_out_of_stock %}<span class="mt-2 inline-flex rounded-full bg-red-100 px-2 py-1 text-xs font-bold text-red-700">Out of stock</span>{% endif %}
+                </div>
+              </div>
+            </td>
+            <td class="px-5 py-4">
+              <p class="font-semibold">{{ row.product.category.name }}</p>
+              <p class="text-xs text-slate-500">{{ row.product.brand.name|default:"No brand" }}</p>
+            </td>
+            <td class="px-5 py-4">
+              {% if row.product.is_serialized %}
+                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">Serialized / IMEI</span>
+              {% else %}
+                <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Quantity based</span>
+              {% endif %}
+            </td>
+            <td class="px-5 py-4">
+              <p class="text-lg font-bold">{{ row.stock_total }}</p>
+              <div class="mt-2 space-y-1">
+                {% for balance in row.balances %}
+                  <p class="text-xs text-slate-500">{{ balance.location.branch.name }} / {{ balance.location.name }}: <span class="font-bold text-slate-700">{{ balance.quantity }}</span></p>
+                {% empty %}
+                  <p class="text-xs text-slate-400">No stock in accessible branches.</p>
+                {% endfor %}
+                {% if row.balance_count > 4 %}<p class="text-xs font-bold text-slate-500">+ more locations</p>{% endif %}
+              </div>
+            </td>
+            <td class="px-5 py-4">
+              <div class="grid gap-2">
+                <span class="rounded-2xl bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">Available {{ row.available_serial_count }}</span>
+                <span class="rounded-2xl bg-slate-100 px-3 py-2 text-xs font-bold text-slate-600">Sold {{ row.sold_serial_count }}</span>
+              </div>
+            </td>
+            <td class="px-5 py-4 font-bold">KES {{ row.product.selling_price }}</td>
+            {% if can_view_costs %}
+              <td class="px-5 py-4">
+                <p class="font-bold">KES {{ row.margin_amount|floatformat:2 }}</p>
+                <p class="text-xs text-slate-500">{{ row.margin_percent|floatformat:2 }}% margin</p>
+              </td>
+            {% endif %}
+            <td class="px-5 py-4"><span class="status-badge {% if row.product.is_active %}status-badge-active{% else %}status-badge-inactive{% endif %}">{% if row.product.is_active %}Active{% else %}Archived{% endif %}</span></td>
+            <td class="px-5 py-4"><a href="{{ row.detail_url }}" class="btn-secondary text-xs">View</a></td>
+          </tr>
+        {% empty %}
+          <tr><td class="px-5 py-8 text-center text-slate-500" colspan="{% if can_view_costs %}9{% else %}8{% endif %}">No products match the current filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+    <div class="flex items-center justify-between border-t border-slate-100 px-5 py-4 text-sm">
+      {% if page_obj.has_previous %}
+        <a class="btn-secondary" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tracking %}&tracking={{ tracking }}{% endif %}{% if stock_status %}&stock_status={{ stock_status }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_brand %}&brand={{ selected_brand }}{% endif %}">Previous</a>
+      {% else %}
+        <span></span>
+      {% endif %}
+      <span class="font-bold text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}
+        <a class="btn-secondary" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if tracking %}&tracking={{ tracking }}{% endif %}{% if stock_status %}&stock_status={{ stock_status }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}{% if selected_brand %}&brand={{ selected_brand }}{% endif %}">Next</a>
+      {% else %}
+        <span></span>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

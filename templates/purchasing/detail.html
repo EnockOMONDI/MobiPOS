@@ -1,25 +1,103 @@
 {% extends "base.html" %}
 {% block title %}{{ order.number }} | MobiPOS{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between"><div><p class="text-sm text-red-700">Purchase order</p><h1 class="text-3xl font-bold">{{ order.number }}</h1><p>{{ order.supplier }} → {{ order.destination }} · {{ order.get_status_display }}</p></div>
-{% if order.status == "draft" %}<form method="post" action="{% url 'purchase-approve' order.id %}">{% csrf_token %}<button class="rounded-lg bg-red-700 px-5 py-3 text-white">Approve</button></form>{% endif %}</div>
-<div class="mt-6 space-y-4">
-{% for line in order.lines.all %}<article class="rounded-xl border bg-white p-5 shadow-sm"><h2 class="font-semibold">{{ line.product }}</h2><p>Ordered: {{ line.quantity }} · Received: {{ line.received_quantity }} · Unit cost: {{ line.unit_cost }}</p>
-{% if order.status == "approved" or order.status == "part_received" or order.status == "discrepancy" %}<form method="post" action="{% url 'purchase-receive' line.id %}" class="mt-4 space-y-3">{% csrf_token %}{{ receive_form.as_p }}<button class="rounded-lg bg-emerald-700 px-4 py-2 text-white">Receive stock</button></form>{% endif %}</article>{% endfor %}
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Purchase order</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">{{ order.number }}</h1>
+    <p class="mt-2 text-slate-600">{{ order.supplier }} → {{ order.destination }} · {{ order.get_status_display }}</p>
+  </div>
+  <div class="flex flex-wrap gap-3">
+    <a href="{% url 'module-overview' 'purchases' %}" class="btn-secondary">Back to purchases</a>
+    {% if order.status == "draft" %}<form method="post" action="{% url 'purchase-approve' order.id %}">{% csrf_token %}<button class="btn-primary">Approve order</button></form>{% endif %}
+  </div>
 </div>
-{% for discrepancy in order.lines.all %}
-  {% for issue in discrepancy.discrepancies.all %}
-  <article class="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-5">
-    <p class="font-semibold">{{ issue.number }} · {{ issue.get_status_display }}</p>
-    <p>Expected {{ issue.expected_quantity }} · Accepted {{ issue.accepted_quantity }} · Damaged {{ issue.damaged_quantity }} · Missing {{ issue.missing_quantity }}</p>
-    <p>{{ issue.reason }}</p>
-    {% if issue.status == "pending" %}
-    <form method="post" action="{% url 'purchase-discrepancy-resolve' issue.id %}" class="mt-3 flex gap-3">{% csrf_token %}
-      <button name="resolution" value="replacement_pending" class="rounded bg-amber-600 px-3 py-2 text-white">Await replacement</button>
-      <button name="resolution" value="accept_short" class="rounded bg-red-700 px-3 py-2 text-white">Accept short delivery</button>
-    </form>
+
+<section class="mt-6 grid gap-4 md:grid-cols-4">
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Supplier</p><p class="mt-2 text-xl font-bold">{{ order.supplier }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Destination</p><p class="mt-2 text-xl font-bold">{{ order.destination }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Supplier reference</p><p class="mt-2 text-xl font-bold">{{ order.supplier_reference|default:"Not provided" }}</p></div>
+  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Source document</p>{% if order.attachment %}<a class="mt-2 inline-block font-bold text-red-700" href="{{ order.attachment.url }}">Open attachment</a>{% else %}<p class="mt-2 text-xl font-bold">Not attached</p>{% endif %}</div>
+</section>
+
+<section class="card mt-6 p-5">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Supplier document extraction</p>
+      <h2 class="mt-1 text-lg font-bold">Invoice OCR / import review</h2>
+      <p class="mt-1 text-sm text-slate-500">Text, CSV and Excel documents can be extracted now. Scanned PDF or image invoices are retained and marked for manual review until a production OCR provider is configured.</p>
+    </div>
+    {% if order.attachment %}
+      <form method="post" action="{% url 'purchase-extract-document' order.id %}">{% csrf_token %}<button class="btn-primary">Extract document</button></form>
+    {% else %}
+      <span class="status-badge">Attach document first</span>
     {% endif %}
-  </article>
+  </div>
+  <div class="mt-4 rounded-3xl bg-slate-50 p-4">
+    <p class="text-sm font-bold text-slate-700">Status: {{ order.get_extraction_status_display }}</p>
+    {% if order.extracted_text %}
+      <pre class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-2xl bg-white p-4 text-xs leading-5 text-slate-700 ring-1 ring-slate-200">{{ order.extracted_text }}</pre>
+    {% else %}
+      <p class="mt-2 text-sm text-slate-500">No extracted text has been captured yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if order.notes %}
+  <section class="card mt-6 p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Notes</p>
+    <p class="mt-2 text-sm leading-6 text-slate-600">{{ order.notes }}</p>
+  </section>
+{% endif %}
+
+<section class="card mt-6 overflow-hidden">
+  <div class="border-b border-slate-100 p-5">
+    <h2 class="text-lg font-bold">Receiving lines</h2>
+    <p class="mt-1 text-sm text-slate-500">Receive quantity stock directly, or paste IMEIs for serialized products. Discrepancies stay visible until resolved.</p>
+  </div>
+  <div class="divide-y divide-slate-100">
+    {% for line in order.lines.all %}
+      <article class="p-5">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p class="text-lg font-bold">{{ line.product }}</p>
+            <p class="mt-1 text-sm text-slate-500">Ordered {{ line.quantity }} · Received {{ line.received_quantity }} · Unit cost KES {{ line.unit_cost }}</p>
+          </div>
+          <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{% if line.product.is_serialized %}Serialized / IMEI{% else %}Quantity based{% endif %}</span>
+        </div>
+        {% if order.status == "approved" or order.status == "part_received" or order.status == "discrepancy" %}
+          <form method="post" action="{% url 'purchase-receive' line.id %}" class="mt-5 grid gap-4 rounded-3xl bg-slate-50 p-4 md:grid-cols-2">
+            {% csrf_token %}
+            {% include "components/form_field.html" with field=receive_form.quantity %}
+            {% include "components/form_field.html" with field=receive_form.damaged_quantity %}
+            <div class="md:col-span-2">{% include "components/form_field.html" with field=receive_form.serial_numbers %}</div>
+            {% include "components/form_field.html" with field=receive_form.close_with_discrepancy %}
+            <div class="md:col-span-2">{% include "components/form_field.html" with field=receive_form.discrepancy_reason %}</div>
+            <div class="md:col-span-2"><button class="btn-primary">Receive stock</button></div>
+          </form>
+        {% endif %}
+      </article>
+    {% endfor %}
+  </div>
+</section>
+
+{% for line in order.lines.all %}
+  {% for issue in line.discrepancies.all %}
+    <article class="mt-4 rounded-3xl border border-amber-200 bg-amber-50 p-5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="font-bold">{{ issue.number }} · {{ issue.get_status_display }}</p>
+          <p class="mt-1 text-sm text-amber-900">Expected {{ issue.expected_quantity }} · Accepted {{ issue.accepted_quantity }} · Damaged {{ issue.damaged_quantity }} · Missing {{ issue.missing_quantity }}</p>
+          <p class="mt-2 text-sm text-amber-900">{{ issue.reason }}</p>
+        </div>
+        {% if issue.status == "pending" %}
+          <form method="post" action="{% url 'purchase-discrepancy-resolve' issue.id %}" class="flex flex-wrap gap-2">{% csrf_token %}
+            <button name="resolution" value="replacement_pending" class="btn-secondary">Await replacement</button>
+            <button name="resolution" value="accept_short" class="btn-danger">Accept short delivery</button>
+          </form>
+        {% endif %}
+      </div>
+    </article>
   {% endfor %}
 {% endfor %}
 {% endblock %}

@@ -1,4 +1,5 @@
 from django import forms
+from pathlib import Path
 
 from apps.catalog.models import Product
 from apps.contacts.models import Contact
@@ -10,11 +11,31 @@ from .models import PurchaseOrderLine
 
 class PurchaseOrderForm(forms.Form):
     MAX_LINES = 5
+    MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024
+    ALLOWED_ATTACHMENT_EXTENSIONS = {
+        ".csv",
+        ".gif",
+        ".jpeg",
+        ".jpg",
+        ".pdf",
+        ".png",
+        ".tsv",
+        ".txt",
+        ".webp",
+        ".xlsx",
+        ".xlsm",
+    }
     supplier = forms.ModelChoiceField(queryset=Contact.objects.none())
     destination = forms.ModelChoiceField(queryset=Location.objects.none())
     product = forms.ModelChoiceField(queryset=Product.objects.none())
     quantity = forms.DecimalField(min_value=1, decimal_places=3)
     unit_cost = forms.DecimalField(min_value=0, decimal_places=2)
+    supplier_reference = forms.CharField(max_length=80, required=False, label="Supplier invoice/reference")
+    attachment = forms.FileField(
+        required=False,
+        label="Attach supplier document",
+        help_text="Upload invoice, delivery note, CSV, text, image, PDF, or Excel workbook. Maximum size: 5 MB.",
+    )
     notes = forms.CharField(widget=forms.Textarea, required=False)
 
     def __init__(self, *args, organization=None, user=None, **kwargs):
@@ -43,6 +64,18 @@ class PurchaseOrderForm(forms.Form):
             (self[f"product_{index}"], self[f"quantity_{index}"], self[f"unit_cost_{index}"])
             for index in range(2, self.MAX_LINES + 1)
         ] if organization else []
+
+    def clean_attachment(self):
+        attachment = self.cleaned_data.get("attachment")
+        if not attachment:
+            return attachment
+        extension = Path(attachment.name or "").suffix.lower()
+        if extension not in self.ALLOWED_ATTACHMENT_EXTENSIONS:
+            allowed = ", ".join(sorted(self.ALLOWED_ATTACHMENT_EXTENSIONS))
+            raise forms.ValidationError(f"Unsupported supplier document type. Allowed file types: {allowed}.")
+        if attachment.size > self.MAX_ATTACHMENT_SIZE:
+            raise forms.ValidationError("Supplier document must be 5 MB or smaller.")
+        return attachment
 
     def clean(self):
         cleaned = super().clean()

@@ -1,73 +1,160 @@
 {% extends "base.html" %}
-{% block title %}Sale cart | MobiPOS{% endblock %}
+{% load static %}
+{% block title %}POS cart | MobiPOS{% endblock %}
 {% block content %}
-<div class="mb-6">
-  <p class="text-sm font-medium text-red-700">{{ location }}</p>
-  <h1 class="text-3xl font-bold">Sale cart</h1>
-  <p class="mt-2 text-slate-600">Add phones, serialized items, and accessories before completing payment.</p>
+<div class="flex flex-wrap items-start justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700" data-pos-location="{{ location }}">{{ location }}</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">Point of sale</h1>
+    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Scan IMEIs, search products, use quick tiles, and collect split payments without leaving the cashier screen.</p>
+  </div>
+  <div class="rounded-3xl bg-slate-950 px-6 py-4 text-right text-white shadow-xl">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-300">Total payable</p>
+    <p class="text-3xl font-black">KES {{ cart_total }}</p>
+  </div>
 </div>
-<div class="grid gap-6 xl:grid-cols-2">
-  <form method="post" action="{% url 'pos-cart-add' %}" class="card space-y-5 p-6">
-    {% csrf_token %}
-    <div>
-      <p class="text-xs font-bold uppercase tracking-wider text-red-700">Fast entry</p>
-      <h2 class="mt-1 text-xl font-semibold">Add item</h2>
-      <p class="mt-2 text-sm text-slate-500">Scan an IMEI or barcode, then press Enter. Use the fields below only when the scan does not identify the item.</p>
-    </div>
-    {% include "components/form_field.html" with field=item_form.lookup %}
-    <div class="grid gap-4 md:grid-cols-2">
-      {% include "components/form_field.html" with field=item_form.product %}
-      {% include "components/form_field.html" with field=item_form.stock_unit %}
-      {% include "components/form_field.html" with field=item_form.quantity %}
-      {% include "components/form_field.html" with field=item_form.discount %}
-    </div>
-    <button class="btn-primary" type="submit">Add to cart</button>
-  </form>
-  <section class="card p-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div>
-        <h2 class="text-xl font-semibold">Current cart</h2>
-        <p class="mt-1 text-sm text-slate-500">Review items before collecting payment.</p>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+  <section class="space-y-6">
+    <form method="post" action="{% url 'pos-cart-add' %}" class="card p-6">
+      {% csrf_token %}
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-red-700">Scanner first</p>
+          <h2 class="mt-1 text-xl font-bold">Add item</h2>
+          <p class="mt-1 text-sm text-slate-500">Scan or type an IMEI, serial, barcode, SKU, or product name. Serialized products still require an available IMEI.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn-secondary text-xs" data-open-camera-scanner>Camera scan</button>
+          <a href="{% url 'imei-history' %}" class="btn-secondary text-xs">IMEI lookup</a>
+        </div>
       </div>
-      <div class="rounded-2xl bg-slate-900 px-4 py-3 text-right text-white">
-        <p class="text-xs font-bold uppercase tracking-wider text-slate-300">Cart total</p>
-        <p class="text-2xl font-bold">KES {{ cart_total }}</p>
+      {% if item_form.non_field_errors %}<div class="mt-4 rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{{ item_form.non_field_errors }}</div>{% endif %}
+      <div class="mt-5 grid gap-4 md:grid-cols-2">
+        <div class="md:col-span-2" data-scanner-field>{% include "components/form_field.html" with field=item_form.lookup %}</div>
+        {% include "components/form_field.html" with field=item_form.product %}
+        {% include "components/form_field.html" with field=item_form.stock_unit %}
+        {% include "components/form_field.html" with field=item_form.quantity %}
+        {% include "components/form_field.html" with field=item_form.discount %}
       </div>
-    </div>
-    {% if cart and cart.lines.exists %}
-      <div class="mt-4 space-y-3">
-        {% for line in cart.lines.all %}
-          <div class="flex items-center justify-between border-b pb-3">
-            <div>
-              <p class="font-medium">{{ line.product.name }}</p>
-              <p class="text-sm text-slate-500">{{ line.quantity }} × KES {{ line.unit_price }}{% if line.discount %} · Discount KES {{ line.discount }}{% endif %}{% if line.stock_unit %} · {{ line.stock_unit.serial_number }}{% endif %}</p>
-              <p class="mt-1 text-sm font-medium">Tax KES {{ line.tax }} · Line total KES {{ line.total_after_tax }}</p>
+      <div class="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">
+        <button class="btn-primary" type="submit">Add to cart</button>
+        <p class="text-xs text-slate-500">Tip: hardware scanners work as keyboard input in the scan/search field.</p>
+      </div>
+    </form>
+
+    <section class="card p-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold">Quick product tiles</h2>
+          <p class="mt-1 text-sm text-slate-500">Tiles use current POS-location stock. Accessories can be added fast; phones show how many IMEIs are available.</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          {% for category in categories %}
+            <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ category.name }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="mt-5 grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
+        {% for tile in product_tiles %}
+          <div class="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+            <div class="flex items-start gap-3">
+              {% if tile.product.display_image_url %}
+                <img src="{{ tile.product.display_image_url }}" alt="{{ tile.product.name }}" class="h-20 w-20 rounded-2xl object-cover ring-1 ring-slate-200">
+              {% else %}
+                <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-900 to-red-700 text-lg font-black text-white">{{ tile.product.name|slice:":2"|upper }}</div>
+              {% endif %}
+              <div class="min-w-0">
+                <p class="font-bold text-slate-950">{{ tile.product.name }}</p>
+                <p class="mt-1 text-xs text-slate-500">SKU {{ tile.product.sku }}</p>
+                <p class="mt-2 text-sm font-black text-red-700">KES {{ tile.product.selling_price }}</p>
+              </div>
             </div>
-            <form method="post" action="{% url 'pos-cart-remove' line.id %}">
-              {% csrf_token %}<button class="text-sm font-medium text-red-700" type="submit">Remove</button>
-            </form>
+            <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+              {% if tile.product.is_serialized %}
+                <span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{{ tile.available_serials }} IMEIs available</span>
+                <span class="text-xs font-semibold text-slate-500">Select IMEI above</span>
+              {% else %}
+                <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Qty {{ tile.stock_total }}</span>
+                <form method="post" action="{% url 'pos-cart-add' %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="product" value="{{ tile.product.id }}">
+                  <input type="hidden" name="quantity" value="1">
+                  <button class="btn-secondary text-xs" type="submit">Add one</button>
+                </form>
+              {% endif %}
+            </div>
           </div>
+        {% empty %}
+          <p class="rounded-3xl bg-slate-50 p-5 text-sm text-slate-500">No sellable products are available for this organization.</p>
         {% endfor %}
       </div>
-      <form method="post" action="{% url 'pos-cart-complete' cart.id %}" class="mt-6 space-y-4 border-t pt-6">
-        {% csrf_token %}
+    </section>
+  </section>
+
+  <section class="space-y-6">
+    <section class="card p-6">
+      <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 class="font-semibold">Payment and customer</h3>
-          <p class="mt-1 text-sm text-slate-500">Allocate across cash, M-Pesa, card, bank transfer, and approved customer credit. Cash over-tender is treated as change due, not extra revenue.</p>
+          <h2 class="text-xl font-bold">Current cart</h2>
+          <p class="mt-1 text-sm text-slate-500">Review stock, discounts, tax and totals before collecting payment.</p>
         </div>
-        <div class="grid gap-4 md:grid-cols-2">
-          {% include "components/form_field.html" with field=complete_form.cash_amount %}
-          {% include "components/form_field.html" with field=complete_form.mpesa_amount %}
-          {% include "components/form_field.html" with field=complete_form.mpesa_reference %}
-          {% include "components/form_field.html" with field=complete_form.card_amount %}
-          {% include "components/form_field.html" with field=complete_form.card_reference %}
-          {% include "components/form_field.html" with field=complete_form.bank_amount %}
-          {% include "components/form_field.html" with field=complete_form.bank_reference %}
-          {% include "components/form_field.html" with field=complete_form.credit_amount %}
+        <div class="rounded-2xl bg-slate-100 px-4 py-3 text-right">
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cart total</p>
+          <p class="text-2xl font-black">KES {{ cart_total }}</p>
         </div>
-        <div class="rounded-2xl bg-slate-50 p-4">
+      </div>
+      {% if cart and cart.lines.exists %}
+        <div class="mt-5 space-y-3">
+          {% for line in cart.lines.all %}
+            <div class="rounded-3xl border border-slate-100 p-4">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-bold" data-cart-line data-product-name="{{ line.product.name }}" data-serial="{{ line.stock_unit.serial_number|default:'' }}" data-quantity="{{ line.quantity }}" data-total="{{ line.total_after_tax }}">{{ line.product.name }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ line.quantity }} x KES {{ line.unit_price }}{% if line.discount %} · Discount KES {{ line.discount }}{% endif %}{% if line.stock_unit %} · {{ line.stock_unit.serial_number }}{% endif %}</p>
+                  <p class="mt-1 text-sm font-semibold">Tax KES {{ line.tax }} · Line total KES {{ line.total_after_tax }}</p>
+                </div>
+                <form method="post" action="{% url 'pos-cart-remove' line.id %}">
+                  {% csrf_token %}<button class="text-sm font-bold text-red-700" type="submit">Remove</button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="mt-5 rounded-3xl bg-slate-50 p-6">
+          <p class="text-sm text-slate-500">No items have been added.</p>
+          <div class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
+            <p class="text-sm font-bold text-slate-700">Offline invoice queue</p>
+            <p class="mt-1 text-xs text-slate-500">Offline queue on this device: <span data-offline-count>{{ queued_offline_count }}</span>. Add items before using Save offline invoice.</p>
+            <button class="mt-3 font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Sync now</button>
+          </div>
+        </div>
+      {% endif %}
+    </section>
+
+    {% if cart and cart.lines.exists %}
+      <form method="post" action="{% url 'pos-cart-complete' cart.id %}" class="card p-6">
+        {% csrf_token %}
+        {% if complete_form.non_field_errors %}<div class="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-700">{{ complete_form.non_field_errors }}</div>{% endif %}
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-red-700">Checkout</p>
+          <h2 class="mt-1 text-xl font-bold">Payment and customer</h2>
+          <p class="mt-1 text-sm text-slate-500">Use cash, M-Pesa, card, bank, customer credit, or split payment. References are required for electronic payments.</p>
+        </div>
+        <div class="mt-5 grid gap-4 md:grid-cols-2">
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.cash_amount %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.mpesa_amount %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.mpesa_reference %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.card_amount %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.card_reference %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.bank_amount %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.bank_reference %}</div>
+          <div data-payment-wrapper>{% include "components/form_field.html" with field=complete_form.credit_amount %}</div>
+        </div>
+        <div class="mt-5 rounded-3xl bg-slate-50 p-4">
           <p class="text-sm font-bold text-slate-700">Customer</p>
-          <p class="mt-1 text-xs text-slate-500">Choose an existing customer for credit sales. For fully paid walk-in sales, you can create a lightweight customer profile inline.</p>
+          <p class="mt-1 text-xs text-slate-500">Choose an existing customer for credit sales. Fully paid walk-in sales can create a lightweight profile inline.</p>
           <div class="mt-4 grid gap-4 md:grid-cols-2">
             {% include "components/form_field.html" with field=complete_form.customer %}
             {% include "components/form_field.html" with field=complete_form.new_customer_name %}
@@ -75,9 +162,8 @@
             {% include "components/form_field.html" with field=complete_form.new_customer_email %}
           </div>
         </div>
-        <div class="rounded-2xl border border-slate-200 p-4">
-          <p class="text-sm font-bold text-slate-700">Credit sale context</p>
-          <p class="mt-1 text-xs text-slate-500">Use these fields for agency-financed phone sales and customer follow-up.</p>
+        <details class="mt-5 rounded-3xl border border-slate-200 p-4">
+          <summary class="cursor-pointer text-sm font-bold text-slate-700">Credit sale and agency details</summary>
           <div class="mt-4 grid gap-4 md:grid-cols-2">
             {% include "components/form_field.html" with field=complete_form.sale_channel %}
             {% include "components/form_field.html" with field=complete_form.credit_agency %}
@@ -85,12 +171,69 @@
             {% include "components/form_field.html" with field=complete_form.next_of_kin_name %}
             {% include "components/form_field.html" with field=complete_form.next_of_kin_phone %}
           </div>
+        </details>
+        <div class="sticky bottom-4 mt-6 rounded-3xl bg-lime-100 p-4 shadow-2xl ring-1 ring-lime-200">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p class="text-xs font-bold uppercase tracking-wider text-lime-800">Total payable</p>
+              <p class="text-2xl font-black text-slate-950">KES {{ cart_total }}</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-primary" type="submit">Complete sale</button>
+              <button class="btn-secondary" type="button" data-save-offline-invoice>Save offline invoice</button>
+              <a href="{% url 'module-overview' 'sales' %}" class="btn-secondary">Sales register</a>
+            </div>
+          </div>
+          <p class="mt-3 text-xs font-semibold text-slate-600">Offline queue on this device: <span data-offline-count>{{ queued_offline_count }}</span>. <button class="font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Sync now</button></p>
+          <p class="mt-1 text-xs text-slate-500" data-offline-status>Queued invoices are stored locally first, then uploaded to the server queue when online.</p>
         </div>
-        <button class="btn-danger" type="submit">Complete sale</button>
       </form>
-    {% else %}
-      <p class="mt-4 text-slate-500">No items have been added.</p>
     {% endif %}
+
+    <section class="card p-6">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h2 class="text-xl font-bold">Recent transactions</h2>
+          <p class="mt-1 text-sm text-slate-500">Last completed transactions for this cashier and POS location.</p>
+        </div>
+        <a href="{% url 'module-overview' 'sales' %}" class="btn-secondary text-xs">View all</a>
+      </div>
+      <div class="mt-4 space-y-3">
+        {% for sale in recent_sales %}
+          <a href="{% url 'sale-detail' sale.id %}" class="flex items-center justify-between rounded-3xl border border-slate-100 p-4 hover:border-red-200">
+            <span><span class="block font-bold">{{ sale.number }}</span><span class="text-xs text-slate-500">{{ sale.customer|default:"Walk-in" }} · {{ sale.get_status_display }}</span></span>
+            <strong>KES {{ sale.total }}</strong>
+          </a>
+        {% empty %}
+          <p class="rounded-3xl bg-slate-50 p-5 text-sm text-slate-500">No completed transactions yet.</p>
+        {% endfor %}
+      </div>
+    </section>
   </section>
 </div>
+
+<div data-camera-scanner hidden class="fixed inset-0 z-[70] grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
+  <div class="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div class="flex items-center justify-between bg-slate-950 px-5 py-4 text-white">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-red-200">Camera scanner</p>
+        <h2 class="text-lg font-bold">Scan barcode or QR</h2>
+      </div>
+      <button type="button" class="text-2xl leading-none" data-close-camera-scanner>&times;</button>
+    </div>
+    <div class="space-y-4 p-5">
+      <video data-camera-video class="aspect-video w-full rounded-3xl bg-slate-900 object-cover" muted playsinline></video>
+      <p class="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">If this browser does not support camera barcode detection, type or paste the scanned value below.</p>
+      <input data-camera-manual class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm" placeholder="IMEI, serial, barcode or QR value">
+      <div class="flex justify-end gap-2">
+        <button type="button" class="btn-secondary" data-close-camera-scanner>Cancel</button>
+        <button type="button" class="btn-primary" data-use-camera-manual>Use value</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="{% static 'js/pos_scanner_queue.js' %}?v=20260719"></script>
 {% endblock %}

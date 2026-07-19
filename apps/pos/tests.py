@@ -1,6 +1,10 @@
+import json
+import re
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.db import IntegrityError
+from django.test import Client
 from django.urls import reverse
 
 from apps.accounts.models import User
@@ -13,7 +17,7 @@ from apps.payments.models import Payment, PaymentStatus
 from apps.contacts.models import Contact
 from apps.operations.models import Receivable
 from apps.operations.models import ApprovalRequest
-from apps.pos.models import CashMovement, POSSession
+from apps.pos.models import CashMovement, OfflineInvoiceQueue, POSSession
 
 
 def grant_sale_permission(membership):
@@ -71,6 +75,87 @@ def test_unified_checkout_completes_quantity_sale(client):
 
     assert response.status_code == 302
     assert Sale.objects.get(organization=org).status == "paid"
+
+
+@pytest.mark.django_db
+def test_pos_cart_includes_camera_scanner_and_offline_queue_ui(client):
+    user = User.objects.create_user(username="scannerui", email="scannerui@example.com")
+    org = Organization.objects.create(name="Scanner UI", slug="scanner-ui", status="active")
+    company = Company.objects.create(organization=org, name="Scanner Ltd", code="SCAN")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="SCANMAIN")
+    Location.objects.create(organization=org, branch=branch, name="POS", code="SCANPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+
+    response = client.get(reverse("pos-cart"))
+
+    assert response.status_code == 200
+    assert b"Camera scan" in response.content
+    assert b"Save offline invoice" in response.content
+    assert b"pos_scanner_queue.js" in response.content
+    assert b'name="csrf-token"' in response.content
+
+
+@pytest.mark.django_db
+def test_offline_invoice_sync_accepts_csrf_meta_token_with_http_only_cookie():
+    user = User.objects.create_user(username="csrf-offline", email="csrf-offline@example.com")
+    org = Organization.objects.create(name="CSRF Offline Retail", slug="csrf-offline-retail", status="active")
+    company = Company.objects.create(organization=org, name="CSRF Ltd", code="CSRF")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="CSRFMAIN")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="CSRFPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    csrf_client = Client(enforce_csrf_checks=True)
+    csrf_client.force_login(user)
+
+    cart_response = csrf_client.get(reverse("pos-cart"))
+    match = re.search(r'<meta name="csrf-token" content="([^"]+)">', cart_response.content.decode())
+    assert cart_response.status_code == 200
+    assert match
+
+    response = csrf_client.post(
+        reverse("pos-offline-sync"),
+        data=json.dumps({"invoices": [{"client_reference": "csrf-local-001", "lines": [{"sku": "A07"}]}]}),
+        content_type="application/json",
+        HTTP_X_CSRFTOKEN=match.group(1),
+    )
+
+    assert response.status_code == 200
+    assert OfflineInvoiceQueue.objects.filter(
+        organization=org,
+        location=location,
+        cashier=user,
+        client_reference="csrf-local-001",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_offline_invoice_sync_queues_client_payload(client):
+    user = User.objects.create_user(username="offlinecashier", email="offline@example.com")
+    org = Organization.objects.create(name="Offline Retail", slug="offline-retail", status="active")
+    company = Company.objects.create(organization=org, name="Offline Ltd", code="OFF")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="OFFMAIN")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="OFFPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("pos-offline-sync"),
+        data=json.dumps({"invoices": [{"client_reference": "local-001", "lines": [{"sku": "A07"}]}]}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["queued"] == 1
+    queue = OfflineInvoiceQueue.objects.get(organization=org, client_reference="local-001")
+    assert queue.location == location
+    assert queue.cashier == user
+    assert queue.payload["lines"][0]["sku"] == "A07"
 
 
 @pytest.mark.django_db

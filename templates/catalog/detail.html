@@ -2,37 +2,203 @@
 {% block title %}{{ product.name }} | MobiPOS{% endblock %}
 {% block content %}
 <div class="flex flex-wrap items-start justify-between gap-4">
-  <div>
-    <div class="flex flex-wrap items-center gap-2"><p class="text-sm font-semibold text-red-700">Product master</p><span class="status-badge {% if product.is_active %}status-badge-active{% else %}status-badge-inactive{% endif %}">{% if product.is_active %}Active{% else %}Archived{% endif %}</span></div>
-    <h1 class="mt-1 text-3xl font-bold tracking-tight">{{ product.name }}</h1>
-    <p class="mt-2 text-slate-600">{{ product.sku }} · {{ product.category }}{% if product.brand %} · {{ product.brand }}{% endif %}</p>
+  <div class="flex items-start gap-4">
+    {% if product.display_image_url %}
+      <img src="{{ product.display_image_url }}" alt="{{ product.name }}" class="h-24 w-24 rounded-3xl object-cover ring-1 ring-slate-200">
+    {% else %}
+      <div class="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl bg-gradient-to-br from-slate-900 to-red-700 text-2xl font-black text-white">{{ product.name|slice:":2"|upper }}</div>
+    {% endif %}
+    <div>
+      <div class="flex flex-wrap items-center gap-2">
+        <p class="text-sm font-semibold text-red-700">Product workspace</p>
+        <span class="status-badge {% if product.is_active %}status-badge-active{% else %}status-badge-inactive{% endif %}">{% if product.is_active %}Active{% else %}Archived{% endif %}</span>
+        {% if product.is_serialized %}<span class="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">Serialized / IMEI</span>{% else %}<span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">Quantity based</span>{% endif %}
+      </div>
+      <h1 class="mt-1 text-3xl font-bold tracking-tight">{{ product.name }}</h1>
+      <p class="mt-2 text-slate-600">SKU {{ product.sku }} · {{ product.category }}{% if product.brand %} · {{ product.brand }}{% endif %}{% if product.barcode %} · Barcode {{ product.barcode }}{% endif %}</p>
+    </div>
   </div>
   <div class="flex flex-wrap gap-3">
-    <a href="{% url 'product-update' product.id %}" class="btn-primary">Edit product</a>
-    <form method="post" action="{% url 'product-toggle-active' product.id %}">{% csrf_token %}<button class="{% if product.is_active %}btn-danger{% else %}btn-secondary{% endif %}">{% if product.is_active %}Archive{% else %}Restore{% endif %}</button></form>
+    <a href="{% url 'module-overview' 'products' %}" class="btn-secondary">Back to products</a>
+    {% if can_change_product %}
+      <a href="{% url 'product-update' product.id %}" class="btn-primary">Edit product</a>
+      <form method="post" action="{% url 'product-toggle-active' product.id %}">{% csrf_token %}<button class="{% if product.is_active %}btn-danger{% else %}btn-secondary{% endif %}">{% if product.is_active %}Archive{% else %}Restore{% endif %}</button></form>
+    {% else %}
+      <button class="btn-secondary opacity-60" type="button" data-locked-action="catalog.change_product">Edit product</button>
+    {% endif %}
   </div>
 </div>
-<div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available stock</p><p class="mt-2 text-2xl font-bold">{{ stock_total }}</p></div>
-  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Units sold</p><p class="mt-2 text-2xl font-bold">{{ sold_total }}</p></div>
-  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Units purchased</p><p class="mt-2 text-2xl font-bold">{{ purchased_total }}</p></div>
-  <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Selling price</p><p class="mt-2 text-2xl font-bold">KES {{ product.selling_price }}</p></div>
-</div>
+
+<section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available stock</p>
+    <p class="mt-2 text-2xl font-bold">{{ stock_total }}</p>
+    <p class="mt-1 text-xs text-slate-500">within your branch scope</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Available IMEIs</p>
+    <p class="mt-2 text-2xl font-bold">{{ available_units_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">ready for sale or transfer</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Sold IMEIs</p>
+    <p class="mt-2 text-2xl font-bold">{{ sold_units_count }}</p>
+    <p class="mt-1 text-xs text-slate-500">linked to completed sales</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Units sold</p>
+    <p class="mt-2 text-2xl font-bold">{{ sold_total }}</p>
+    <p class="mt-1 text-xs text-slate-500">from accessible branches</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Units purchased</p>
+    <p class="mt-2 text-2xl font-bold">{{ purchased_total }}</p>
+    <p class="mt-1 text-xs text-slate-500">received through purchase orders</p>
+  </div>
+  <div class="card p-5">
+    <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Selling price</p>
+    <p class="mt-2 text-2xl font-bold">KES {{ product.selling_price }}</p>
+    <p class="mt-1 text-xs text-slate-500">{% if can_view_costs %}Cost KES {{ product.cost_price }}{% else %}Cost restricted{% endif %}</p>
+  </div>
+</section>
+
 <div class="mt-6 grid gap-6 xl:grid-cols-3">
   <section class="card p-6 xl:col-span-2">
-    <h2 class="text-lg font-bold">Product configuration</h2>
-    <dl class="mt-5 grid gap-4 sm:grid-cols-2">
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Barcode</dt><dd class="mt-1">{{ product.barcode|default:"Not set" }}</dd></div>
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Tracking</dt><dd class="mt-1">{% if product.is_serialized %}Serialized / IMEI{% else %}Quantity based{% endif %}</dd></div>
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Cost price</dt><dd class="mt-1">KES {{ product.cost_price }}</dd></div>
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Tax rate</dt><dd class="mt-1">{{ product.tax_rate }}%</dd></div>
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Reorder level</dt><dd class="mt-1">{{ product.reorder_level }}</dd></div>
-      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Warranty</dt><dd class="mt-1">{{ product.warranty_days }} days</dd></div>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h2 class="text-lg font-bold">Product configuration</h2>
+        <p class="mt-1 text-sm text-slate-500">Commercial rules used by purchasing, stock, POS, warranty and reporting workflows.</p>
+      </div>
+      <a href="{% url 'imei-history' %}?q={{ product.sku }}" class="btn-secondary text-xs">Open IMEI search</a>
+    </div>
+    <dl class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Category</dt><dd class="mt-1 font-semibold">{{ product.category }}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Brand</dt><dd class="mt-1 font-semibold">{{ product.brand|default:"Not set" }}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Barcode</dt><dd class="mt-1 font-semibold">{{ product.barcode|default:"Not set" }}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Stocked</dt><dd class="mt-1 font-semibold">{% if product.is_stocked %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Sellable</dt><dd class="mt-1 font-semibold">{% if product.is_sellable %}Yes{% else %}No{% endif %}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Purchasable</dt><dd class="mt-1 font-semibold">{% if product.is_purchasable %}Yes{% else %}No{% endif %}</dd></div>
+      {% if can_view_costs %}<div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Cost price</dt><dd class="mt-1 font-semibold">KES {{ product.cost_price }}</dd></div>{% endif %}
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Tax rate</dt><dd class="mt-1 font-semibold">{{ product.tax_rate }}%</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Reorder level</dt><dd class="mt-1 font-semibold">{{ product.reorder_level }}</dd></div>
+      <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Warranty</dt><dd class="mt-1 font-semibold">{{ product.warranty_days }} days</dd></div>
     </dl>
     {% if product.description %}<p class="mt-5 border-t pt-5 text-sm leading-6 text-slate-600">{{ product.description }}</p>{% endif %}
-    <h2 class="mt-7 text-lg font-bold">Stock by location</h2>
-    <div class="mt-3 overflow-x-auto"><table class="min-w-full text-left text-sm"><thead class="bg-slate-50"><tr><th class="p-3">Branch</th><th>Location</th><th>Quantity</th></tr></thead><tbody>{% for balance in balances %}<tr class="border-t"><td class="p-3">{{ balance.location.branch }}</td><td>{{ balance.location }}</td><td>{{ balance.quantity }}</td></tr>{% empty %}<tr><td class="p-4 text-slate-500" colspan="3">No stock balances.</td></tr>{% endfor %}</tbody></table></div>
+
+    <h2 class="mt-8 text-lg font-bold">Stock by location</h2>
+    <div class="mt-3 overflow-x-auto rounded-3xl border border-slate-100">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="p-3">Branch</th><th class="p-3">Location</th><th class="p-3">Type</th><th class="p-3">Quantity</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for balance in balances %}
+            <tr><td class="p-3 font-semibold">{{ balance.location.branch }}</td><td class="p-3">{{ balance.location }}</td><td class="p-3">{{ balance.location.get_location_type_display }}</td><td class="p-3 font-bold">{{ balance.quantity }}</td></tr>
+          {% empty %}
+            <tr><td class="p-4 text-slate-500" colspan="4">No stock balances in accessible branches.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </section>
+
+  <section class="card p-6">
+    <h2 class="text-lg font-bold">Lifecycle shortcuts</h2>
+    <p class="mt-1 text-sm text-slate-500">Use these workflows to move stock without re-entering identifiers.</p>
+    <div class="mt-5 grid gap-3">
+      <a href="{% url 'batch-serial-intake' %}" class="btn-secondary justify-center">Batch IMEI intake</a>
+      <a href="{% url 'transfer-create' %}" class="btn-secondary justify-center">Create transfer</a>
+      <a href="{% url 'agent-allocation-create' %}" class="btn-secondary justify-center">Allocate to agent</a>
+      <a href="{% url 'module-overview' 'movements' %}?q={{ product.sku }}" class="btn-secondary justify-center">View movement ledger</a>
+    </div>
+    <div class="mt-6 rounded-3xl bg-slate-50 p-4 text-sm text-slate-600">
+      <p class="font-bold text-slate-900">Audit rule</p>
+      <p class="mt-1">Completed stock history is not edited in place. Corrections should be posted as approved reversals or source-workflow adjustments.</p>
+    </div>
+  </section>
+</div>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-2">
+  <section class="card p-6">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-lg font-bold">Available IMEIs</h2>
+      <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{{ available_units_count }} available</span>
+    </div>
+    <div class="mt-4 max-h-96 overflow-auto rounded-3xl border border-slate-100">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="p-3">IMEI / serial</th><th class="p-3">Location</th><th class="p-3">Status</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for unit in available_units %}
+            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
+          {% empty %}
+            <tr><td class="p-4 text-slate-500" colspan="3">No available IMEIs in accessible branches.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="card p-6">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-lg font-bold">Sold IMEIs</h2>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ sold_units_count }} sold</span>
+    </div>
+    <div class="mt-4 max-h-96 overflow-auto rounded-3xl border border-slate-100">
+      <table class="min-w-full text-left text-sm">
+        <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="p-3">IMEI / serial</th><th class="p-3">Last location</th><th class="p-3">Status</th></tr></thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for unit in sold_units %}
+            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location|default:"Released to customer" }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
+          {% empty %}
+            <tr><td class="p-4 text-slate-500" colspan="3">No sold IMEIs in accessible branches.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<div class="mt-6 grid gap-6 xl:grid-cols-3">
+  <section class="card p-6">
+    <h2 class="text-lg font-bold">Recent stock movements</h2>
+    <div class="mt-4 space-y-3">
+      {% for movement in recent_movements %}
+        <div class="rounded-3xl border border-slate-100 p-4">
+          <p class="font-bold">{{ movement.get_movement_type_display }} · {{ movement.quantity }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ movement.location }} · {{ movement.created_at|date:"d M Y H:i" }}{% if movement.stock_unit %} · {{ movement.stock_unit.serial_number }}{% endif %}</p>
+        </div>
+      {% empty %}
+        <p class="text-sm text-slate-500">No movement history yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="card p-6">
+    <h2 class="text-lg font-bold">Recent sales</h2>
+    <div class="mt-4 space-y-3">
+      {% for sale in recent_sales %}
+        <a href="{% url 'sale-detail' sale.id %}" class="block rounded-3xl border border-slate-100 p-4 hover:border-red-200">
+          <p class="font-bold">{{ sale.number }} · KES {{ sale.total }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ sale.location }} · {{ sale.get_status_display }} · {{ sale.created_at|date:"d M Y H:i" }}</p>
+        </a>
+      {% empty %}
+        <p class="text-sm text-slate-500">No sales for this product yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+  <section class="card p-6">
+    <h2 class="text-lg font-bold">Recent purchases</h2>
+    <div class="mt-4 space-y-3">
+      {% for purchase in recent_purchases %}
+        <a href="{% url 'purchase-detail' purchase.id %}" class="block rounded-3xl border border-slate-100 p-4 hover:border-red-200">
+          <p class="font-bold">{{ purchase.number }} · {{ purchase.supplier }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ purchase.destination }} · {{ purchase.get_status_display }} · {{ purchase.created_at|date:"d M Y H:i" }}</p>
+        </a>
+      {% empty %}
+        <p class="text-sm text-slate-500">No purchases for this product yet.</p>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+
+<div class="mt-6">
   {% include "components/activity_timeline.html" %}
 </div>
 {% endblock %}

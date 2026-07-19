@@ -2,9 +2,19 @@
 {% block title %}New purchase | MobiPOS{% endblock %}
 {% block content %}
 <p class="text-sm font-semibold text-red-700">Purchasing</p><h1 class="mt-1 text-3xl font-bold">New multi-line purchase order</h1><p class="mt-2 text-slate-600">Add up to five products in one controlled order. Leave unused additional item rows blank.</p>
-<form method="post" class="mt-6 max-w-4xl space-y-5">{% csrf_token %}
+<form method="post" enctype="multipart/form-data" class="mt-6 max-w-5xl space-y-5">{% csrf_token %}
   {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
-  <section class="card grid gap-5 p-6 md:grid-cols-2"><div class="md:col-span-2"><h2 class="text-lg font-bold">Order details</h2></div>{% include "components/form_field.html" with field=form.supplier %}{% include "components/form_field.html" with field=form.destination %}<div class="md:col-span-2">{% include "components/form_field.html" with field=form.notes %}</div></section>
+  <section class="card grid gap-5 p-6 md:grid-cols-2"><div class="md:col-span-2"><h2 class="text-lg font-bold">Order details</h2></div>{% include "components/form_field.html" with field=form.supplier %}{% include "components/form_field.html" with field=form.destination %}{% include "components/form_field.html" with field=form.supplier_reference %}{% include "components/form_field.html" with field=form.attachment %}<div class="md:col-span-2">{% include "components/form_field.html" with field=form.notes %}</div></section>
+  <section class="card p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Import support</p>
+        <h2 class="mt-1 text-lg font-bold">Supplier document and product lines</h2>
+        <p class="mt-1 text-sm text-slate-500">Attach the supplier invoice or delivery note now. Excel/CSV line import and OCR extraction remain separate workflows, but the source document stays linked to the purchase order.</p>
+      </div>
+      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">Document retained for audit</span>
+    </div>
+  </section>
   <section class="card grid gap-5 p-6 md:grid-cols-3"><div class="md:col-span-3"><p class="text-xs font-bold uppercase tracking-wider text-red-700">Required</p><h2 class="mt-1 text-lg font-bold">First order line</h2></div>{% include "components/form_field.html" with field=form.product %}{% include "components/form_field.html" with field=form.quantity %}{% include "components/form_field.html" with field=form.unit_cost %}</section>
   <details class="card p-6"><summary class="cursor-pointer font-bold">Add more products</summary><p class="mt-2 text-sm text-slate-500">Complete only the additional lines required for this order.</p><div class="mt-5 space-y-5">{% for fields in form.additional_line_groups %}<div class="grid gap-4 rounded-xl bg-slate-50 p-4 md:grid-cols-3">{% for field in fields %}{% include "components/form_field.html" with field=field %}{% endfor %}</div>{% endfor %}</div></details>
   <div class="flex gap-3"><button class="btn-primary">Create purchase order</button><a href="{% url 'module-overview' 'purchases' %}" class="btn-secondary">Cancel</a></div>

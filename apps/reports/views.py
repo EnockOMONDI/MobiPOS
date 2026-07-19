@@ -3,7 +3,8 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, DecimalField, F, IntegerField, OuterRef, Q, Subquery, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import render
@@ -13,7 +14,8 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.audit.models import AuditEvent
-from apps.catalog.models import Product
+from apps.catalog.models import Brand, Category, Product
+from apps.catalog.permissions import can_view_product_costs
 from apps.contacts.models import Contact
 from apps.commissions.models import CommissionAccrual, CommissionPayout
 from apps.expenses.models import Expense
@@ -28,7 +30,7 @@ from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, PurchaseS
 from apps.repairs.models import RepairTicket
 from apps.sales.models import Sale, SaleReturn
 from apps.transfers.models import StockTransfer, TransferStatus
-from .exporting import safe_csv_row
+from .exporting import build_simple_pdf, safe_csv_row
 
 
 BRANCH_LOOKUPS = {
@@ -615,6 +617,210 @@ MODULE_DETAIL_URLS = {
 }
 
 
+def _product_register(request, title):
+    organization = request.organization
+    can_view_costs = can_view_product_costs(request.user, organization)
+    branches = accessible_branches_for(request.user, organization) if organization else Branch.objects.all()
+    queryset = Product.objects.none()
+    if organization:
+        queryset = Product.objects.filter(organization=organization)
+    elif request.user.is_platform_admin or request.user.is_superuser:
+        queryset = Product.objects.all()
+
+    balance_subquery = StockBalance.objects.filter(
+        product=OuterRef("pk"),
+        location__branch__in=branches,
+    )
+    available_unit_subquery = StockUnit.objects.filter(
+        product=OuterRef("pk"),
+        location__branch__in=branches,
+        status=SerialStatus.AVAILABLE,
+    )
+    sold_unit_subquery = StockUnit.objects.filter(
+        product=OuterRef("pk"),
+        status=SerialStatus.SOLD,
+    ).filter(
+        Q(location__branch__in=branches)
+        | Q(saleline__sale__location__branch__in=branches)
+        | Q(movements__location__branch__in=branches)
+    )
+    if organization:
+        balance_subquery = balance_subquery.filter(organization=organization)
+        available_unit_subquery = available_unit_subquery.filter(organization=organization)
+        sold_unit_subquery = sold_unit_subquery.filter(organization=organization)
+
+    queryset = queryset.select_related("category", "brand").annotate(
+        scoped_stock_total=Coalesce(
+            Subquery(
+                balance_subquery.values("product").annotate(total=Sum("quantity")).values("total")[:1],
+                output_field=DecimalField(max_digits=14, decimal_places=3),
+            ),
+            Value(0),
+            output_field=DecimalField(max_digits=14, decimal_places=3),
+        ),
+        available_serial_count=Coalesce(
+            Subquery(
+                available_unit_subquery.values("product").annotate(total=Count("id")).values("total")[:1],
+                output_field=IntegerField(),
+            ),
+            Value(0),
+            output_field=IntegerField(),
+        ),
+        sold_serial_count=Coalesce(
+            Subquery(
+                sold_unit_subquery.values("product").annotate(total=Count("id", distinct=True)).values("total")[:1],
+                output_field=IntegerField(),
+            ),
+            Value(0),
+            output_field=IntegerField(),
+        ),
+    )
+
+    query = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "").strip()
+    tracking = request.GET.get("tracking", "").strip()
+    stock_status = request.GET.get("stock_status", "").strip()
+    category_id = request.GET.get("category", "").strip()
+    brand_id = request.GET.get("brand", "").strip()
+
+    if query:
+        queryset = queryset.filter(
+            Q(name__icontains=query)
+            | Q(sku__icontains=query)
+            | Q(barcode__icontains=query)
+            | Q(stock_units__serial_number__icontains=query)
+            | Q(stock_units__secondary_serial__icontains=query)
+        ).distinct()
+    if status in {"active", "inactive"}:
+        queryset = queryset.filter(is_active=status == "active")
+    if tracking == "serialized":
+        queryset = queryset.filter(is_serialized=True)
+    elif tracking == "quantity":
+        queryset = queryset.filter(is_serialized=False)
+    if category_id:
+        queryset = queryset.filter(category_id=category_id)
+    if brand_id:
+        queryset = queryset.filter(brand_id=brand_id)
+    if stock_status == "in_stock":
+        queryset = queryset.filter(scoped_stock_total__gt=0)
+    elif stock_status == "out_of_stock":
+        queryset = queryset.filter(scoped_stock_total__lte=0)
+    elif stock_status == "low_stock":
+        queryset = queryset.filter(is_stocked=True, scoped_stock_total__gt=0, scoped_stock_total__lte=F("reorder_level"))
+
+    queryset = queryset.order_by("name", "sku")
+
+    export_headers = [
+        "Product", "SKU", "Barcode", "Category", "Brand", "Tracking",
+        "Current stock", "Available IMEIs", "Sold IMEIs", "Selling price", "Active",
+    ]
+    if can_view_costs:
+        export_headers.extend(["Cost price", "Margin amount", "Margin percent"])
+
+    def product_export_rows():
+        for product in queryset:
+            row = [
+                product.name,
+                product.sku,
+                product.barcode,
+                product.category.name if product.category else "",
+                product.brand.name if product.brand else "",
+                "Serialized / IMEI" if product.is_serialized else "Quantity",
+                product.scoped_stock_total,
+                product.available_serial_count,
+                product.sold_serial_count,
+                product.selling_price,
+                "Yes" if product.is_active else "No",
+            ]
+            if can_view_costs:
+                margin_amount = product.selling_price - product.cost_price
+                margin_percent = (margin_amount / product.selling_price * 100) if product.selling_price else 0
+                row.extend([product.cost_price, margin_amount, f"{margin_percent:.2f}"])
+            yield row
+
+    if request.GET.get("format") == "csv":
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="products.csv"'
+        writer = csv.writer(response)
+        writer.writerow(export_headers)
+        for row in product_export_rows():
+            writer.writerow(safe_csv_row(row))
+        return response
+    if request.GET.get("format") == "pdf":
+        response = HttpResponse(
+            build_simple_pdf(title="MobiPOS Products", headers=export_headers, rows=list(product_export_rows())),
+            content_type="application/pdf",
+        )
+        response["Content-Disposition"] = 'attachment; filename="products.pdf"'
+        return response
+
+    page_obj = Paginator(queryset, 25).get_page(request.GET.get("page"))
+    page_products = list(page_obj.object_list)
+    product_ids = [product.id for product in page_products]
+    location_summaries = {}
+    if product_ids:
+        for balance in StockBalance.objects.filter(
+            organization=organization,
+            product_id__in=product_ids,
+            location__branch__in=branches,
+        ).select_related("location", "location__branch").order_by("location__branch__name", "location__name"):
+            location_summaries.setdefault(balance.product_id, []).append(balance)
+
+    rows = []
+    for product in page_products:
+        margin_amount = product.selling_price - product.cost_price
+        margin_percent = (margin_amount / product.selling_price * 100) if product.selling_price else 0
+        rows.append({
+            "product": product,
+            "detail_url": reverse("product-detail", args=[product.pk]),
+            "stock_total": product.scoped_stock_total,
+            "available_serial_count": product.available_serial_count,
+            "sold_serial_count": product.sold_serial_count,
+            "balances": location_summaries.get(product.id, [])[:4],
+            "balance_count": len(location_summaries.get(product.id, [])),
+            "is_low_stock": product.is_stocked and product.scoped_stock_total > 0 and product.scoped_stock_total <= product.reorder_level,
+            "is_out_of_stock": product.is_stocked and product.scoped_stock_total <= 0,
+            "margin_amount": margin_amount,
+            "margin_percent": margin_percent,
+            "values": [product.name, product.sku, product.selling_price, product.is_serialized],
+        })
+
+    base_queryset = Product.objects.filter(organization=organization) if organization else Product.objects.all()
+    category_options = Category.objects.filter(organization=organization, is_active=True).order_by("name") if organization else Category.objects.none()
+    brand_options = Brand.objects.filter(organization=organization, is_active=True).order_by("name") if organization else Brand.objects.none()
+    balance_filters = {"product__in": queryset, "location__branch__in": branches}
+    unit_filters = {"product__in": queryset, "location__branch__in": branches}
+    if organization:
+        balance_filters["organization"] = organization
+        unit_filters["organization"] = organization
+    metrics = {
+        "products": queryset.count(),
+        "available_stock": StockBalance.objects.filter(**balance_filters).aggregate(total=Sum("quantity"))["total"] or 0,
+        "available_serials": StockUnit.objects.filter(**unit_filters, status=SerialStatus.AVAILABLE).count(),
+        "low_stock": queryset.filter(is_stocked=True, scoped_stock_total__gt=0, scoped_stock_total__lte=F("reorder_level")).count(),
+        "all_products": base_queryset.count(),
+    }
+
+    return render(request, "catalog/register.html", {
+        "title": title,
+        "rows": rows,
+        "page_obj": page_obj,
+        "query": query,
+        "status": status,
+        "tracking": tracking,
+        "stock_status": stock_status,
+        "selected_category": category_id,
+        "selected_brand": brand_id,
+        "category_options": category_options,
+        "brand_options": brand_options,
+        "metrics": metrics,
+        "can_view_costs": can_view_costs,
+        "can_add_product": user_has_organization_permission(request.user, organization, "catalog.add_product") if organization else request.user.is_superuser,
+        "supports_status_filter": True,
+        "has_detail_pages": True,
+    })
+
+
 @login_required
 def module_overview(request, module):
     if module not in MODULES:
@@ -629,6 +835,8 @@ def module_overview(request, module):
         if not user_has_organization_permission(request.user, request.organization, permission):
             raise PermissionDenied(f"Permission {permission} is required.")
     title, model, fields = MODULES[module]
+    if module == "products":
+        return _product_register(request, title)
     queryset = model.objects.none()
     if request.organization:
         queryset = _scope_to_user_branches(
@@ -667,6 +875,14 @@ def module_overview(request, module):
         writer = csv.writer(response)
         writer.writerow(headers)
         writer.writerows(safe_csv_row(getattr(item, field) for field in fields) for item in queryset)
+        return response
+    if request.GET.get("format") == "pdf":
+        rows_for_pdf = ([getattr(item, field) for field in fields] for item in queryset[:80])
+        response = HttpResponse(
+            build_simple_pdf(title=f"MobiPOS {title}", headers=headers, rows=list(rows_for_pdf)),
+            content_type="application/pdf",
+        )
+        response["Content-Disposition"] = f'attachment; filename="{module}.pdf"'
         return response
     page_obj = Paginator(queryset, 25).get_page(request.GET.get("page"))
     detail_url_name = MODULE_DETAIL_URLS.get(module)
@@ -727,20 +943,31 @@ def global_search(request):
 @organization_permission_required("inventory.view_stockunit")
 def imei_history(request):
     query = request.GET.get("q", "").strip()
+    status = request.GET.get("status", "").strip()
     branches = accessible_branches_for(request.user, request.organization)
-    units = StockUnit.objects.none()
+    units = StockUnit.objects.filter(
+        organization=request.organization,
+    ).filter(
+        Q(location__branch__in=branches)
+        | Q(saleline__sale__location__branch__in=branches)
+        | Q(movements__location__branch__in=branches)
+    ).select_related("product", "location", "location__branch").distinct()
+    if query:
+        units = units.filter(
+            Q(serial_number__icontains=query)
+            | Q(secondary_serial__icontains=query)
+            | Q(product__name__icontains=query)
+            | Q(product__sku__icontains=query)
+        )
+    valid_statuses = {choice.value for choice in SerialStatus}
+    if status in valid_statuses:
+        units = units.filter(status=status)
+    units = units.order_by("product__name", "serial_number")
     unit = None
     movements = StockMovement.objects.none()
     sales = Sale.objects.none()
     purchases = PurchaseOrder.objects.none()
     if query and request.organization:
-        units = StockUnit.objects.filter(
-            organization=request.organization,
-        ).filter(
-            Q(location__branch__in=branches)
-            | Q(saleline__sale__location__branch__in=branches)
-            | Q(movements__location__branch__in=branches)
-        ).filter(Q(serial_number__icontains=query) | Q(secondary_serial__icontains=query)).select_related("product", "location").distinct()
         unit = units.first()
         if unit:
             movements = StockMovement.objects.filter(
@@ -757,11 +984,31 @@ def imei_history(request):
                 lines__product=unit.product,
                 destination__branch__in=branches,
             ).select_related("supplier", "destination").distinct()[:10]
+    page_obj = Paginator(units, 25).get_page(request.GET.get("page"))
+    scoped_units = StockUnit.objects.filter(
+        organization=request.organization,
+    ).filter(
+        Q(location__branch__in=branches)
+        | Q(saleline__sale__location__branch__in=branches)
+        | Q(movements__location__branch__in=branches)
+    ).distinct()
     return render(request, "reports/imei_history.html", {
         "query": query,
-        "units": units[:25],
+        "status": status,
+        "status_options": SerialStatus.choices,
+        "units": page_obj.object_list,
+        "page_obj": page_obj,
         "unit": unit,
         "movements": movements,
         "sales": sales,
         "purchases": purchases,
+        "metrics": {
+            "total": scoped_units.count(),
+            "available": scoped_units.filter(status=SerialStatus.AVAILABLE).count(),
+            "sold": scoped_units.filter(status=SerialStatus.SOLD).count(),
+            "in_transfer": scoped_units.filter(status=SerialStatus.IN_TRANSFER).count(),
+            "exceptions": scoped_units.filter(
+                status__in=(SerialStatus.DAMAGED, SerialStatus.WARRANTY_REPAIR, SerialStatus.WRITTEN_OFF)
+            ).count(),
+        },
     })

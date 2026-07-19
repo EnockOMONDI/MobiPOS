@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Wireless earbuds">
+  <defs>
+    <linearGradient id="case" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e2e8f0"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="48" fill="#111827"/>
+  <circle cx="600" cy="120" r="100" fill="#ef4444" opacity=".35"/>
+  <rect x="235" y="305" width="330" height="135" rx="56" fill="url(#case)"/>
+  <path d="M280 300c-20-90 28-150 85-118 45 25 34 98-18 118z" fill="#f8fafc"/>
+  <path d="M520 300c20-90-28-150-85-118-45 25-34 98 18 118z" fill="#f8fafc"/>
+  <rect x="325" y="235" width="42" height="150" rx="21" fill="#f8fafc"/>
+  <rect x="433" y="235" width="42" height="150" rx="21" fill="#f8fafc"/>
+  <circle cx="346" cy="232" r="30" fill="#e2e8f0"/>
+  <circle cx="454" cy="232" r="30" fill="#e2e8f0"/>
+  <text x="400" y="524" text-anchor="middle" font-family="Arial, sans-serif" font-size="36" font-weight="800" fill="#ffffff">Wireless Earbuds Pro</text>
+</svg>

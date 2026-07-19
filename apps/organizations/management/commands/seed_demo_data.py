@@ -309,6 +309,7 @@ class Command(BaseCommand):
             defaults={
                 "category": phones, "brand": brand, "name": "A07 64GB/4GB",
                 "barcode": f"{organization.slug}-PHONE", "is_serialized": True,
+                "image_url": "/static/img/products/a07-phone.svg",
                 "warranty_days": 365, "cost_price": Decimal("15000.00"),
                 "selling_price": Decimal("18600.00"), "tax_rate": Decimal("16.00"),
             },
@@ -318,6 +319,7 @@ class Command(BaseCommand):
             defaults={
                 "category": phones, "brand": brand, "name": "S24 Ultra 256GB",
                 "barcode": f"{organization.slug}-S24", "is_serialized": True,
+                "image_url": "/static/img/products/s24-phone.svg",
                 "warranty_days": 365, "cost_price": Decimal("118000.00"),
                 "selling_price": Decimal("139500.00"), "tax_rate": Decimal("16.00"),
             },
@@ -327,6 +329,7 @@ class Command(BaseCommand):
             defaults={
                 "category": accessories, "brand": brand, "name": "20W Fast Charger",
                 "barcode": f"{organization.slug}-CHARGER", "is_serialized": False,
+                "image_url": "/static/img/products/charger-20w.svg",
                 "warranty_days": 90, "cost_price": Decimal("850.00"),
                 "selling_price": Decimal("1500.00"), "tax_rate": Decimal("16.00"),
             },
@@ -336,6 +339,7 @@ class Command(BaseCommand):
             defaults={
                 "category": accessories, "brand": brand, "name": "Wireless Earbuds Pro",
                 "barcode": f"{organization.slug}-EARBUDS", "is_serialized": False,
+                "image_url": "/static/img/products/earbuds-pro.svg",
                 "warranty_days": 180, "cost_price": Decimal("2400.00"),
                 "selling_price": Decimal("4200.00"), "tax_rate": Decimal("16.00"),
             },
