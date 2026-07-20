@@ -10,7 +10,7 @@ from apps.audit.services import record_audit_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from .document_extraction import extract_purchase_document_text
 from .forms import PurchaseOrderForm, ReceivePurchaseLineForm, SupplierReturnForm
-from .models import PurchaseDiscrepancy, PurchaseOrder, PurchaseOrderLine, SupplierReturn
+from .models import PurchaseDiscrepancy, PurchaseDocumentExtractionStatus, PurchaseOrder, PurchaseOrderLine, SupplierReturn
 from .services import (
     approve_purchase_order,
     complete_supplier_return,
@@ -81,7 +81,11 @@ def purchase_extract_document(request, order_id):
         else:
             messages.error(request, text)
     except ValidationError as error:
-        messages.error(request, error.message)
+        message = error.message if hasattr(error, "message") else "; ".join(error.messages)
+        order.extraction_status = PurchaseDocumentExtractionStatus.FAILED
+        order.extracted_text = message
+        order.save(update_fields=["extraction_status", "extracted_text", "updated_at"])
+        messages.error(request, message)
     return redirect("purchase-detail", order_id=order.id)
 
 

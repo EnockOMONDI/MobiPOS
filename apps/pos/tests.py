@@ -118,7 +118,7 @@ def test_offline_invoice_sync_accepts_csrf_meta_token_with_http_only_cookie():
 
     response = csrf_client.post(
         reverse("pos-offline-sync"),
-        data=json.dumps({"invoices": [{"client_reference": "csrf-local-001", "lines": [{"sku": "A07"}]}]}),
+        data=json.dumps({"invoices": [{"client_reference": "csrf-local-001", "lines": [{"product": "A07"}]}]}),
         content_type="application/json",
         HTTP_X_CSRFTOKEN=match.group(1),
     )
@@ -146,16 +146,54 @@ def test_offline_invoice_sync_queues_client_payload(client):
 
     response = client.post(
         reverse("pos-offline-sync"),
-        data=json.dumps({"invoices": [{"client_reference": "local-001", "lines": [{"sku": "A07"}]}]}),
+        data=json.dumps({
+            "invoices": [{
+                "client_reference": "local-001",
+                "lines": [{"product": "A07", "serial": "350111111111111", "quantity": "1", "total": "100"}],
+                "payment_snapshot": {
+                    "new_customer_name": "Private Customer",
+                    "new_customer_phone": "+254799999999",
+                    "cash_reference": "MPESA-SECRET",
+                },
+            }]
+        }),
         content_type="application/json",
     )
 
     assert response.status_code == 200
     assert response.json()["queued"] == 1
+    assert response.json()["accepted"] == ["local-001"]
     queue = OfflineInvoiceQueue.objects.get(organization=org, client_reference="local-001")
     assert queue.location == location
     assert queue.cashier == user
-    assert queue.payload["lines"][0]["sku"] == "A07"
+    assert queue.payload["lines"][0]["product"] == "A07"
+    assert "serial" not in queue.payload["lines"][0]
+    assert "payment_snapshot" not in queue.payload
+    assert "Private Customer" not in json.dumps(queue.payload)
+
+
+@pytest.mark.django_db
+def test_offline_invoice_sync_rejects_oversized_batches_without_truncating(client):
+    user = User.objects.create_user(username="offlinebatch", email="offlinebatch@example.com")
+    org = Organization.objects.create(name="Offline Batch Retail", slug="offline-batch-retail", status="active")
+    company = Company.objects.create(organization=org, name="Offline Batch Ltd", code="OFFB")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="OFFBMAIN")
+    Location.objects.create(organization=org, branch=branch, name="POS", code="OFFBPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+    invoices = [{"client_reference": f"local-{index:03d}", "lines": []} for index in range(51)]
+
+    response = client.post(
+        reverse("pos-offline-sync"),
+        data=json.dumps({"invoices": invoices}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 413
+    assert response.json()["accepted"] == []
+    assert OfflineInvoiceQueue.objects.filter(organization=org).count() == 0
 
 
 @pytest.mark.django_db

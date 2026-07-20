@@ -197,6 +197,41 @@ def test_purchase_document_extraction_reads_csv_attachment(client, tmp_path):
 
 
 @pytest.mark.django_db
+def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="mobipos-electronics")
+    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "supplier-invoice.xlsx",
+        b"not a real workbook",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        client.post(reverse("purchase-create"), {
+            "supplier": supplier.id,
+            "destination": destination.id,
+            "supplier_reference": "BAD-XLSX-9001",
+            "attachment": upload,
+            "product": product.id,
+            "quantity": "4",
+            "unit_cost": "800",
+        })
+        order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+        response = client.post(reverse("purchase-extract-document", args=[order.id]), follow=True)
+        order.refresh_from_db()
+
+    assert response.status_code == 200
+    assert order.extraction_status == "failed"
+    assert "Could not read the spreadsheet attachment" in order.extracted_text
+    assert b"Could not read the spreadsheet attachment" in response.content
+
+
+@pytest.mark.django_db
 def test_purchase_create_rejects_cross_tenant_supplier(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="alice")

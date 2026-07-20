@@ -130,6 +130,7 @@ class Command(BaseCommand):
             is_staff=True,
             is_superuser=True,
             is_platform_admin=True,
+            is_demo_account=True,
         )
 
         for dataset in DEMO_ORGANIZATIONS:
@@ -160,6 +161,7 @@ class Command(BaseCommand):
             is_staff=False,
             is_superuser=False,
             is_platform_admin=False,
+            is_demo_account=True,
         )
 
         company_values = dataset["company"]
@@ -664,6 +666,7 @@ class Command(BaseCommand):
                 is_staff=False,
                 is_superuser=False,
                 is_platform_admin=False,
+                is_demo_account=True,
             )
             membership, _ = Membership.objects.update_or_create(
                 organization=organization,

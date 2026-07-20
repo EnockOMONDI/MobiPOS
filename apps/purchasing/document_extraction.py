@@ -1,9 +1,11 @@
 import csv
 from io import BytesIO, StringIO
 from pathlib import Path
+from zipfile import BadZipFile
 
 from django.core.exceptions import ValidationError
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from .models import PurchaseDocumentExtractionStatus
 
@@ -19,11 +21,14 @@ def extract_purchase_document_text(upload):
 
     name = upload.name or ""
     extension = Path(name).suffix.lower()
-    upload.open("rb")
     try:
-        content = upload.read()
-    finally:
-        upload.close()
+        upload.open("rb")
+        try:
+            content = upload.read()
+        finally:
+            upload.close()
+    except OSError as error:
+        raise ValidationError(f"Could not read the supplier document: {error}") from error
 
     if extension in TEXT_EXTENSIONS:
         text = content.decode("utf-8-sig", errors="replace")
@@ -35,7 +40,10 @@ def extract_purchase_document_text(upload):
         return PurchaseDocumentExtractionStatus.EXTRACTED, text[:12000]
 
     if extension in SPREADSHEET_EXTENSIONS:
-        workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        try:
+            workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
+        except (BadZipFile, InvalidFileException, OSError, ValueError) as error:
+            raise ValidationError(f"Could not read the spreadsheet attachment: {error}") from error
         lines = []
         for sheet in workbook.worksheets[:3]:
             lines.append(f"[{sheet.title}]")

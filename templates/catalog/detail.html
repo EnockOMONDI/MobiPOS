@@ -69,7 +69,7 @@
         <h2 class="text-lg font-bold">Product configuration</h2>
         <p class="mt-1 text-sm text-slate-500">Commercial rules used by purchasing, stock, POS, warranty and reporting workflows.</p>
       </div>
-      <a href="{% url 'imei-history' %}?q={{ product.sku }}" class="btn-secondary text-xs">Open IMEI search</a>
+      <a href="{% url 'imei-history' %}?q={{ product.sku|urlencode }}" class="btn-secondary text-xs">Open IMEI search</a>
     </div>
     <dl class="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       <div><dt class="text-xs font-bold uppercase tracking-wider text-slate-400">Category</dt><dd class="mt-1 font-semibold">{{ product.category }}</dd></div>
@@ -107,7 +107,7 @@
       <a href="{% url 'batch-serial-intake' %}" class="btn-secondary justify-center">Batch IMEI intake</a>
       <a href="{% url 'transfer-create' %}" class="btn-secondary justify-center">Create transfer</a>
       <a href="{% url 'agent-allocation-create' %}" class="btn-secondary justify-center">Allocate to agent</a>
-      <a href="{% url 'module-overview' 'movements' %}?q={{ product.sku }}" class="btn-secondary justify-center">View movement ledger</a>
+      <a href="{% url 'module-overview' 'movements' %}?q={{ product.sku|urlencode }}" class="btn-secondary justify-center">View movement ledger</a>
     </div>
     <div class="mt-6 rounded-3xl bg-slate-50 p-4 text-sm text-slate-600">
       <p class="font-bold text-slate-900">Audit rule</p>
@@ -127,7 +127,7 @@
         <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="p-3">IMEI / serial</th><th class="p-3">Location</th><th class="p-3">Status</th></tr></thead>
         <tbody class="divide-y divide-slate-100">
           {% for unit in available_units %}
-            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
+            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number|urlencode }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
           {% empty %}
             <tr><td class="p-4 text-slate-500" colspan="3">No available IMEIs in accessible branches.</td></tr>
           {% endfor %}
@@ -146,7 +146,7 @@
         <thead class="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th class="p-3">IMEI / serial</th><th class="p-3">Last location</th><th class="p-3">Status</th></tr></thead>
         <tbody class="divide-y divide-slate-100">
           {% for unit in sold_units %}
-            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location|default:"Released to customer" }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
+            <tr><td class="p-3 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ unit.serial_number|urlencode }}">{{ unit.serial_number }}</a>{% if unit.secondary_serial %}<p class="text-xs text-slate-500">{{ unit.secondary_serial }}</p>{% endif %}</td><td class="p-3">{{ unit.location|default:"Released to customer" }}</td><td class="p-3">{{ unit.get_status_display }}</td></tr>
           {% empty %}
             <tr><td class="p-4 text-slate-500" colspan="3">No sold IMEIs in accessible branches.</td></tr>
           {% endfor %}

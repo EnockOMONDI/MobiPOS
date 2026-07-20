@@ -25,6 +25,27 @@ from apps.sales.services import calculate_sale_line_amounts, complete_sale, crea
 from .forms import CartCompleteForm, CartItemForm, CashMovementForm, CheckoutForm, CloseSessionForm, OpenSessionForm
 from .models import CashMovement, CashMovementType, OfflineInvoiceQueue, POSSession, SessionStatus
 
+OFFLINE_SYNC_BATCH_LIMIT = 50
+
+
+def _safe_offline_invoice_payload(invoice):
+    lines = invoice.get("lines") if isinstance(invoice.get("lines"), list) else []
+    safe_lines = []
+    for line in lines[:100]:
+        if not isinstance(line, dict):
+            continue
+        safe_lines.append({
+            "product": str(line.get("product") or "")[:200],
+            "quantity": str(line.get("quantity") or "")[:40],
+            "total": str(line.get("total") or "")[:40],
+        })
+    return {
+        "client_reference": str(invoice.get("client_reference") or invoice.get("clientReference") or "").strip()[:120],
+        "created_at": str(invoice.get("created_at") or "")[:80],
+        "location": str(invoice.get("location") or "")[:120],
+        "lines": safe_lines,
+    }
+
 
 def _apply_cash_change(*, allocations, paid_amount, total):
     change_due = Decimal("0")
@@ -353,21 +374,35 @@ def offline_invoice_sync(request):
     invoices = payload.get("invoices")
     if not isinstance(invoices, list):
         return JsonResponse({"ok": False, "error": "Expected an invoices list."}, status=400)
-    queued = 0
-    for invoice in invoices[:50]:
+    if len(invoices) > OFFLINE_SYNC_BATCH_LIMIT:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": f"Sync a maximum of {OFFLINE_SYNC_BATCH_LIMIT} offline drafts at a time.",
+                "accepted": [],
+                "rejected": [{"reason": "batch_limit_exceeded"}],
+            },
+            status=413,
+        )
+    accepted = []
+    rejected = []
+    for invoice in invoices:
         if not isinstance(invoice, dict):
+            rejected.append({"client_reference": "", "reason": "invalid_invoice"})
             continue
-        client_reference = str(invoice.get("client_reference") or invoice.get("clientReference") or "").strip()
+        safe_invoice = _safe_offline_invoice_payload(invoice)
+        client_reference = safe_invoice["client_reference"]
         if not client_reference:
+            rejected.append({"client_reference": "", "reason": "missing_client_reference"})
             continue
         queue, created = OfflineInvoiceQueue.objects.update_or_create(
             organization=request.organization,
-            client_reference=client_reference[:120],
+            client_reference=client_reference,
             defaults={
                 "session": session,
                 "location": location,
                 "cashier": request.user,
-                "payload": invoice,
+                "payload": safe_invoice,
                 "status": "queued",
                 "error_message": "",
                 "synced_at": timezone.now(),
@@ -375,8 +410,8 @@ def offline_invoice_sync(request):
         )
         if created:
             record_audit_event(action="pos.offline_invoice_queued", actor=request.user, organization=request.organization, target=queue, request=request)
-        queued += 1
-    return JsonResponse({"ok": True, "queued": queued})
+        accepted.append(client_reference)
+    return JsonResponse({"ok": True, "queued": len(accepted), "accepted": accepted, "rejected": rejected})
 
 
 @login_required

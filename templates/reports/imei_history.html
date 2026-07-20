@@ -60,11 +60,11 @@
       <tbody class="divide-y divide-slate-100">
         {% for device in units %}
           <tr class="hover:bg-slate-50">
-            <td class="px-5 py-4 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ device.serial_number }}">{{ device.serial_number }}</a>{% if device.secondary_serial %}<p class="text-xs text-slate-500">{{ device.secondary_serial }}</p>{% endif %}</td>
+            <td class="px-5 py-4 font-bold"><a class="text-red-700" href="{% url 'imei-history' %}?q={{ device.serial_number|urlencode }}">{{ device.serial_number }}</a>{% if device.secondary_serial %}<p class="text-xs text-slate-500">{{ device.secondary_serial }}</p>{% endif %}</td>
             <td class="px-5 py-4"><a href="{% url 'product-detail' device.product.id %}" class="font-semibold text-slate-900 hover:text-red-700">{{ device.product.name }}</a><p class="text-xs text-slate-500">SKU {{ device.product.sku }}</p></td>
             <td class="px-5 py-4">{{ device.location|default:"Released to customer" }}{% if device.location %}<p class="text-xs text-slate-500">{{ device.location.branch }}</p>{% endif %}</td>
             <td class="px-5 py-4"><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{{ device.get_status_display }}</span></td>
-            <td class="px-5 py-4"><a href="{% url 'imei-history' %}?q={{ device.serial_number }}" class="btn-secondary text-xs">View history</a></td>
+            <td class="px-5 py-4"><a href="{% url 'imei-history' %}?q={{ device.serial_number|urlencode }}" class="btn-secondary text-xs">View history</a></td>
           </tr>
         {% empty %}
           <tr><td class="px-5 py-8 text-center text-slate-500" colspan="5">No serialized devices match the current filters.</td></tr>

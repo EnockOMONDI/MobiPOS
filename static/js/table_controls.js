@@ -25,12 +25,17 @@
       }
       var controls = document.querySelectorAll('[data-column-controls="' + key + '"] [data-column-index]');
       controls.forEach(function (control) {
-        if (Object.prototype.hasOwnProperty.call(saved, control.dataset.columnIndex)) {
-          control.checked = Boolean(saved[control.dataset.columnIndex]);
+        var columnKey = control.dataset.columnKey || control.dataset.columnIndex;
+        if (Object.prototype.hasOwnProperty.call(saved, columnKey)) {
+          control.checked = Boolean(saved[columnKey]);
         }
         control.addEventListener("change", function () {
-          saved[control.dataset.columnIndex] = control.checked;
-          localStorage.setItem(storageKey, JSON.stringify(saved));
+          saved[columnKey] = control.checked;
+          try {
+            localStorage.setItem(storageKey, JSON.stringify(saved));
+          } catch (error) {
+            // Column visibility still applies for this page when browser storage is unavailable.
+          }
           applyColumnState(table, key);
         });
       });

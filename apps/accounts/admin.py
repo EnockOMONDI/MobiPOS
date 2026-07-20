@@ -13,15 +13,16 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
         "first_name",
         "last_name",
         "is_platform_admin",
+        "is_demo_account",
         "is_active",
     )
-    list_filter = ("is_platform_admin", "is_staff", "is_active")
+    list_filter = ("is_platform_admin", "is_demo_account", "is_staff", "is_active")
     search_fields = ("username", "email", "first_name", "last_name", "phone_number")
     fieldsets = BaseUserAdmin.fieldsets + (
-        ("MobiPOS", {"fields": ("phone_number", "is_platform_admin")}),
+        ("MobiPOS", {"fields": ("phone_number", "is_platform_admin", "is_demo_account")}),
     )
     add_fieldsets = BaseUserAdmin.add_fieldsets + (
-        ("MobiPOS", {"fields": ("email", "phone_number", "is_platform_admin")}),
+        ("MobiPOS", {"fields": ("email", "phone_number", "is_platform_admin", "is_demo_account")}),
     )
 
     def has_module_permission(self, request):

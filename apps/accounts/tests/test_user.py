@@ -9,3 +9,4 @@ def test_user_uses_uuid_and_unique_email():
 
     assert user.pk is not None
     assert str(user) == "owner@example.com"
+    assert not user.is_demo_account

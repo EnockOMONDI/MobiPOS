@@ -89,6 +89,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "apps.accounts.context_processors.usertour_context",
                 "apps.organizations.context_processors.organization_context",
             ],
         },
@@ -190,6 +191,9 @@ CELERY_BEAT_SCHEDULE = {
 INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "sandbox")
 PRIVILEGED_OTP_REQUIRED = os.environ.get("PRIVILEGED_OTP_REQUIRED", "false").lower() == "true"
 POS_AUTO_OPEN_SESSION = os.environ.get("POS_AUTO_OPEN_SESSION", "true").lower() == "true"
+USERTOUR_ENABLED = os.environ.get("USERTOUR_ENABLED", "false").lower() == "true"
+USERTOUR_TOKEN = os.environ.get("USERTOUR_TOKEN", "")
+USERTOUR_DEMO_ONLY = os.environ.get("USERTOUR_DEMO_ONLY", "true").lower() == "true"
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "MobiPOS <no-reply@mobipos.local>")
 

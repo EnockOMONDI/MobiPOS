@@ -161,6 +161,7 @@
   {% else %}
     <main class="min-h-screen px-4 py-12 sm:px-6">{% block anonymous_content %}{% endblock %}</main>
   {% endif %}
+  {% include "includes/usertour.html" %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

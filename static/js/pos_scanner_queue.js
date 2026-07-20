@@ -17,17 +17,23 @@
   }
 
   function saveQueue(items) {
-    localStorage.setItem(queueKey, JSON.stringify(items));
+    try {
+      localStorage.setItem(queueKey, JSON.stringify(items));
+    } catch (error) {
+      var status = document.querySelector("[data-offline-status]");
+      if (status) status.textContent = "Browser storage is unavailable. Offline drafts cannot be saved on this device.";
+      return false;
+    }
     document.querySelectorAll("[data-offline-count]").forEach(function (node) {
       node.textContent = String(items.length);
     });
+    return true;
   }
 
   function snapshotInvoice() {
     var saleLines = Array.prototype.slice.call(document.querySelectorAll("[data-cart-line]")).map(function (line) {
       return {
         product: line.dataset.productName || "",
-        serial: line.dataset.serial || "",
         quantity: line.dataset.quantity || "",
         total: line.dataset.total || ""
       };
@@ -36,13 +42,7 @@
       client_reference: "offline-" + Date.now() + "-" + Math.random().toString(16).slice(2),
       created_at: new Date().toISOString(),
       location: document.querySelector("[data-pos-location]")?.dataset.posLocation || "",
-      lines: saleLines,
-      payment_snapshot: Array.prototype.slice.call(document.querySelectorAll(
-        "input[name$='_amount'], input[name$='_reference'], select[name='customer'], input[name^='new_customer_']"
-      )).reduce(function (acc, field) {
-        acc[field.name] = field.value;
-        return acc;
-      }, {})
+      lines: saleLines
     };
   }
 
@@ -57,8 +57,9 @@
       saveButton.addEventListener("click", function () {
         var queue = loadQueue();
         queue.push(snapshotInvoice());
-        saveQueue(queue);
-        if (status) status.textContent = "Saved locally. It will sync when connectivity is available.";
+        if (saveQueue(queue) && status) {
+          status.textContent = "Saved locally without customer or payment details. Revalidate online before completing the sale.";
+        }
       });
     }
 
@@ -79,8 +80,18 @@
         });
       }).then(function (result) {
         if (result.ok && result.body.ok) {
-          saveQueue([]);
-          if (status) status.textContent = "Offline invoice queue synced.";
+          var accepted = result.body.accepted || [];
+          var acceptedLookup = accepted.reduce(function (acc, reference) {
+            acc[reference] = true;
+            return acc;
+          }, {});
+          var retained = loadQueue().filter(function (invoice) {
+            return !acceptedLookup[invoice.client_reference];
+          });
+          saveQueue(retained);
+          if (status) {
+            status.textContent = accepted.length + " offline draft(s) synced; " + retained.length + " retained for review.";
+          }
         } else if (status) {
           status.textContent = result.body.error || "Offline invoice sync failed.";
         }
