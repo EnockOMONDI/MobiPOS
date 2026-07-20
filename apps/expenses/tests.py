@@ -10,9 +10,9 @@ from apps.organizations.models import Branch, Membership, MembershipStatus, Orga
 @pytest.mark.django_db
 def test_expense_submit_and_owner_approve(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.filter(organization=organization).order_by("code").first()
     client.force_login(user)
 
     response = client.post(reverse("expense-create"), {
@@ -33,9 +33,9 @@ def test_expense_submit_and_owner_approve(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_approve_expense(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
-    owner = User.objects.get(username="alice")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.filter(organization=organization).order_by("code").first()
+    owner = User.objects.get(username="brian")
     staff = User.objects.create_user(username="expense-staff", email="expense-staff@example.com")
     Membership.objects.create(
         organization=organization,

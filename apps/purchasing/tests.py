@@ -17,10 +17,10 @@ from apps.operations.models import Payable
 @pytest.mark.django_db
 def test_purchase_staff_workflow_receives_stock(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -43,10 +43,10 @@ def test_purchase_staff_workflow_receives_stock(client):
 @pytest.mark.django_db
 def test_purchase_create_supports_multiple_lines(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     products = list(Product.objects.filter(organization=organization).order_by("sku")[:2])
     client.force_login(user)
 
@@ -66,10 +66,10 @@ def test_purchase_create_supports_multiple_lines(client):
 @pytest.mark.django_db
 def test_purchase_create_stores_supplier_reference_and_attachment(client, tmp_path):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -103,10 +103,10 @@ def test_purchase_create_stores_supplier_reference_and_attachment(client, tmp_pa
 @pytest.mark.django_db
 def test_purchase_create_rejects_unsupported_supplier_attachment(client, tmp_path):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -134,10 +134,10 @@ def test_purchase_create_rejects_unsupported_supplier_attachment(client, tmp_pat
 @pytest.mark.django_db
 def test_purchase_create_rejects_oversized_supplier_attachment(client, tmp_path):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -165,10 +165,10 @@ def test_purchase_create_rejects_oversized_supplier_attachment(client, tmp_path)
 @pytest.mark.django_db
 def test_purchase_document_extraction_reads_csv_attachment(client, tmp_path):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -199,10 +199,10 @@ def test_purchase_document_extraction_reads_csv_attachment(client, tmp_path):
 @pytest.mark.django_db
 def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_path):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -234,11 +234,16 @@ def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_
 @pytest.mark.django_db
 def test_purchase_create_rejects_cross_tenant_supplier(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    own_org = Organization.objects.get(slug="mobipos-electronics")
-    other_org = Organization.objects.get(slug="nairobi-mobile-hub")
-    supplier = Contact.objects.get(organization=other_org, contact_type="supplier")
-    destination = Location.objects.get(organization=own_org, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    own_org = Organization.objects.get(slug="nairobi-mobile-hub")
+    other_org = Organization.objects.create(name="Other Purchase Tenant", slug="other-purchase-tenant", status="active")
+    supplier = Contact.objects.create(
+        organization=other_org,
+        contact_type="supplier",
+        name="Other Tenant Supplier",
+        phone_number="+254744400001",
+    )
+    destination = Location.objects.filter(organization=own_org, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=own_org, sku="CHG-20W")
     client.force_login(user)
 
@@ -254,13 +259,13 @@ def test_purchase_create_rejects_cross_tenant_supplier(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_approve_purchase(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     staff = User.objects.create_user(username="purchase-staff", email="purchase-staff@example.com")
     Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     order = PurchaseOrder.objects.create(
         organization=organization, number="PO-AUTH",
-        supplier=Contact.objects.get(organization=organization, contact_type="supplier"),
-        destination=Location.objects.get(organization=organization, location_type="warehouse"),
+        supplier=Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first(),
+        destination=Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first(),
         ordered_on="2026-06-12", created_by=staff,
     )
     client.force_login(staff)
@@ -273,21 +278,21 @@ def test_non_owner_cannot_approve_purchase(client):
 @pytest.mark.django_db
 def test_purchase_form_rejects_unassigned_branch_location(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     staff = User.objects.create_user(username="limited-purchaser", email="limited-purchaser@example.com")
     membership = Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     role = Role.objects.create(organization=organization, name="Purchaser", code="purchaser")
     role.permissions.add(Permission.objects.get(content_type__app_label="purchasing", codename="add_purchaseorder"))
     membership.roles.add(role)
-    assigned_branch = Branch.objects.get(organization=organization)
+    assigned_branch = Branch.objects.get(organization=organization, code="WST")
     membership.branches.add(assigned_branch)
-    company = Company.objects.get(organization=organization)
+    company = Company.objects.filter(organization=organization).order_by("code").first()
     hidden_branch = Branch.objects.create(organization=organization, company=company, name="Hidden", code="HIDDEN")
     hidden_location = Location.objects.create(
         organization=organization, branch=hidden_branch, name="Hidden Warehouse",
         code="HIDDEN-WH", location_type="warehouse",
     )
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(staff)
 
@@ -303,10 +308,10 @@ def test_purchase_form_rejects_unassigned_branch_location(client):
 @pytest.mark.django_db
 def test_supplier_return_reduces_stock_and_payable(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    supplier = Contact.objects.get(organization=organization, contact_type="supplier")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
     client.post(reverse("purchase-create"), {
@@ -334,13 +339,13 @@ def test_supplier_return_reduces_stock_and_payable(client):
 @pytest.mark.django_db
 def test_purchase_receipt_discrepancy_records_only_accepted_stock(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
     client.post(reverse("purchase-create"), {
-        "supplier": Contact.objects.get(organization=organization, contact_type="supplier").id,
+        "supplier": Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first().id,
         "destination": destination.id, "product": product.id, "quantity": "5", "unit_cost": "800",
     })
     order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")

@@ -11,8 +11,8 @@ from apps.sales.models import Sale, SaleReturn
 @pytest.mark.django_db
 def test_return_workflow_restocks_and_creates_refund(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     sale = Sale.objects.get(organization=organization, number="DEMO-SALE-001")
     original_balance = StockBalance.objects.get(organization=organization, product=sale.lines.get().product, location=sale.location).quantity
     client.force_login(user)
@@ -38,8 +38,8 @@ def test_return_workflow_restocks_and_creates_refund(client):
 @pytest.mark.django_db
 def test_partial_line_return_allocates_refund_across_split_payments(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     sale = Sale.objects.get(organization=organization, number="DEMO-SALE-001")
     line = sale.lines.get()
     line.quantity = 2

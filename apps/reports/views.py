@@ -1,5 +1,6 @@
 import csv
 from datetime import timedelta
+from urllib.parse import quote
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -28,8 +29,8 @@ from apps.payments.models import Payment, Refund
 from apps.pos.models import POSSession
 from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, PurchaseStatus, SupplierReturn
 from apps.repairs.models import RepairTicket
-from apps.sales.models import Sale, SaleReturn
-from apps.transfers.models import StockTransfer, TransferStatus
+from apps.sales.models import Sale, SaleReturn, SaleStatus
+from apps.transfers.models import StockTransfer, TransferDiscrepancy, TransferStatus
 from .exporting import build_simple_pdf, safe_csv_row
 
 
@@ -270,6 +271,439 @@ def product_features(request):
     return render(request, "marketing/features.html", {"feature_groups": PRODUCT_FEATURE_GROUPS})
 
 
+def _business_flow_organization(request):
+    organization = getattr(request, "organization", None)
+    if request.user.is_authenticated and organization:
+        return organization
+    return (
+        Organization.objects.filter(slug="nairobi-mobile-hub").first()
+        or Organization.objects.filter(status="active").order_by("created_at").first()
+    )
+
+
+def _demo_user_label(username, fallback):
+    user = User.objects.filter(username=username).first()
+    if not user:
+        return fallback
+    full_name = user.get_full_name().strip()
+    return full_name or user.username.title()
+
+
+def _flow_metric(value, singular, plural=None):
+    label = singular if value == 1 else (plural or f"{singular}s")
+    return f"{value} {label}"
+
+
+def _business_flow_counts(organization):
+    if not organization:
+        return {
+            "branches": 0,
+            "locations": 0,
+            "warehouse_locations": 0,
+            "pos_locations": 0,
+            "agent_locations": 0,
+            "repair_locations": 0,
+            "memberships": 0,
+            "roles": 0,
+            "agents": 0,
+            "dsas": 0,
+            "products": 0,
+            "serialized_units": 0,
+            "available_units": 0,
+            "sold_units": 0,
+            "stock_movements": 0,
+            "purchases": 0,
+            "purchase_discrepancies": 0,
+            "supplier_returns": 0,
+            "transfers": 0,
+            "transfer_discrepancies": 0,
+            "sales": 0,
+            "credit_sales": 0,
+            "payments": 0,
+            "receivables": 0,
+            "returns": 0,
+            "refunds": 0,
+            "commissions": 0,
+            "commission_payouts": 0,
+            "repairs": 0,
+            "expenses": 0,
+            "audit_events": 0,
+            "login_events": 0,
+        }
+    return {
+        "branches": Branch.objects.filter(organization=organization, is_active=True).count(),
+        "locations": Location.objects.filter(organization=organization, is_active=True).count(),
+        "warehouse_locations": Location.objects.filter(organization=organization, location_type=LocationType.WAREHOUSE).count(),
+        "pos_locations": Location.objects.filter(organization=organization, location_type=LocationType.POS).count(),
+        "agent_locations": Location.objects.filter(organization=organization, location_type=LocationType.AGENT).count(),
+        "repair_locations": Location.objects.filter(organization=organization, location_type=LocationType.REPAIR).count(),
+        "memberships": Membership.objects.filter(organization=organization, status="active").count(),
+        "roles": Role.objects.filter(organization=organization, is_active=True).count(),
+        "agents": AgentProfile.objects.filter(organization=organization, profile_type="agent").count(),
+        "dsas": AgentProfile.objects.filter(organization=organization, profile_type="dsa").count(),
+        "products": Product.objects.filter(organization=organization, is_active=True).count(),
+        "serialized_units": StockUnit.objects.filter(organization=organization).count(),
+        "available_units": StockUnit.objects.filter(organization=organization, status=SerialStatus.AVAILABLE).count(),
+        "sold_units": StockUnit.objects.filter(organization=organization, status=SerialStatus.SOLD).count(),
+        "stock_movements": StockMovement.objects.filter(organization=organization).count(),
+        "purchases": PurchaseOrder.objects.filter(organization=organization).count(),
+        "purchase_discrepancies": PurchaseDiscrepancy.objects.filter(organization=organization).count(),
+        "supplier_returns": SupplierReturn.objects.filter(organization=organization).count(),
+        "transfers": StockTransfer.objects.filter(organization=organization).count(),
+        "transfer_discrepancies": TransferDiscrepancy.objects.filter(organization=organization).count(),
+        "sales": Sale.objects.filter(organization=organization).exclude(status=SaleStatus.DRAFT).count(),
+        "credit_sales": Sale.objects.filter(organization=organization, sale_channel="credit").count(),
+        "payments": Payment.objects.filter(organization=organization).count(),
+        "receivables": Receivable.objects.filter(organization=organization).count(),
+        "returns": SaleReturn.objects.filter(organization=organization).count(),
+        "refunds": Refund.objects.filter(organization=organization).count(),
+        "commissions": CommissionAccrual.objects.filter(organization=organization).count(),
+        "commission_payouts": CommissionPayout.objects.filter(organization=organization).count(),
+        "repairs": RepairTicket.objects.filter(organization=organization).count(),
+        "expenses": Expense.objects.filter(organization=organization).count(),
+        "audit_events": AuditEvent.objects.filter(organization=organization).count(),
+        "login_events": AuditEvent.objects.filter(organization=organization, action="auth.login").count(),
+    }
+
+
+def _demo_url(url):
+    return f"{reverse('login')}?demo=brian&next={quote(url, safe='/?=&')}"
+
+
+def _node(title, summary, metric, url_name, *, args=None, status="Implemented", query=""):
+    url = reverse(url_name, args=args or [])
+    if query:
+        url = f"{url}?{query}"
+    return {
+        "title": title,
+        "summary": summary,
+        "metric": metric,
+        "url": url,
+        "demo_url": _demo_url(url),
+        "status": status,
+    }
+
+
+def _business_flow_sections(counts):
+    return [
+        {
+            "title": "Stock Enters The Business",
+            "summary": "Purchasing creates the supplier record, receiving confirms what arrived, and batch intake turns delivered IMEIs into traceable stock.",
+            "nodes": [
+                _node("Supplier Purchase", "Create the supplier order and attach invoice evidence.", _flow_metric(counts["purchases"], "purchase"), "purchase-create"),
+                _node("Receiving Check", "Record received items and raise supplier discrepancies when delivery is short or damaged.", _flow_metric(counts["purchase_discrepancies"], "discrepancy", "discrepancies"), "module-overview", args=["purchase-discrepancies"]),
+                _node("Batch IMEI Intake", "Paste, upload CSV, or upload Excel serials and IMEIs for fast stock registration.", _flow_metric(counts["serialized_units"], "serialized device"), "batch-serial-intake"),
+                _node("Supplier Return", "Send damaged or incorrect stock back with traceable supplier-return records.", _flow_metric(counts["supplier_returns"], "supplier return"), "supplier-return-create"),
+            ],
+        },
+        {
+            "title": "Stock Moves Across Branches And Custodians",
+            "summary": "Devices move through warehouse, branch, POS, repair bench and agent custody without retyping identifiers.",
+            "nodes": [
+                _node("Device Search", "Find a phone by IMEI, serial, product, status, branch or custodian.", _flow_metric(counts["available_units"], "available unit"), "device-search"),
+                _node("Branch Transfer", "Dispatch and receive stock between warehouse, branches and POS locations.", _flow_metric(counts["transfers"], "transfer"), "transfer-create"),
+                _node("Agent Allocation", "Allocate selected devices to agent custody and retain ownership history.", _flow_metric(counts["agent_locations"], "agent custody location"), "agent-allocation-create"),
+                _node("Discrepancy Resolution", "Resolve transfer differences through a controlled exception workflow.", _flow_metric(counts["transfer_discrepancies"], "transfer exception"), "exception-report"),
+            ],
+        },
+        {
+            "title": "Sales, Payments And Credit Are Controlled",
+            "summary": "Cashiers sell serialized phones and accessories, record split payments, handle credit and keep sessions reconcilable.",
+            "nodes": [
+                _node("POS Cart", "Add products, reserve IMEIs, complete sales and print receipts.", _flow_metric(counts["sales"], "sale"), "pos-cart"),
+                _node("Payments", "Record cash, M-Pesa, card, bank, credit and split-payment workflows.", _flow_metric(counts["payments"], "payment"), "module-overview", args=["payments"], status="Workflow level"),
+                _node("Credit Follow-Up", "Track receivables, outstanding balances, limits and installment schedules.", _flow_metric(counts["receivables"], "receivable"), "operational-report"),
+                _node("Returns And Refunds", "Request returns, approve outcomes and record refunds without deleting history.", _flow_metric(counts["returns"], "return"), "module-overview", args=["returns"]),
+            ],
+        },
+        {
+            "title": "After-Sales, People And Oversight Stay Visible",
+            "summary": "Repairs, commissions, expenses, approvals and activity reports keep operational accountability visible to management.",
+            "nodes": [
+                _node("Repair Desk", "Track warranty and repair tickets with parts usage.", _flow_metric(counts["repairs"], "repair ticket"), "repair-create"),
+                _node("Commission Payouts", "Accrue, approve and pay commission from qualifying sales.", _flow_metric(counts["commissions"], "commission accrual"), "commission-payout-create"),
+                _node("Activity Report", "See login, user, stock, sale, approval and integration activity.", _flow_metric(counts["audit_events"], "audit event"), "activity-report"),
+                _node("Owner Reports", "Review operations, retail analytics, agent stock, IMEI history and exceptions.", _flow_metric(counts["stock_movements"], "stock movement"), "operational-report"),
+            ],
+        },
+    ]
+
+
+def _business_role_flows(counts):
+    roles = [
+        {
+            "role": "Owner",
+            "slug": "owner-journey",
+            "person": _demo_user_label("brian", "Brian"),
+            "focus": "Owns the full business view: branches, money, stock risk, approvals, staff activity and growth decisions.",
+            "proof": [
+                _flow_metric(counts["branches"], "branch"),
+                _flow_metric(counts["locations"], "location"),
+                _flow_metric(counts["audit_events"], "audit event"),
+                _flow_metric(counts["login_events"], "login event"),
+            ],
+            "steps": [
+                ("Open dashboard", reverse("dashboard")),
+                ("Review activity report", reverse("activity-report")),
+                ("Check operational report", reverse("operational-report")),
+                ("Inspect agent network", reverse("agent-network-report")),
+                ("Trace IMEI history", reverse("imei-history")),
+            ],
+        },
+        {
+            "role": "Branch Manager",
+            "slug": "manager-journey",
+            "person": _demo_user_label("manager", "Mary"),
+            "focus": "Controls branch execution: approvals, transfers, customer credit, cash discipline and exceptions.",
+            "proof": [
+                _flow_metric(counts["transfers"], "transfer"),
+                _flow_metric(counts["purchase_discrepancies"], "purchase discrepancy", "purchase discrepancies"),
+                _flow_metric(counts["receivables"], "receivable"),
+            ],
+            "steps": [
+                ("Review approvals", reverse("approval-inbox")),
+                ("Create stock transfer", reverse("transfer-create")),
+                ("Resolve exceptions", reverse("exception-report")),
+                ("Review branch report", reverse("operational-report")),
+            ],
+        },
+        {
+            "role": "Inventory Officer",
+            "slug": "inventory-journey",
+            "person": _demo_user_label("inventory", "Grace"),
+            "focus": "Maintains inventory accuracy by receiving stock, uploading IMEIs, moving stock and correcting exceptions.",
+            "proof": [
+                _flow_metric(counts["serialized_units"], "serialized unit"),
+                _flow_metric(counts["available_units"], "available unit"),
+                _flow_metric(counts["stock_movements"], "ledger movement"),
+            ],
+            "steps": [
+                ("Batch IMEI intake", reverse("batch-serial-intake")),
+                ("Search devices", reverse("device-search")),
+                ("Create adjustment", reverse("stock-adjustment-create")),
+                ("Trace IMEI report", reverse("imei-history")),
+            ],
+        },
+        {
+            "role": "Cashier",
+            "slug": "cashier-journey",
+            "person": _demo_user_label("cashier", "Kevin"),
+            "focus": "Runs the POS: opens a session, sells devices and accessories, records payments and reconciles cash.",
+            "proof": [
+                _flow_metric(counts["sales"], "sale"),
+                _flow_metric(counts["payments"], "payment"),
+                _flow_metric(counts["sold_units"], "sold device"),
+            ],
+            "steps": [
+                ("Open POS session", reverse("session-open")),
+                ("Use POS cart", reverse("pos-cart")),
+                ("Checkout", reverse("pos-checkout")),
+                ("Review sales", reverse("module-overview", args=["sales"])),
+            ],
+        },
+        {
+            "role": "Field Agent",
+            "slug": "agent-journey",
+            "person": _demo_user_label("agent", "Renny"),
+            "focus": "Receives allocated devices, works with DSAs, completes field sales and remains accountable for custody.",
+            "proof": [
+                _flow_metric(counts["agents"], "agent"),
+                _flow_metric(counts["agent_locations"], "agent custody location"),
+                _flow_metric(counts["credit_sales"], "credit sale"),
+            ],
+            "steps": [
+                ("View agent report", reverse("agent-network-report")),
+                ("Allocate stock", reverse("agent-allocation-create")),
+                ("Recall stock", reverse("agent-recall-create")),
+                ("Register DSA", reverse("agent-dsa-create")),
+            ],
+        },
+        {
+            "role": "Direct Sales Agent",
+            "slug": "dsa-journey",
+            "person": _demo_user_label("dsa", "Faith"),
+            "focus": "Supports field sales under an agent while the business keeps supervisor, customer and stock accountability.",
+            "proof": [
+                _flow_metric(counts["dsas"], "DSA"),
+                _flow_metric(counts["credit_sales"], "credit workflow"),
+                _flow_metric(counts["commissions"], "commission record"),
+            ],
+            "steps": [
+                ("Review agent network", reverse("agent-network-report")),
+                ("Create customer", reverse("contact-create")),
+                ("Support POS sale", reverse("pos-cart")),
+                ("Check commissions", reverse("module-overview", args=["commissions"])),
+            ],
+        },
+        {
+            "role": "Technician",
+            "slug": "technician-journey",
+            "person": _demo_user_label("technician", "Daniel"),
+            "focus": "Handles warranty and repair tickets, uses parts from stock and updates repair outcomes.",
+            "proof": [
+                _flow_metric(counts["repairs"], "repair ticket"),
+                _flow_metric(counts["repair_locations"], "repair location"),
+                _flow_metric(counts["returns"], "after-sales return"),
+            ],
+            "steps": [
+                ("Create repair ticket", reverse("repair-create")),
+                ("Open repair register", reverse("module-overview", args=["repairs"])),
+                ("Search IMEI", reverse("imei-history")),
+                ("Review exceptions", reverse("exception-report")),
+            ],
+        },
+    ]
+    for role in roles:
+        role["steps"] = [(label, _demo_url(url)) for label, url in role["steps"]]
+    return roles
+
+
+def _journey_step(label, detail, url_name, *, args=None, status="Complete"):
+    url = reverse(url_name, args=args or [])
+    return {"label": label, "detail": detail, "url": _demo_url(url), "status": status}
+
+
+def _business_journeys(counts):
+    return [
+        {
+            "slug": "full-business-flow",
+            "title": "Full Business Flow",
+            "audience": "Owners, directors and operations managers",
+            "status": "Complete foundation",
+            "purpose": "Shows how MobiPOS controls the journey from supplier purchase to warehouse, branch, agent, customer sale, repair, audit trail and management reporting.",
+            "flow": ["Supplier", "Purchase", "Receiving", "IMEI Intake", "Warehouse", "Transfer", "POS/Agent", "Customer", "Reports"],
+            "steps": [
+                _journey_step("Create supplier purchase", "Record the supplier, destination, costs, attachment and purchase status before stock enters the business.", "purchase-create"),
+                _journey_step("Receive and validate stock", "Confirm what arrived, flag supplier discrepancies and keep payables linked to the purchase.", "module-overview", args=["purchase-discrepancies"]),
+                _journey_step("Register IMEIs in batch", "Use pasted scanner lines, CSV or Excel to create centralized serialized inventory records.", "batch-serial-intake"),
+                _journey_step("Move stock with custody", "Transfer selected items to branches, POS locations, repair benches or agent custody without retyping IMEIs.", "transfer-create"),
+                _journey_step("Sell, repair or report", "Complete POS sales, repair tickets, commissions and owner reports while stock and activity history remain traceable.", "pos-cart"),
+            ],
+            "notes": [
+                f"{counts['serialized_units']} serialized devices and {counts['stock_movements']} stock movements in the current demo dataset.",
+                "All critical inventory changes should produce audit and stock movement evidence.",
+            ],
+        },
+        {
+            "slug": "purchasing-intake",
+            "title": "Purchasing And Stock Intake Journey",
+            "audience": "Purchasing officers and warehouse teams",
+            "status": "Complete with OCR boundary",
+            "purpose": "Controls how new products and serialized devices enter the business and become available stock.",
+            "flow": ["Supplier Order", "Invoice Upload", "Receive", "Discrepancy Check", "Batch IMEI Upload", "Available Stock"],
+            "steps": [
+                _journey_step("Create purchase", "Choose supplier, destination, purchase date, status and supporting document.", "purchase-create"),
+                _journey_step("Extract document text", "CSV, text and Excel documents can be extracted for review. Scanned PDFs/images are marked for manual review until OCR is connected.", "module-overview", args=["purchases"], status="Partial"),
+                _journey_step("Receive stock", "Record received quantities and create discrepancy records when delivery differs from the order.", "module-overview", args=["purchases"]),
+                _journey_step("Upload IMEI batch", "Paste lines or upload CSV/Excel to validate duplicates and register devices.", "batch-serial-intake"),
+            ],
+            "notes": [
+                "Real OCR for scanned supplier invoices is still pending.",
+                "Excel/CSV intake is implemented and covered by tests.",
+            ],
+        },
+        {
+            "slug": "inventory-transfer",
+            "title": "Inventory, Transfer And Custody Journey",
+            "audience": "Inventory officers, branch managers and agents",
+            "status": "Complete foundation",
+            "purpose": "Keeps every phone traceable as it moves between warehouse, branch, POS, repair desk and field custody.",
+            "flow": ["Search Device", "Select IMEIs", "Dispatch", "Receive", "Resolve Difference", "Update Custody"],
+            "steps": [
+                _journey_step("Search inventory", "Find products or devices by IMEI, serial, SKU, barcode, model, status, branch or custodian.", "device-search"),
+                _journey_step("Create transfer", "Select source and destination, choose existing stock and dispatch it for receiving.", "transfer-create"),
+                _journey_step("Allocate to agent", "Move selected devices into agent custody with ownership history.", "agent-allocation-create"),
+                _journey_step("Resolve discrepancies", "Review missing, excess or damaged transfer items through exception reports.", "exception-report"),
+            ],
+            "notes": [
+                "Manual IMEI re-entry should not be required during transfer selection.",
+                "Discrepancies require review instead of silent stock edits.",
+            ],
+        },
+        {
+            "slug": "pos-payments",
+            "title": "POS, Payments And Credit Journey",
+            "audience": "Cashiers, branch managers and finance teams",
+            "status": "Workflow complete; live providers pending",
+            "purpose": "Supports day-to-day selling, split payments, customer credit, receipts and session reconciliation.",
+            "flow": ["Open Session", "Scan Item", "Select IMEI", "Choose Customer", "Record Payment", "Receipt", "Reconcile"],
+            "steps": [
+                _journey_step("Open register", "Cashier starts a session at an assigned POS location.", "session-open"),
+                _journey_step("Build cart", "Scan or type product, SKU, barcode, serial or IMEI. Serialized products require an available IMEI.", "pos-cart"),
+                _journey_step("Record payment", "Capture cash, M-Pesa reference, card, bank, credit or split payment.", "pos-checkout", status="Workflow level"),
+                _journey_step("Review sales", "Managers and owners review sales, payment status, returns and outstanding balances.", "module-overview", args=["sales"]),
+            ],
+            "notes": [
+                "M-Pesa is recordable today, but live Daraja confirmation is not connected.",
+                "Offline invoices are local drafts requiring online validation; production policy still needs a final decision.",
+            ],
+        },
+        {
+            "slug": "agent-dsa",
+            "title": "Agent And DSA Journey",
+            "audience": "Owners, managers, agents and direct sales agents",
+            "status": "Complete foundation",
+            "purpose": "Models field sales hierarchy, onboarding documents, stock allocation, recall and accountability.",
+            "flow": ["Register Agent", "Upload ID", "Approve", "Register DSA", "Allocate Stock", "Sell/Return", "Report"],
+            "steps": [
+                _journey_step("Create agent profile", "Capture legal identity, phone, branch, supervising manager and verification status.", "tenant-user-create"),
+                _journey_step("Upload ID documents", "Attach national ID or onboarding documents for compliance and review from an agent profile.", "agent-network-report"),
+                _journey_step("Register DSA", "Link DSA profiles under supervising agents where business policy permits.", "agent-dsa-create"),
+                _journey_step("Allocate and recall stock", "Move selected devices into and out of agent custody with audit records.", "agent-allocation-create"),
+                _journey_step("Review network report", "Owner checks agent/DSA stock, activity and accountability.", "agent-network-report"),
+            ],
+            "notes": [
+                "Direct camera capture is browser upload based, not a separate native scanning app.",
+                "Advanced productivity recommendations remain future work.",
+            ],
+        },
+        {
+            "slug": "after-sales-audit",
+            "title": "After-Sales, Audit And Reporting Journey",
+            "audience": "Owners, technicians, finance users and auditors",
+            "status": "Complete foundation",
+            "purpose": "Keeps repairs, returns, refunds, expenses, commissions and staff activity visible after the original sale.",
+            "flow": ["Return/Repair", "Parts Usage", "Refund/Commission", "Expense", "Audit Event", "Owner Report"],
+            "steps": [
+                _journey_step("Create repair ticket", "Track customer, device, warranty and repair status.", "repair-create"),
+                _journey_step("Record returns/refunds", "Handle after-sales corrections without deleting completed sale history.", "module-overview", args=["returns"]),
+                _journey_step("Approve/pay commissions", "Review commission accruals and payout status.", "commission-payout-create"),
+                _journey_step("Review activity", "Owner checks logins, actions, privileged changes and suspicious activity.", "activity-report"),
+                _journey_step("Open operational reports", "Use reports for stock, sales, aging, exceptions, IMEI history and agent visibility.", "operational-report"),
+            ],
+            "notes": [
+                "Completed operational records should be corrected through reversals and approvals, not deletion.",
+                "Sentry and production monitoring still require deployment configuration.",
+            ],
+        },
+    ]
+
+
+def business_flow(request):
+    organization = _business_flow_organization(request)
+    counts = _business_flow_counts(organization)
+    stats = [
+        {"label": "Branches", "value": counts["branches"], "detail": "operating locations across the company"},
+        {"label": "Locations", "value": counts["locations"], "detail": "warehouses, POS points, repair benches and agent custody"},
+        {"label": "Serialized Devices", "value": counts["serialized_units"], "detail": "phones and tracked stock units in the inventory database"},
+        {"label": "Stock Movements", "value": counts["stock_movements"], "detail": "append-only ledger entries proving what changed"},
+        {"label": "Sales", "value": counts["sales"], "detail": "completed, paid, part-paid or returned sales workflows"},
+        {"label": "Audit Events", "value": counts["audit_events"], "detail": "recorded actions visible to owners and auditors"},
+    ]
+    return render(
+        request,
+        "marketing/business_flow.html",
+        {
+            "flow_organization": organization,
+            "flow_counts": counts,
+            "flow_stats": stats,
+            "flow_sections": _business_flow_sections(counts),
+            "role_flows": _business_role_flows(counts),
+            "journeys": _business_journeys(counts),
+        },
+    )
+
+
 def _scope_to_user_branches(queryset, model, request):
     branches = accessible_branches_for(request.user, request.organization)
     if model is StockTransfer:
@@ -435,20 +869,6 @@ def demo_access(request):
             "role": "Owner demo",
             "organization": "Nairobi Mobile Hub",
             "best_for": "Full business owner view with Kenyan mobile retail demo data.",
-        },
-        {
-            "username": "alice",
-            "password": "DemoPass123!",
-            "role": "Owner demo",
-            "organization": "MobiPOS Electronics",
-            "best_for": "Testing dashboards, inventory, sales, transfers, users, and reports.",
-        },
-        {
-            "username": "platformadmin",
-            "password": "AdminPass123!",
-            "role": "Platform administrator",
-            "organization": "Platform-wide",
-            "best_for": "Platform administration and Django admin access.",
         },
     ]
     return render(request, "marketing/demo.html", {"demo_accounts": demo_accounts})

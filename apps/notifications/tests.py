@@ -10,7 +10,7 @@ from apps.organizations.models import Membership, MembershipStatus, Organization
 @pytest.mark.django_db
 def test_user_can_mark_own_notification_read(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
+    user = User.objects.get(username="brian")
     notification = Notification.objects.get(recipient=user)
     client.force_login(user)
 

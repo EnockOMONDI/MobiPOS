@@ -30,6 +30,17 @@ def test_demo_access_page_lists_brian_demo_credentials(client):
     assert b"Login as Brian" in response.content
     assert b"brian" in response.content
     assert b"DemoPass123!" in response.content
+    assert b"platformadmin" not in response.content
+    assert b"AdminPass123!" not in response.content
+
+
+@pytest.mark.django_db
+def test_login_demo_page_does_not_expose_platform_admin_credentials(client):
+    response = client.get(f"{reverse('login')}?demo=platformadmin")
+
+    assert response.status_code == 200
+    assert b"DemoPass123!" in response.content
+    assert b"AdminPass123!" not in response.content
 
 
 @pytest.mark.django_db
@@ -45,6 +56,76 @@ def test_product_features_page_explains_completion_statuses_and_scenarios(client
     assert b"Business scenario" in response.content
     assert b"IMEI and serial lifecycle tracking" in response.content
     assert b"Live M-Pesa confirmation and reconciliation" in response.content
+
+
+@pytest.mark.django_db
+def test_business_flow_page_handles_empty_database_and_keeps_nodes_clickable(client):
+    response = client.get(reverse("business-flow"))
+
+    assert response.status_code == 200
+    assert b"How MobiPOS" in response.content
+    assert b"runs the business." in response.content
+    assert b"MobiPOS Business Flow Documentation" in response.content
+    assert b"Quick navigation" in response.content
+    assert b"Role-based flows" in response.content
+    assert b"Mermaid-style visual flowchart" in response.content
+    assert b"Status notes" in response.content
+    assert b"No seeded organization yet" in response.content
+    assert reverse("purchase-create") in response.content.decode()
+    assert reverse("batch-serial-intake") in response.content.decode()
+    assert reverse("agent-network-report") in response.content.decode()
+    assert "demo=brian&amp;next=/purchases/new/" in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_business_flow_page_uses_rich_seeded_demo_data(client):
+    from django.core.management import call_command
+
+    call_command("seed_demo_data")
+
+    response = client.get(reverse("business-flow"))
+
+    assert response.status_code == 200
+    assert response.context["flow_organization"].slug == "nairobi-mobile-hub"
+    assert response.context["flow_counts"]["branches"] >= 3
+    assert response.context["flow_counts"]["serialized_units"] >= 60
+    assert response.context["flow_counts"]["audit_events"] >= 8
+    assert b"Nairobi Mobile Hub" in response.content
+    assert b"Brian" in response.content
+    assert b"Owner" in response.content
+    assert b"Inventory Officer" in response.content
+    assert b"Cashier" in response.content
+    assert b"Field Agent" in response.content
+    assert b"Direct Sales Agent" in response.content
+    assert b"Technician" in response.content
+    assert b"Supplier Purchase" in response.content
+    assert b"Batch IMEI Intake" in response.content
+    assert b"Agent Allocation" in response.content
+    assert b"Activity Report" in response.content
+    assert b"Full Business Flow" in response.content
+    assert b"Purchasing And Stock Intake Journey" in response.content
+    assert b"Inventory, Transfer And Custody Journey" in response.content
+    assert b"POS, Payments And Credit Journey" in response.content
+    assert b"Agent And DSA Journey" in response.content
+    assert b"After-Sales, Audit And Reporting Journey" in response.content
+    assert b"Live M-Pesa Daraja confirmation and reconciliation remain pending" in response.content
+
+
+@pytest.mark.django_db
+def test_business_flow_page_renders_for_authenticated_demo_owner(client):
+    from django.core.management import call_command
+
+    call_command("seed_demo_data")
+    brian = User.objects.get(username="brian")
+    client.force_login(brian)
+
+    response = client.get(reverse("business-flow"))
+
+    assert response.status_code == 200
+    assert b"MobiPOS Business Flow Documentation" in response.content
+    assert b"Quick navigation" in response.content
+    assert b"Full Business Flow" in response.content
+    assert b"Role-based flows" in response.content
 
 
 @pytest.mark.django_db
@@ -184,8 +265,8 @@ def test_existing_operational_registers_expose_detail_links(client):
     from apps.sales.models import Sale
 
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     sale = Sale.objects.filter(organization=organization).first()
     client.force_login(owner)
 

@@ -13,9 +13,9 @@ from apps.organizations.models import AgentDocument, AgentDocumentType, AgentPro
 @pytest.mark.django_db
 def test_owner_can_create_branch_scoped_user(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     client.force_login(owner)
 
     response = client.post(reverse("tenant-user-create"), {
@@ -32,9 +32,9 @@ def test_owner_can_create_branch_scoped_user(client):
 @pytest.mark.django_db
 def test_owner_can_create_user_with_agent_stock_custody_location(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     client.force_login(owner)
 
     response = client.post(reverse("tenant-user-create"), {
@@ -62,9 +62,9 @@ def test_owner_can_create_user_with_agent_stock_custody_location(client):
 @pytest.mark.django_db
 def test_owner_can_create_agent_profile_during_user_invite(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     client.force_login(owner)
 
     response = client.post(reverse("tenant-user-create"), {
@@ -96,9 +96,9 @@ def test_owner_can_create_agent_profile_during_user_invite(client):
 @pytest.mark.django_db
 def test_owner_can_create_dsa_profile_with_supervising_agent(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     supervisor_user = User.objects.create_user(username="super-agent", email="super-agent@example.com")
     supervisor_membership = Membership.objects.create(
         organization=organization,
@@ -138,11 +138,13 @@ def test_owner_can_create_dsa_profile_with_supervising_agent(client):
 @pytest.mark.django_db
 def test_owner_branch_and_pos_creation_enforce_plan_limits(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    company = Company.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    company = Company.objects.filter(organization=organization).order_by("code").first()
     subscription = Subscription.objects.get(organization=organization)
-    subscription.plan.limits = {"users": 25, "branches": 2, "pos_locations": 2}
+    branch_limit = Branch.objects.filter(organization=organization).count() + 1
+    pos_limit = Location.objects.filter(organization=organization, location_type="pos").count() + 1
+    subscription.plan.limits = {"users": 25, "branches": branch_limit, "pos_locations": pos_limit}
     subscription.plan.save(update_fields=["limits", "updated_at"])
     client.force_login(owner)
 
@@ -156,7 +158,7 @@ def test_owner_branch_and_pos_creation_enforce_plan_limits(client):
         "branch": branch.id, "name": "Second POS", "code": "SECOND-POS", "location_type": "pos",
     })
     assert response.status_code == 302
-    assert Location.objects.filter(organization=organization, location_type="pos").count() == 2
+    assert Location.objects.filter(organization=organization, location_type="pos").count() == pos_limit
 
     response = client.post(reverse("branch-create"), {
         "company": company.id, "name": "Third Branch", "code": "THIRD",
@@ -185,8 +187,8 @@ def test_tenant_role_form_excludes_framework_and_privileged_permissions():
 @pytest.mark.django_db
 def test_owner_can_assign_multiple_roles_and_branches(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     membership = Membership.objects.get(organization=organization, user=owner)
     first_role = Role.objects.create(organization=organization, name="Sales", code="sales-role")
     second_role = Role.objects.create(organization=organization, name="Inventory", code="inventory-role")
@@ -207,9 +209,9 @@ def test_owner_can_assign_multiple_roles_and_branches(client):
 @pytest.mark.django_db
 def test_owner_can_provision_agent_stock_custody_from_access_update(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     staff = User.objects.create_user(username="fieldagent", email="fieldagent@example.com", first_name="Field", last_name="Agent")
     membership = Membership.objects.create(
         organization=organization,
@@ -241,9 +243,9 @@ def test_owner_can_provision_agent_stock_custody_from_access_update(client):
 @pytest.mark.django_db
 def test_owner_can_update_agent_profile_from_access_update(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     staff = User.objects.create_user(username="profile-update-agent", email="profile-update-agent@example.com", first_name="Profile", last_name="Agent")
     membership = Membership.objects.create(
         organization=organization,
@@ -276,9 +278,9 @@ def test_owner_can_update_agent_profile_from_access_update(client):
 @pytest.mark.django_db
 def test_agent_register_and_detail_are_owner_visible(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -303,9 +305,9 @@ def test_agent_register_and_detail_are_owner_visible(client):
 @pytest.mark.django_db
 def test_owner_can_upload_and_download_agent_document(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -343,9 +345,9 @@ def test_owner_can_upload_and_download_agent_document(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_upload_agent_document(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     owner_membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -381,9 +383,9 @@ def test_non_owner_cannot_upload_agent_document(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_download_agent_document(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     owner_membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -420,9 +422,9 @@ def test_non_owner_cannot_download_agent_document(client):
 @pytest.mark.django_db
 def test_owner_can_approve_suspend_and_reactivate_agent_profile(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -461,9 +463,9 @@ def test_owner_can_approve_suspend_and_reactivate_agent_profile(client):
 @pytest.mark.django_db
 def test_owner_can_reject_pending_agent_profile(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -488,9 +490,9 @@ def test_owner_can_reject_pending_agent_profile(client):
 @pytest.mark.django_db
 def test_invalid_agent_profile_decision_does_not_change_status(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     membership = Membership.objects.get(organization=organization, user=owner)
     profile = AgentProfile.objects.create(
         organization=organization,
@@ -513,8 +515,8 @@ def test_invalid_agent_profile_decision_does_not_change_status(client):
 @pytest.mark.django_db
 def test_active_agent_can_register_dsa_when_policy_enabled(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     agent_user = User.objects.create_user(
         username="self-onboard-agent",
         email="self-onboard-agent@example.com",
@@ -572,8 +574,8 @@ def test_active_agent_can_register_dsa_when_policy_enabled(client):
 @pytest.mark.django_db
 def test_agent_cannot_register_dsa_when_policy_disabled(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
     agent_user = User.objects.create_user(username="blocked-agent", email="blocked-agent@example.com")
     agent_membership = Membership.objects.create(
         organization=organization,
@@ -609,9 +611,9 @@ def test_agent_cannot_register_dsa_when_policy_disabled(client):
 @pytest.mark.django_db
 def test_agent_dsa_registration_rejects_unassigned_branch(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    company = Company.objects.get(organization=organization)
-    assigned_branch = Branch.objects.get(organization=organization)
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    company = Company.objects.filter(organization=organization).order_by("code").first()
+    assigned_branch = Branch.objects.get(organization=organization, code="WST")
     unassigned_branch = Branch.objects.create(
         organization=organization,
         company=company,

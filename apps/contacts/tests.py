@@ -11,10 +11,16 @@ from apps.organizations.models import Organization
 @pytest.mark.django_db
 def test_contact_duplicate_validation_and_lifecycle(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     contact = Contact.objects.filter(organization=organization).first()
-    other_contact = Contact.objects.exclude(organization=organization).first()
+    other_org = Organization.objects.create(name="Other Contact Tenant", slug="other-contact-tenant", status="active")
+    other_contact = Contact.objects.create(
+        organization=other_org,
+        contact_type="customer",
+        name="Other Tenant Customer",
+        phone_number="+254733300001",
+    )
     contact.email = "unique-contact@example.com"
     contact.save(update_fields=["email", "updated_at"])
     client.force_login(owner)
@@ -53,10 +59,16 @@ def test_contact_duplicate_validation_and_lifecycle(client):
 @pytest.mark.django_db
 def test_contact_statement_is_tenant_scoped_and_renders_finance_sections(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     contact = Contact.objects.filter(organization=organization, contact_type__in=("customer", "both")).first()
-    other_contact = Contact.objects.exclude(organization=organization).first()
+    other_org = Organization.objects.create(name="Other Statement Tenant", slug="other-statement-tenant", status="active")
+    other_contact = Contact.objects.create(
+        organization=other_org,
+        contact_type="customer",
+        name="Other Statement Customer",
+        phone_number="+254733300002",
+    )
     client.force_login(owner)
 
     response = client.get(reverse("contact-statement", args=[contact.id]))

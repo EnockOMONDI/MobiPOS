@@ -13,9 +13,9 @@ from apps.repairs.models import RepairPartUsage, RepairTicket
 @pytest.mark.django_db
 def test_repair_ticket_workflow(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    branch = Branch.objects.get(organization=organization)
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.filter(organization=organization).order_by("code").first()
     customer = Contact.objects.get(organization=organization, name="Demo Credit Customer")
     client.force_login(user)
 
@@ -35,7 +35,7 @@ def test_repair_ticket_workflow(client):
     assert ticket.warranty
 
     part = Product.objects.get(organization=organization, sku="CHG-20W")
-    location = Location.objects.get(organization=organization, location_type="pos")
+    location = Location.objects.filter(organization=organization, location_type="pos").order_by("code").first()
     before = StockBalance.objects.get(organization=organization, product=part, location=location).quantity
     client.post(reverse("repair-use-part", args=[ticket.id]), {
         "product": part.id, "location": location.id, "quantity": "1",

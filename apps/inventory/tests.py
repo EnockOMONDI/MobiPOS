@@ -90,10 +90,10 @@ def test_stock_unit_rejects_primary_secondary_imei_conflicts():
 @pytest.mark.django_db
 def test_owner_approved_adjustment_posts_ledger_movement(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     product = Product.objects.get(organization=org, sku="CHG-20W")
-    location = Location.objects.get(organization=org, location_type="warehouse")
+    location = Location.objects.filter(organization=org, location_type="warehouse").order_by("code").first()
     client.force_login(user)
 
     response = client.post(reverse("stock-adjustment-create"), {
@@ -112,10 +112,10 @@ def test_owner_approved_adjustment_posts_ledger_movement(client):
 @pytest.mark.django_db
 def test_batch_serial_intake_accepts_pasted_scanner_lines(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     product = Product.objects.filter(organization=org, is_serialized=True).first()
-    location = Location.objects.get(organization=org, location_type="warehouse")
+    location = Location.objects.filter(organization=org, location_type="warehouse").order_by("code").first()
     client.force_login(user)
 
     response = client.post(reverse("batch-serial-intake"), {
@@ -135,10 +135,10 @@ def test_batch_serial_intake_accepts_pasted_scanner_lines(client):
 @pytest.mark.django_db
 def test_batch_serial_intake_reports_duplicate_rows_without_blocking_valid_rows(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     product = Product.objects.filter(organization=org, is_serialized=True).first()
-    location = Location.objects.get(organization=org, location_type="warehouse")
+    location = Location.objects.filter(organization=org, location_type="warehouse").order_by("code").first()
     existing = StockUnit.objects.filter(organization=org).first()
     client.force_login(user)
 
@@ -158,10 +158,10 @@ def test_batch_serial_intake_reports_duplicate_rows_without_blocking_valid_rows(
 @pytest.mark.django_db
 def test_batch_serial_intake_accepts_csv_upload(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     product = Product.objects.filter(organization=org, is_serialized=True).first()
-    location = Location.objects.get(organization=org, location_type="warehouse")
+    location = Location.objects.filter(organization=org, location_type="warehouse").order_by("code").first()
     upload = SimpleUploadedFile(
         "serials.csv",
         b"serial_number,secondary_serial\nCSV-IMEI-001,CSV-IMEI-001B\nCSV-IMEI-002,\n",
@@ -184,10 +184,10 @@ def test_batch_serial_intake_accepts_csv_upload(client):
 @pytest.mark.django_db
 def test_batch_serial_intake_accepts_excel_upload(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     product = Product.objects.filter(organization=org, is_serialized=True).first()
-    location = Location.objects.get(organization=org, location_type="warehouse")
+    location = Location.objects.filter(organization=org, location_type="warehouse").order_by("code").first()
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.append(["serial_number", "secondary_serial"])

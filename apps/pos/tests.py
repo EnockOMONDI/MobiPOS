@@ -361,9 +361,9 @@ def test_explicit_register_open_and_cash_movements_feed_reconciliation(client, s
 def test_owner_can_review_closed_cashier_session(client):
     from django.core.management import call_command
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
-    session = POSSession.objects.get(organization=org)
+    owner = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
+    session = POSSession.objects.get(organization=org, number="DEMO-SESSION-001")
     session.status = "closed"
     session.save(update_fields=["status", "updated_at"])
     client.force_login(owner)

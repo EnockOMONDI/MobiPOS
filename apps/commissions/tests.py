@@ -51,8 +51,8 @@ def test_commission_becomes_payable_after_full_collection():
 @pytest.mark.django_db
 def test_owner_approves_and_pays_commission_batch(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    org = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    org = Organization.objects.get(slug="nairobi-mobile-hub")
     client.force_login(owner)
     today = timezone.localdate()
 
@@ -61,7 +61,7 @@ def test_owner_approves_and_pays_commission_batch(client):
     })
 
     from apps.commissions.models import CommissionPayout
-    payout = CommissionPayout.objects.get(organization=org)
+    payout = CommissionPayout.objects.filter(organization=org, number__startswith="COM-").latest("created_at")
     assert response.status_code == 302
     assert payout.amount > 0
     client.post(reverse("commission-payout-approve", args=[payout.id]))

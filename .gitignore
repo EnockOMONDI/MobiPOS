@@ -23,3 +23,7 @@ venv/
 *.pfx
 secrets/
 credentials/
+db_backups/
+*.dump
+MDFILES/
+pilot/

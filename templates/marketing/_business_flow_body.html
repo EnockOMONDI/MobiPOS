@@ -1,0 +1,247 @@
+<style>
+  .doc-page { margin:-3rem -1rem; min-height:100vh; background:#f8fafc; color:#111827; font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  .doc-top { border-bottom:1px solid #e5e7eb; background:rgba(255,255,255,.94); backdrop-filter:blur(18px); position:sticky; top:0; z-index:20; }
+  .doc-top-inner { max-width:1440px; margin:0 auto; padding:16px 28px; display:flex; align-items:center; justify-content:space-between; gap:24px; }
+  .doc-brand { display:inline-flex; align-items:center; gap:11px; color:#111827; font-weight:950; font-size:22px; text-decoration:none; letter-spacing:-.04em; }
+  .doc-mark { width:40px; height:40px; border-radius:15px; background:linear-gradient(135deg,#dc2626,#991b1b); color:#fff; display:inline-flex; align-items:center; justify-content:center; box-shadow:0 12px 24px rgba(220,38,38,.22); }
+  .doc-top-links { display:flex; align-items:center; gap:20px; font-size:14px; font-weight:850; }
+  .doc-top-links a { color:#4b5563; text-decoration:none; }
+  .doc-demo { border-radius:999px; background:#111827; color:#fff !important; padding:12px 18px; text-decoration:none; }
+  .doc-shell { max-width:1440px; margin:0 auto; display:grid; grid-template-columns:310px minmax(0,1fr); gap:30px; padding:30px 28px 90px; }
+  .doc-sidebar { position:sticky; top:88px; align-self:start; max-height:calc(100vh - 110px); overflow:auto; border:1px solid #e5e7eb; border-radius:26px; background:#fff; box-shadow:0 16px 40px rgba(15,23,42,.06); }
+  .doc-sidebar-head { padding:22px 22px 16px; border-bottom:1px solid #f1f5f9; }
+  .doc-sidebar-head span { display:inline-flex; border-radius:999px; background:#fee2e2; color:#b91c1c; padding:7px 10px; font-size:11px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
+  .doc-sidebar-head h2 { margin:13px 0 0; font-size:22px; letter-spacing:-.05em; line-height:1.05; }
+  .doc-sidebar nav { padding:12px; }
+  .doc-nav-group { margin-bottom:14px; }
+  .doc-nav-title { padding:8px 10px; color:#94a3b8; font-size:11px; font-weight:950; letter-spacing:.1em; text-transform:uppercase; }
+  .doc-nav-link { display:flex; align-items:center; gap:10px; border-radius:15px; padding:10px 11px; color:#475569; text-decoration:none; font-size:13px; font-weight:850; line-height:1.3; }
+  .doc-nav-link:hover { background:#fff1f2; color:#b91c1c; }
+  .doc-dot { width:8px; height:8px; border-radius:50%; background:#dc2626; box-shadow:0 0 0 4px #fee2e2; flex:0 0 auto; }
+  .doc-content { min-width:0; }
+  .doc-hero { border:1px solid #e5e7eb; border-radius:34px; background:#fff; padding:44px; box-shadow:0 24px 70px rgba(15,23,42,.08); }
+  .doc-pill { display:inline-flex; border-radius:999px; background:#fee2e2; color:#b91c1c; padding:9px 14px; font-size:12px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
+  .doc-hero h1 { max-width:900px; margin:20px 0 0; font-size:clamp(42px,6vw,82px); line-height:.93; letter-spacing:-.075em; font-weight:950; }
+  .doc-hero h1 em { display:block; font-family:Georgia,"Times New Roman",serif; font-weight:500; font-style:italic; letter-spacing:-.055em; color:#3f3f46; }
+  .doc-lead { max-width:920px; color:#475569; font-size:18px; line-height:1.75; margin:24px 0 0; }
+  .doc-proof { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; margin-top:30px; }
+  .doc-proof-card { border:1px solid #e5e7eb; border-radius:22px; background:#f8fafc; padding:18px; }
+  .doc-proof-card strong { display:block; font-size:31px; letter-spacing:-.05em; }
+  .doc-proof-card span { display:block; margin-top:3px; font-size:13px; color:#334155; font-weight:900; }
+  .doc-section { margin-top:26px; border:1px solid #e5e7eb; border-radius:30px; background:#fff; padding:34px; box-shadow:0 16px 45px rgba(15,23,42,.045); scroll-margin-top:96px; }
+  .doc-section-head { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:start; }
+  .doc-kicker { color:#dc2626; font-size:12px; font-weight:950; letter-spacing:.11em; text-transform:uppercase; }
+  .doc-section h2 { margin:8px 0 0; font-size:34px; line-height:1.03; letter-spacing:-.055em; }
+  .doc-section p { color:#475569; line-height:1.75; }
+  .doc-status { border-radius:999px; padding:9px 12px; background:#ecfdf5; color:#047857; font-size:12px; font-weight:950; white-space:nowrap; }
+  .doc-status.partial { background:#fffbeb; color:#b45309; }
+  .doc-meta { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0 0; }
+  .doc-meta span { border-radius:999px; background:#f1f5f9; color:#475569; padding:8px 10px; font-size:12px; font-weight:850; }
+  .doc-quick { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; margin-top:22px; }
+  .doc-quick a { min-height:122px; border:1px solid #e5e7eb; border-radius:22px; background:#fff; color:#111827; text-decoration:none; padding:18px; transition:.18s ease; }
+  .doc-quick a:hover { transform:translateY(-3px); border-color:#fca5a5; box-shadow:0 18px 40px rgba(220,38,38,.12); }
+  .doc-quick strong { display:block; font-size:18px; letter-spacing:-.035em; }
+  .doc-quick span { display:block; margin-top:10px; color:#64748b; font-size:13px; line-height:1.55; }
+  .doc-flowchart { margin-top:24px; border-radius:26px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#f8fafc,#fff); padding:22px; overflow:auto; }
+  .doc-flow-row { min-width:720px; display:flex; align-items:center; gap:12px; }
+  .doc-flow-node { position:relative; min-width:132px; border:1px solid #c7d2fe; border-radius:14px; background:#eef2ff; color:#312e81; padding:13px 12px; text-align:center; font-size:13px; font-weight:950; box-shadow:0 8px 20px rgba(99,102,241,.08); text-decoration:none; }
+  .doc-flow-node.decision { border-color:#fecaca; background:#fff1f2; color:#991b1b; transform:rotate(45deg); width:98px; height:98px; display:grid; place-items:center; margin:0 14px; }
+  .doc-flow-node.decision span { transform:rotate(-45deg); display:block; }
+  .doc-arrow { color:#7c3aed; font-weight:950; font-size:24px; }
+  .doc-steps { margin-top:24px; display:grid; gap:12px; counter-reset:steps; }
+  .doc-step { display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:14px; align-items:start; border:1px solid #e5e7eb; border-radius:22px; padding:16px; background:#fff; }
+  .doc-step-num { width:36px; height:36px; border-radius:14px; display:grid; place-items:center; background:#111827; color:#fff; font-size:13px; font-weight:950; }
+  .doc-step h3 { margin:0; font-size:18px; letter-spacing:-.035em; }
+  .doc-step p { margin:5px 0 0; font-size:14px; line-height:1.6; }
+  .doc-step a { border-radius:999px; border:1px solid #fecaca; color:#b91c1c; background:#fff5f5; padding:9px 12px; text-decoration:none; font-size:12px; font-weight:950; white-space:nowrap; }
+  .doc-notes { margin-top:20px; display:grid; gap:9px; }
+  .doc-note { border-left:4px solid #dc2626; border-radius:14px; background:#fff7f7; padding:13px 14px; color:#7f1d1d; font-size:14px; line-height:1.6; }
+  .role-doc-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:24px; }
+  .role-doc { border:1px solid #e5e7eb; border-radius:24px; padding:22px; background:#fff; scroll-margin-top:96px; }
+  .role-doc h3 { margin:0; font-size:23px; letter-spacing:-.05em; }
+  .role-person { display:inline-flex; margin-top:10px; border-radius:999px; background:#fee2e2; color:#991b1b; padding:7px 10px; font-size:12px; font-weight:950; }
+  .role-proof { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+  .role-proof span { border-radius:999px; background:#f1f5f9; color:#475569; padding:8px 10px; font-size:12px; font-weight:850; }
+  .role-links { display:grid; gap:8px; }
+  .role-links a { display:flex; justify-content:space-between; gap:12px; border:1px solid #e5e7eb; border-radius:15px; padding:11px 12px; color:#111827; text-decoration:none; font-size:13px; font-weight:850; }
+  .role-links a:hover { background:#fff1f2; border-color:#fecaca; color:#b91c1c; }
+  .doc-final { margin-top:26px; border-radius:30px; background:#111827; color:#fff; padding:34px; display:flex; align-items:center; justify-content:space-between; gap:20px; }
+  .doc-final h2 { margin:0; font-size:30px; letter-spacing:-.055em; }
+  .doc-final p { color:#cbd5e1; margin:8px 0 0; }
+  .doc-final a { border-radius:999px; background:#fff; color:#111827; padding:13px 18px; text-decoration:none; font-size:14px; font-weight:950; white-space:nowrap; }
+  @media (max-width:1080px) { .doc-shell { grid-template-columns:1fr; } .doc-sidebar { position:relative; top:auto; max-height:none; } .doc-sidebar nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; } .doc-nav-group { margin-bottom:0; } }
+  @media (max-width:780px) { .doc-top-links a:not(.doc-demo) { display:none; } .doc-shell { padding:18px 14px 60px; } .doc-hero, .doc-section { padding:24px; border-radius:24px; } .doc-proof, .doc-quick, .role-doc-grid { grid-template-columns:1fr; } .doc-section-head, .doc-step { grid-template-columns:1fr; } .doc-step a { justify-self:start; } .doc-final { flex-direction:column; align-items:flex-start; } .doc-sidebar nav { grid-template-columns:1fr; } }
+</style>
+
+<div class="doc-page">
+  <header class="doc-top">
+    <div class="doc-top-inner">
+      <a href="{% url 'dashboard' %}" class="doc-brand">
+        <span class="doc-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 19.5v-15h15v15h-15Zm4.5 0v-6h6v6M8 8h.01M12 8h.01M16 8h.01"/></svg></span>
+        MobiPOS
+      </a>
+      <nav class="doc-top-links" aria-label="Top navigation">
+        <a href="{% url 'dashboard' %}">Home</a>
+        <a href="{% url 'product-features' %}">Features</a>
+        <a href="#quick-navigation">Quick Navigation</a>
+        <a href="{% url 'demo-access' %}" class="doc-demo">Access Demo</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="doc-shell">
+    <aside class="doc-sidebar" aria-label="Business flow side navigation">
+      <div class="doc-sidebar-head">
+        <span>Quick navigation</span>
+        <h2>MobiPOS user journeys</h2>
+      </div>
+      <nav>
+        <div class="doc-nav-group">
+          <div class="doc-nav-title">Overview</div>
+          <a class="doc-nav-link" href="#overview"><span class="doc-dot"></span>Main title and purpose</a>
+          <a class="doc-nav-link" href="#quick-navigation"><span class="doc-dot"></span>Quick navigation</a>
+          <a class="doc-nav-link" href="#company-flow"><span class="doc-dot"></span>Full business flow</a>
+          <a class="doc-nav-link" href="#role-flows"><span class="doc-dot"></span>Role-based flows</a>
+          <a class="doc-nav-link" href="#status-roadmap"><span class="doc-dot"></span>Status and roadmap</a>
+        </div>
+        <div class="doc-nav-group">
+          <div class="doc-nav-title">Journeys</div>
+          {% for journey in journeys %}
+            <a class="doc-nav-link" href="#{{ journey.slug }}"><span class="doc-dot"></span>{{ journey.title }}</a>
+          {% endfor %}
+        </div>
+        <div class="doc-nav-group">
+          <div class="doc-nav-title">Staff</div>
+          {% for role in role_flows %}
+            <a class="doc-nav-link" href="#{{ role.slug }}"><span class="doc-dot"></span>{{ role.role }}</a>
+          {% endfor %}
+        </div>
+      </nav>
+    </aside>
+
+    <main class="doc-content">
+      <section class="doc-hero" id="overview">
+        <span class="doc-pill">Business flow documentation</span>
+        <h1>How MobiPOS <em>runs the business.</em></h1>
+        <p class="doc-lead">MobiPOS Business Flow Documentation explains the complete operating journey for a Kenyan mobile retail company: supplier purchase, IMEI intake, warehouse control, branch transfers, agent and DSA custody, POS sales, credit, repairs, commissions, audit trails and owner reporting.</p>
+        <p class="doc-lead">Use this page in boardrooms, investor meetings and staff onboarding. Each section uses presentation-friendly language, visual flowcharts, step explanations, status notes and links into Brian's demo account.</p>
+        <div class="doc-proof" aria-label="Business proof points">
+          {% for stat in flow_stats %}
+            <article class="doc-proof-card"><strong>{{ stat.value }}</strong><span>{{ stat.label }}</span></article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="doc-section" id="quick-navigation">
+        <div class="doc-section-head">
+          <div><span class="doc-kicker">Quick Navigation</span><h2>Choose the journey you want to explain.</h2></div>
+          <span class="doc-status">Presentation ready</span>
+        </div>
+        <p>Each quick link opens a detailed journey with process steps, status notes, flowcharts and demo links. This mirrors the reference documentation style while staying focused on MobiPOS business operations.</p>
+        <div class="doc-quick">
+          {% for journey in journeys %}
+            <a href="#{{ journey.slug }}"><strong>{{ journey.title }}</strong><span>{{ journey.purpose|truncatechars:118 }}</span></a>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="doc-section" id="company-flow">
+        <div class="doc-section-head">
+          <div><span class="doc-kicker">Full business flow</span><h2>From supplier purchase to owner visibility.</h2></div>
+          <span class="doc-status">Live demo mapped</span>
+        </div>
+        <p>This is the complete MobiPOS operating model. The demo company is {% if flow_organization %}<strong>{{ flow_organization.name }}</strong>{% else %}<strong>No seeded organization yet</strong>{% endif %}, and the numbers shown on this page are pulled from the available demo data.</p>
+        {% for section in flow_sections %}
+          <div class="doc-flowchart" aria-label="{{ section.title }} flowchart">
+            <p class="doc-kicker">{{ section.title }}</p>
+            <p>{{ section.summary }}</p>
+            <div class="doc-flow-row">
+              {% for node in section.nodes %}
+                <a class="doc-flow-node {% if 'Discrepancy' in node.title or 'Check' in node.title %}decision{% endif %}" href="{{ node.demo_url }}"><span>{{ node.title }}</span></a>
+                {% if not forloop.last %}<span class="doc-arrow">→</span>{% endif %}
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+      </section>
+
+      {% for journey in journeys %}
+        <section class="doc-section" id="{{ journey.slug }}">
+          <div class="doc-section-head">
+            <div>
+              <span class="doc-kicker">Journey {{ forloop.counter|stringformat:"02d" }}</span>
+              <h2>{{ journey.title }}</h2>
+            </div>
+            <span class="doc-status {% if 'pending' in journey.status|lower or 'partial' in journey.status|lower or 'provider' in journey.status|lower %}partial{% endif %}">{{ journey.status }}</span>
+          </div>
+          <div class="doc-meta"><span>{{ journey.audience }}</span><span>Brian demo links included</span><span>Business process documentation</span></div>
+          <p>{{ journey.purpose }}</p>
+
+          <div class="doc-flowchart" aria-label="{{ journey.title }} mermaid-style flowchart">
+            <p class="doc-kicker">Mermaid-style visual flowchart</p>
+            <div class="doc-flow-row">
+              {% for label in journey.flow %}
+                <div class="doc-flow-node {% if 'Check' in label or 'Approve' in label or 'Validate' in label %}decision{% endif %}"><span>{{ label }}</span></div>
+                {% if not forloop.last %}<span class="doc-arrow">→</span>{% endif %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="doc-steps">
+            {% for step in journey.steps %}
+              <article class="doc-step">
+                <span class="doc-step-num">{{ forloop.counter }}</span>
+                <div><h3>{{ step.label }}</h3><p>{{ step.detail }}</p></div>
+                <a href="{{ step.url }}">Open demo ↗</a>
+              </article>
+            {% endfor %}
+          </div>
+
+          <div class="doc-notes">
+            {% for note in journey.notes %}<div class="doc-note">{{ note }}</div>{% endfor %}
+          </div>
+        </section>
+      {% endfor %}
+
+      <section class="doc-section" id="role-flows">
+        <div class="doc-section-head">
+          <div><span class="doc-kicker">Role-based flows</span><h2>Each staff member understands their journey.</h2></div>
+          <span class="doc-status">Role mapped</span>
+        </div>
+        <p>The owner gets the richest view, but every role has a clear business flow. This makes demos easier because the audience can immediately see how owners, managers, inventory teams, cashiers, agents, DSAs and technicians use the same operating platform.</p>
+        <div class="role-doc-grid">
+          {% for role in role_flows %}
+            <article class="role-doc" id="{{ role.slug }}">
+              <h3>{{ role.role }}</h3>
+              <span class="role-person">{{ role.person }}</span>
+              <p>{{ role.focus }}</p>
+              <div class="role-proof">{% for item in role.proof %}<span>{{ item }}</span>{% endfor %}</div>
+              <div class="role-links">
+                {% for label, url in role.steps %}<a href="{{ url }}"><span>{{ label }}</span><span>Open demo ↗</span></a>{% endfor %}
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="doc-section" id="status-roadmap">
+        <div class="doc-section-head">
+          <div><span class="doc-kicker">Status notes</span><h2>What works today and what needs provider setup.</h2></div>
+          <span class="doc-status partial">Production boundary</span>
+        </div>
+        <div class="doc-notes">
+          <div class="doc-note">Email/process documentation: MobiPOS currently documents operational notifications and approval flows. Production email branding and delivery policy should be finalized per tenant.</div>
+          <div class="doc-note">Payment documentation: Cash, card, bank, credit and M-Pesa references are supported at workflow level. Live M-Pesa Daraja confirmation and reconciliation remain pending.</div>
+          <div class="doc-note">Tax process documentation: eTIMS has an integration event foundation, but live KRA provider submission is not activated.</div>
+          <div class="doc-note">Offline process documentation: offline invoice queue is treated as a local draft queue that syncs sanitized data. Final production policy must decide whether true offline sales are allowed.</div>
+          <div class="doc-note">Monitoring and backup documentation: persistent media storage, Sentry, automated backup/restore and Render browser smoke tests remain production-readiness work.</div>
+        </div>
+      </section>
+
+      <section class="doc-final">
+        <div><h2>Ready to present the whole business flow.</h2><p>Start with this page, explain the operating journey, then open Brian's demo account to prove each workflow with live seeded data.</p></div>
+        <a href="{% url 'login' %}?demo=brian">Access Brian Demo</a>
+      </section>
+    </main>
+  </div>
+</div>

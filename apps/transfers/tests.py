@@ -13,10 +13,10 @@ from apps.transfers.models import StockTransfer, TransferDiscrepancy
 @pytest.mark.django_db
 def test_transfer_staff_workflow_moves_quantity_stock(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    source = Location.objects.get(organization=organization, location_type="pos")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    source = Location.objects.filter(organization=organization, location_type="pos").order_by("code").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
 
@@ -38,10 +38,10 @@ def test_transfer_staff_workflow_moves_quantity_stock(client):
 @pytest.mark.django_db
 def test_transfer_create_supports_multiple_quantity_lines(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    source = Location.objects.get(organization=organization, location_type="pos")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    source = Location.objects.filter(organization=organization, location_type="pos").order_by("code").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     first = Product.objects.get(organization=organization, sku="CHG-20W")
     second = Product.objects.create(
         organization=organization, category=first.category, brand=first.brand,
@@ -66,8 +66,8 @@ def test_transfer_create_supports_multiple_quantity_lines(client):
 @pytest.mark.django_db
 def test_transfer_create_selects_existing_serialized_devices(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     first_unit = StockUnit.objects.filter(organization=organization, status=SerialStatus.AVAILABLE).first()
     source = first_unit.location
     units = list(StockUnit.objects.filter(
@@ -92,8 +92,8 @@ def test_transfer_create_selects_existing_serialized_devices(client):
 @pytest.mark.django_db
 def test_owner_can_allocate_existing_devices_to_agent_custody_in_one_step(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     owner_membership = Membership.objects.get(organization=organization, user=owner)
     branch = owner_membership.branches.first()
     agent = User.objects.create_user(username="allocation-agent", email="allocation-agent@example.com", first_name="Allocation", last_name="Agent")
@@ -140,8 +140,8 @@ def test_owner_can_allocate_existing_devices_to_agent_custody_in_one_step(client
 @pytest.mark.django_db
 def test_owner_can_recall_agent_devices_in_one_step(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     owner_membership = Membership.objects.get(organization=organization, user=owner)
     branch = owner_membership.branches.first()
     agent = User.objects.create_user(username="recall-agent", email="recall-agent@example.com", first_name="Recall", last_name="Agent")
@@ -198,8 +198,8 @@ def test_owner_can_recall_agent_devices_in_one_step(client):
 @pytest.mark.django_db
 def test_staff_without_transfer_change_permission_can_only_request_agent_allocation(client):
     call_command("seed_demo_data")
-    owner = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     owner_membership = Membership.objects.get(organization=organization, user=owner)
     branch = owner_membership.branches.first()
     staff = User.objects.create_user(username="allocation-staff", email="allocation-staff@example.com")
@@ -227,7 +227,11 @@ def test_staff_without_transfer_change_permission_can_only_request_agent_allocat
         location_type=LocationType.AGENT,
         custodian_membership=agent_membership,
     )
-    unit = StockUnit.objects.filter(organization=organization, status=SerialStatus.AVAILABLE).exclude(location__location_type=LocationType.AGENT).first()
+    unit = StockUnit.objects.filter(
+        organization=organization,
+        status=SerialStatus.AVAILABLE,
+        location__branch=branch,
+    ).exclude(location__location_type=LocationType.AGENT).first()
     client.force_login(staff)
 
     response = client.post(reverse("agent-allocation-create"), {
@@ -247,8 +251,8 @@ def test_staff_without_transfer_change_permission_can_only_request_agent_allocat
 @pytest.mark.django_db
 def test_device_search_returns_authorized_available_devices(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     unit = StockUnit.objects.filter(organization=organization, status=SerialStatus.AVAILABLE).select_related("location").first()
     client.force_login(user)
 
@@ -262,7 +266,7 @@ def test_device_search_returns_authorized_available_devices(client):
 @pytest.mark.django_db
 def test_non_owner_cannot_approve_transfer(client):
     call_command("seed_demo_data")
-    organization = Organization.objects.get(slug="mobipos-electronics")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
     staff = User.objects.create_user(username="transfer-staff", email="transfer-staff@example.com")
     Membership.objects.create(organization=organization, user=staff, status=MembershipStatus.ACTIVE)
     locations = list(Location.objects.filter(organization=organization)[:2])
@@ -280,10 +284,10 @@ def test_non_owner_cannot_approve_transfer(client):
 @pytest.mark.django_db
 def test_transfer_discrepancy_can_be_received_and_reconciled(client):
     call_command("seed_demo_data")
-    user = User.objects.get(username="alice")
-    organization = Organization.objects.get(slug="mobipos-electronics")
-    source = Location.objects.get(organization=organization, location_type="pos")
-    destination = Location.objects.get(organization=organization, location_type="warehouse")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    source = Location.objects.filter(organization=organization, location_type="pos").order_by("code").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
     product = Product.objects.get(organization=organization, sku="CHG-20W")
     client.force_login(user)
     client.post(reverse("transfer-create"), {

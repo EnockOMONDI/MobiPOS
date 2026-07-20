@@ -8,7 +8,7 @@ from apps.accounts.models import User
 @pytest.mark.django_db
 def test_all_staff_modules_search_and_export_render(client):
     call_command("seed_demo_data")
-    client.force_login(User.objects.get(username="alice"))
+    client.force_login(User.objects.get(username="brian"))
     modules = (
         "products", "inventory", "stock", "purchases", "transfers", "sales",
         "payments", "expenses", "commissions", "repairs", "integrations",
@@ -44,7 +44,7 @@ def test_all_staff_modules_search_and_export_render(client):
 @pytest.mark.django_db
 def test_module_overview_pdf_export_returns_pdf(client):
     call_command("seed_demo_data")
-    client.force_login(User.objects.get(username="alice"))
+    client.force_login(User.objects.get(username="brian"))
 
     response = client.get(reverse("module-overview", args=["sales"]), {"format": "pdf"})
 
@@ -56,7 +56,7 @@ def test_module_overview_pdf_export_returns_pdf(client):
 @pytest.mark.django_db
 def test_product_register_column_controls_and_pdf_export(client):
     call_command("seed_demo_data")
-    client.force_login(User.objects.get(username="alice"))
+    client.force_login(User.objects.get(username="brian"))
 
     page_response = client.get(reverse("module-overview", args=["products"]))
     pdf_response = client.get(reverse("module-overview", args=["products"]), {"format": "pdf"})
