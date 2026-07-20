@@ -65,12 +65,14 @@ def test_business_flow_page_handles_empty_database_and_keeps_nodes_clickable(cli
     assert response.status_code == 200
     assert b"How MobiPOS" in response.content
     assert b"runs the business." in response.content
-    assert b"MobiPOS Business Flow Documentation" in response.content
+    assert b"MobiPOS business flow" in response.content
     assert b"Quick navigation" in response.content
     assert b"Role-based flows" in response.content
-    assert b"Mermaid-style visual flowchart" in response.content
-    assert b"Status notes" in response.content
-    assert b"No seeded organization yet" in response.content
+    assert b"Business flow" in response.content
+    assert b"Current status" in response.content
+    assert b"No seeded organization yet" not in response.content
+    assert b"boardrooms" not in response.content
+    assert b"Presentation ready" not in response.content
     assert reverse("purchase-create") in response.content.decode()
     assert reverse("batch-serial-intake") in response.content.decode()
     assert reverse("agent-network-report") in response.content.decode()
@@ -90,7 +92,6 @@ def test_business_flow_page_uses_rich_seeded_demo_data(client):
     assert response.context["flow_counts"]["branches"] >= 3
     assert response.context["flow_counts"]["serialized_units"] >= 60
     assert response.context["flow_counts"]["audit_events"] >= 8
-    assert b"Nairobi Mobile Hub" in response.content
     assert b"Brian" in response.content
     assert b"Owner" in response.content
     assert b"Inventory Officer" in response.content
@@ -108,7 +109,7 @@ def test_business_flow_page_uses_rich_seeded_demo_data(client):
     assert b"POS, Payments And Credit Journey" in response.content
     assert b"Agent And DSA Journey" in response.content
     assert b"After-Sales, Audit And Reporting Journey" in response.content
-    assert b"Live M-Pesa Daraja confirmation and reconciliation remain pending" in response.content
+    assert b"Live M-Pesa confirmation and automatic reconciliation still need provider setup" in response.content
 
 
 @pytest.mark.django_db
@@ -122,7 +123,7 @@ def test_business_flow_page_renders_for_authenticated_demo_owner(client):
     response = client.get(reverse("business-flow"))
 
     assert response.status_code == 200
-    assert b"MobiPOS Business Flow Documentation" in response.content
+    assert b"MobiPOS business flow" in response.content
     assert b"Quick navigation" in response.content
     assert b"Full Business Flow" in response.content
     assert b"Role-based flows" in response.content

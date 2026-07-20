@@ -682,21 +682,12 @@ def _business_journeys(counts):
 def business_flow(request):
     organization = _business_flow_organization(request)
     counts = _business_flow_counts(organization)
-    stats = [
-        {"label": "Branches", "value": counts["branches"], "detail": "operating locations across the company"},
-        {"label": "Locations", "value": counts["locations"], "detail": "warehouses, POS points, repair benches and agent custody"},
-        {"label": "Serialized Devices", "value": counts["serialized_units"], "detail": "phones and tracked stock units in the inventory database"},
-        {"label": "Stock Movements", "value": counts["stock_movements"], "detail": "append-only ledger entries proving what changed"},
-        {"label": "Sales", "value": counts["sales"], "detail": "completed, paid, part-paid or returned sales workflows"},
-        {"label": "Audit Events", "value": counts["audit_events"], "detail": "recorded actions visible to owners and auditors"},
-    ]
     return render(
         request,
         "marketing/business_flow.html",
         {
             "flow_organization": organization,
             "flow_counts": counts,
-            "flow_stats": stats,
             "flow_sections": _business_flow_sections(counts),
             "role_flows": _business_role_flows(counts),
             "journeys": _business_journeys(counts),

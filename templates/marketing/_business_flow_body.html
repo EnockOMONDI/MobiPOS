@@ -7,7 +7,7 @@
   .doc-top-links { display:flex; align-items:center; gap:20px; font-size:14px; font-weight:850; }
   .doc-top-links a { color:#4b5563; text-decoration:none; }
   .doc-demo { border-radius:999px; background:#111827; color:#fff !important; padding:12px 18px; text-decoration:none; }
-  .doc-shell { max-width:1440px; margin:0 auto; display:grid; grid-template-columns:310px minmax(0,1fr); gap:30px; padding:30px 28px 90px; }
+  .doc-shell { max-width:1440px; margin:0 auto; display:grid; grid-template-columns:290px minmax(0,1fr); gap:26px; padding:30px 28px 90px; }
   .doc-sidebar { position:sticky; top:88px; align-self:start; max-height:calc(100vh - 110px); overflow:auto; border:1px solid #e5e7eb; border-radius:26px; background:#fff; box-shadow:0 16px 40px rgba(15,23,42,.06); }
   .doc-sidebar-head { padding:22px 22px 16px; border-bottom:1px solid #f1f5f9; }
   .doc-sidebar-head span { display:inline-flex; border-radius:999px; background:#fee2e2; color:#b91c1c; padding:7px 10px; font-size:11px; font-weight:950; letter-spacing:.08em; text-transform:uppercase; }
@@ -69,8 +69,46 @@
   .doc-final h2 { margin:0; font-size:30px; letter-spacing:-.055em; }
   .doc-final p { color:#cbd5e1; margin:8px 0 0; }
   .doc-final a { border-radius:999px; background:#fff; color:#111827; padding:13px 18px; text-decoration:none; font-size:14px; font-weight:950; white-space:nowrap; }
-  @media (max-width:1080px) { .doc-shell { grid-template-columns:1fr; } .doc-sidebar { position:relative; top:auto; max-height:none; } .doc-sidebar nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; } .doc-nav-group { margin-bottom:0; } }
-  @media (max-width:780px) { .doc-top-links a:not(.doc-demo) { display:none; } .doc-shell { padding:18px 14px 60px; } .doc-hero, .doc-section { padding:24px; border-radius:24px; } .doc-proof, .doc-quick, .role-doc-grid { grid-template-columns:1fr; } .doc-section-head, .doc-step { grid-template-columns:1fr; } .doc-step a { justify-self:start; } .doc-final { flex-direction:column; align-items:flex-start; } .doc-sidebar nav { grid-template-columns:1fr; } }
+  @media (max-width:1080px) {
+    .doc-shell { grid-template-columns:1fr; }
+    .doc-sidebar { position:sticky; top:74px; z-index:12; max-height:42vh; }
+    .doc-sidebar nav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; }
+    .doc-nav-group { margin-bottom:0; }
+  }
+  @media (max-width:780px) {
+    .doc-page { margin:-2rem -1rem; }
+    .doc-top-inner { padding:12px 14px; }
+    .doc-brand { font-size:19px; }
+    .doc-mark { width:36px; height:36px; border-radius:13px; }
+    .doc-top-links { gap:10px; }
+    .doc-top-links a:not(.doc-demo) { display:none; }
+    .doc-demo { padding:10px 14px; font-size:13px; }
+    .doc-shell { padding:14px 12px 54px; gap:16px; }
+    .doc-sidebar { top:62px; max-height:58vh; border-radius:20px; }
+    .doc-sidebar-head { padding:16px 16px 10px; }
+    .doc-sidebar-head h2 { font-size:19px; }
+    .doc-sidebar nav { grid-template-columns:1fr; max-height:42vh; overflow:auto; padding:8px; }
+    .doc-nav-title { padding-top:12px; }
+    .doc-nav-link { min-height:44px; font-size:13px; }
+    .doc-hero, .doc-section { padding:22px; border-radius:24px; }
+    .doc-hero h1 { font-size:clamp(38px,13vw,54px); line-height:.98; }
+    .doc-lead { font-size:16px; line-height:1.65; }
+    .doc-proof, .doc-quick, .role-doc-grid { grid-template-columns:1fr; }
+    .doc-quick a { min-height:auto; }
+    .doc-section-head, .doc-step { grid-template-columns:1fr; }
+    .doc-section h2 { font-size:28px; line-height:1.08; }
+    .doc-status { justify-self:start; }
+    .doc-flowchart { padding:16px; overflow:visible; }
+    .doc-flow-row { min-width:0; flex-direction:column; align-items:stretch; gap:10px; }
+    .doc-flow-node { width:auto; min-width:0; text-align:left; }
+    .doc-flow-node.decision { transform:none; width:auto; height:auto; display:block; margin:0; }
+    .doc-flow-node.decision span { transform:none; }
+    .doc-arrow { transform:rotate(90deg); align-self:center; line-height:1; }
+    .doc-step { gap:10px; padding:14px; }
+    .doc-step a { justify-self:start; min-height:42px; display:inline-flex; align-items:center; }
+    .doc-final { flex-direction:column; align-items:flex-start; padding:26px; border-radius:24px; }
+    .doc-final h2 { font-size:26px; }
+  }
 </style>
 
 <div class="doc-page">
@@ -97,15 +135,15 @@
       </div>
       <nav>
         <div class="doc-nav-group">
-          <div class="doc-nav-title">Overview</div>
-          <a class="doc-nav-link" href="#overview"><span class="doc-dot"></span>Main title and purpose</a>
-          <a class="doc-nav-link" href="#quick-navigation"><span class="doc-dot"></span>Quick navigation</a>
-          <a class="doc-nav-link" href="#company-flow"><span class="doc-dot"></span>Full business flow</a>
-          <a class="doc-nav-link" href="#role-flows"><span class="doc-dot"></span>Role-based flows</a>
-          <a class="doc-nav-link" href="#status-roadmap"><span class="doc-dot"></span>Status and roadmap</a>
+          <div class="doc-nav-title">Start here</div>
+          <a class="doc-nav-link" href="#overview"><span class="doc-dot"></span>Business overview</a>
+          <a class="doc-nav-link" href="#quick-navigation"><span class="doc-dot"></span>Choose a journey</a>
+          <a class="doc-nav-link" href="#company-flow"><span class="doc-dot"></span>Complete business flow</a>
+          <a class="doc-nav-link" href="#role-flows"><span class="doc-dot"></span>Staff workflows</a>
+          <a class="doc-nav-link" href="#status-roadmap"><span class="doc-dot"></span>What is ready now</a>
         </div>
         <div class="doc-nav-group">
-          <div class="doc-nav-title">Journeys</div>
+          <div class="doc-nav-title">Business journeys</div>
           {% for journey in journeys %}
             <a class="doc-nav-link" href="#{{ journey.slug }}"><span class="doc-dot"></span>{{ journey.title }}</a>
           {% endfor %}
@@ -121,23 +159,18 @@
 
     <main class="doc-content">
       <section class="doc-hero" id="overview">
-        <span class="doc-pill">Business flow documentation</span>
+        <span class="doc-pill">MobiPOS business flow</span>
         <h1>How MobiPOS <em>runs the business.</em></h1>
-        <p class="doc-lead">MobiPOS Business Flow Documentation explains the complete operating journey for a Kenyan mobile retail company: supplier purchase, IMEI intake, warehouse control, branch transfers, agent and DSA custody, POS sales, credit, repairs, commissions, audit trails and owner reporting.</p>
-        <p class="doc-lead">Use this page in boardrooms, investor meetings and staff onboarding. Each section uses presentation-friendly language, visual flowcharts, step explanations, status notes and links into Brian's demo account.</p>
-        <div class="doc-proof" aria-label="Business proof points">
-          {% for stat in flow_stats %}
-            <article class="doc-proof-card"><strong>{{ stat.value }}</strong><span>{{ stat.label }}</span></article>
-          {% endfor %}
-        </div>
+        <p class="doc-lead">This page shows how a mobile retail business can run its daily operations in MobiPOS: buying stock, registering IMEIs, moving devices between locations, selling to customers, managing agents and DSAs, handling repairs, tracking credit, and reviewing reports.</p>
+        <p class="doc-lead">The demo account lets you open the same workflows with sample business data, so a client can see how the system works before using it in their own company.</p>
       </section>
 
       <section class="doc-section" id="quick-navigation">
         <div class="doc-section-head">
-          <div><span class="doc-kicker">Quick Navigation</span><h2>Choose the journey you want to explain.</h2></div>
-          <span class="doc-status">Presentation ready</span>
+          <div><span class="doc-kicker">Quick navigation</span><h2>Choose the business journey you want to see.</h2></div>
+          <span class="doc-status">Demo account available</span>
         </div>
-        <p>Each quick link opens a detailed journey with process steps, status notes, flowcharts and demo links. This mirrors the reference documentation style while staying focused on MobiPOS business operations.</p>
+        <p>Each card explains one part of the business in plain language. Open a journey to see what happens, who is involved, and where the demo account can show the workflow inside MobiPOS.</p>
         <div class="doc-quick">
           {% for journey in journeys %}
             <a href="#{{ journey.slug }}"><strong>{{ journey.title }}</strong><span>{{ journey.purpose|truncatechars:118 }}</span></a>
@@ -148,9 +181,9 @@
       <section class="doc-section" id="company-flow">
         <div class="doc-section-head">
           <div><span class="doc-kicker">Full business flow</span><h2>From supplier purchase to owner visibility.</h2></div>
-          <span class="doc-status">Live demo mapped</span>
+          <span class="doc-status">Connected workflow</span>
         </div>
-        <p>This is the complete MobiPOS operating model. The demo company is {% if flow_organization %}<strong>{{ flow_organization.name }}</strong>{% else %}<strong>No seeded organization yet</strong>{% endif %}, and the numbers shown on this page are pulled from the available demo data.</p>
+        <p>This is the complete MobiPOS operating model. A business can follow stock from supplier purchase to warehouse, branch, agent custody, customer sale, repair, and management reporting without losing accountability.</p>
         {% for section in flow_sections %}
           <div class="doc-flowchart" aria-label="{{ section.title }} flowchart">
             <p class="doc-kicker">{{ section.title }}</p>
@@ -174,11 +207,11 @@
             </div>
             <span class="doc-status {% if 'pending' in journey.status|lower or 'partial' in journey.status|lower or 'provider' in journey.status|lower %}partial{% endif %}">{{ journey.status }}</span>
           </div>
-          <div class="doc-meta"><span>{{ journey.audience }}</span><span>Brian demo links included</span><span>Business process documentation</span></div>
+          <div class="doc-meta"><span>{{ journey.audience }}</span><span>Demo account available</span><span>Client workflow guide</span></div>
           <p>{{ journey.purpose }}</p>
 
           <div class="doc-flowchart" aria-label="{{ journey.title }} mermaid-style flowchart">
-            <p class="doc-kicker">Mermaid-style visual flowchart</p>
+            <p class="doc-kicker">Business flow</p>
             <div class="doc-flow-row">
               {% for label in journey.flow %}
                 <div class="doc-flow-node {% if 'Check' in label or 'Approve' in label or 'Validate' in label %}decision{% endif %}"><span>{{ label }}</span></div>
@@ -208,7 +241,7 @@
           <div><span class="doc-kicker">Role-based flows</span><h2>Each staff member understands their journey.</h2></div>
           <span class="doc-status">Role mapped</span>
         </div>
-        <p>The owner gets the richest view, but every role has a clear business flow. This makes demos easier because the audience can immediately see how owners, managers, inventory teams, cashiers, agents, DSAs and technicians use the same operating platform.</p>
+        <p>The owner gets the widest business view, but each staff member has a focused workflow. This helps a company see how managers, inventory teams, cashiers, agents, DSAs and technicians work in one shared system.</p>
         <div class="role-doc-grid">
           {% for role in role_flows %}
             <article class="role-doc" id="{{ role.slug }}">
@@ -226,20 +259,20 @@
 
       <section class="doc-section" id="status-roadmap">
         <div class="doc-section-head">
-          <div><span class="doc-kicker">Status notes</span><h2>What works today and what needs provider setup.</h2></div>
-          <span class="doc-status partial">Production boundary</span>
+          <div><span class="doc-kicker">Current status</span><h2>What is ready now and what needs final setup.</h2></div>
+          <span class="doc-status partial">Setup notes</span>
         </div>
         <div class="doc-notes">
-          <div class="doc-note">Email/process documentation: MobiPOS currently documents operational notifications and approval flows. Production email branding and delivery policy should be finalized per tenant.</div>
-          <div class="doc-note">Payment documentation: Cash, card, bank, credit and M-Pesa references are supported at workflow level. Live M-Pesa Daraja confirmation and reconciliation remain pending.</div>
-          <div class="doc-note">Tax process documentation: eTIMS has an integration event foundation, but live KRA provider submission is not activated.</div>
-          <div class="doc-note">Offline process documentation: offline invoice queue is treated as a local draft queue that syncs sanitized data. Final production policy must decide whether true offline sales are allowed.</div>
-          <div class="doc-note">Monitoring and backup documentation: persistent media storage, Sentry, automated backup/restore and Render browser smoke tests remain production-readiness work.</div>
+          <div class="doc-note">Notifications and approvals are part of the workflow. Final email branding and delivery rules should be set for each client before launch.</div>
+          <div class="doc-note">Cash, card, bank, credit and M-Pesa reference recording are available in the workflow. Live M-Pesa confirmation and automatic reconciliation still need provider setup.</div>
+          <div class="doc-note">eTIMS is planned for tax compliance, but live submission to the tax provider is not active yet.</div>
+          <div class="doc-note">Offline invoices should be handled carefully. The recommended approach is to keep them as controlled drafts until the system can confirm and sync them safely.</div>
+          <div class="doc-note">Before a full production rollout, the client should confirm media storage, backups, monitoring, error reporting and recovery procedures.</div>
         </div>
       </section>
 
       <section class="doc-final">
-        <div><h2>Ready to present the whole business flow.</h2><p>Start with this page, explain the operating journey, then open Brian's demo account to prove each workflow with live seeded data.</p></div>
+        <div><h2>Ready to explore the business flow.</h2><p>Start with the journey cards, then open Brian's demo account to see how the workflows operate with sample data.</p></div>
         <a href="{% url 'login' %}?demo=brian">Access Brian Demo</a>
       </section>
     </main>
