@@ -12,7 +12,9 @@ from apps.catalog.models import Brand, Category, Product
 from apps.commissions.models import CommissionAccrual, CommissionPayout, CommissionPayoutLine, CommissionPayoutStatus, CommissionRule
 from apps.contacts.models import Contact, ContactType
 from apps.expenses.models import Expense, ExpenseStatus
-from apps.integrations.services import queue_integration_event
+from apps.integrations.models import FiscalDevice, FiscalDeviceStatus, FiscalDocumentStatus, IntegrationEvent, ReceiptPolicy
+from apps.integrations.services import create_sale_fiscal_document
+from apps.integrations.tasks import process_integration_event
 from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
 from apps.inventory.services import post_stock_movement
 from apps.notifications.models import Notification
@@ -612,11 +614,61 @@ class Command(BaseCommand):
             },
             users=demo_users,
         )
-        queue_integration_event(
-            organization=organization, provider="etims", event_type="invoice.submit",
-            idempotency_key=f"demo-etims-{organization.id}", payload={"sale_number": sale.number},
+        self._seed_etims_receipt_demo(
+            organization=organization,
+            owner=owner,
+            company=branch.company,
+            location=pos_location,
+            sale=sale,
         )
         self._record_demo_activity(organization, owner, manager, cashier, agent, dsa, agent_profile, dsa_profile)
+
+    def _seed_etims_receipt_demo(self, *, organization, owner, company, location, sale):
+        IntegrationEvent.objects.filter(
+            organization=organization,
+            provider="etims",
+            idempotency_key=f"demo-etims-{organization.id}",
+        ).delete()
+        device, _ = FiscalDevice.objects.update_or_create(
+            organization=organization,
+            branch_office_id="51404677J",
+            environment="sandbox",
+            defaults={
+                "company": company,
+                "location": location,
+                "status": FiscalDeviceStatus.SANDBOX_TESTING,
+                "receipt_policy": ReceiptPolicy.STANDARD_AND_ETIMS,
+                "taxpayer_pin": company.tax_number or "P051234568B",
+                "mode": "oscu",
+                "device_serial": "SBX-NMH-OSCU-001",
+                "device_name": "Nairobi Mobile Hub Sandbox OSCU",
+                "activated_by": owner,
+                "activated_at": timezone.now(),
+                "last_error": "",
+            },
+        )
+        record_audit_event(
+            action="integrations.etims_demo_seeded",
+            actor=owner,
+            organization=organization,
+            target=device,
+            message="Seeded sandbox eTIMS setup for demo receipt testing.",
+            metadata={
+                "taxpayer_pin": device.taxpayer_pin,
+                "branch_office_id": device.branch_office_id,
+                "environment": device.environment,
+            },
+        )
+        document = create_sale_fiscal_document(sale=sale)
+        if not document:
+            return
+        event = document.organization.integrationevent_set.filter(
+            provider="etims",
+            event_type="invoice.submit",
+            payload__fiscal_document_id=str(document.id),
+        ).first()
+        if event and document.status != FiscalDocumentStatus.ACCEPTED:
+            process_integration_event(str(event.id))
 
     def _seed_demo_team(self, organization, branch, owner):
         role_definitions = {

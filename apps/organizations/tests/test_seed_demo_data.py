@@ -5,6 +5,7 @@ from apps.accounts.models import User
 from apps.audit.models import AuditEvent
 from apps.catalog.models import Product
 from apps.contacts.models import Contact, ContactType
+from apps.integrations.models import FiscalDevice, FiscalDocument, FiscalDocumentStatus, IntegrationEvent, IntegrationStatus
 from apps.inventory.models import StockUnit
 from apps.organizations.models import AgentProfile, Branch, Location, Membership, Organization
 from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, SupplierReturn
@@ -38,6 +39,17 @@ def test_seed_demo_data_is_repeatable_and_rich():
     assert StockTransfer.objects.filter(organization=organization).count() >= 7
     assert TransferDiscrepancy.objects.filter(organization=organization).exists()
     assert Sale.objects.filter(organization=organization).count() >= 25
+    etims_device = FiscalDevice.objects.get(organization=organization, branch_office_id="51404677J")
+    assert etims_device.taxpayer_pin == "P051234568B"
+    assert etims_device.environment == "sandbox"
+    assert etims_device.device_serial == "SBX-NMH-OSCU-001"
+    etims_document = FiscalDocument.objects.get(
+        organization=organization,
+        sale__number="DEMO-SALE-001",
+    )
+    assert etims_document.status == FiscalDocumentStatus.ACCEPTED
+    assert etims_document.etims_invoice_number
+    assert IntegrationEvent.objects.get(idempotency_key=f"etims-sale-{etims_document.sale_id}").status == IntegrationStatus.SUCCEEDED
     assert SaleReturn.objects.filter(organization=organization).exists()
     assert RepairTicket.objects.filter(organization=organization).count() >= 6
     assert AuditEvent.objects.filter(organization=organization).count() >= 20

@@ -32,6 +32,8 @@ class OrganizationOwnedAdmin(ModelAdmin):
         "operations.Receivable",
         "operations.ReceivableInstallment",
         "integrations.IntegrationEvent",
+        "integrations.FiscalDocument",
+        "integrations.FiscalDocumentLine",
     }
     editable_statuses = {"draft", "requested", "pending", "open"}
 
@@ -60,7 +62,7 @@ class OrganizationOwnedAdmin(ModelAdmin):
             organization__membership__status="active",
         ).distinct()
 
-    def has_view_or_change_permission(self, request, obj):
+    def has_view_or_change_permission(self, request, obj=None):
         if obj is None or request.user.is_superuser or request.user.is_platform_admin:
             return True
         return bool(self._active_membership(request, obj))

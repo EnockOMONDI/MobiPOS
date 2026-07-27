@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from apps.payments.models import Payment, PaymentMethod, PaymentStatus
 from apps.payments.services import record_sale_payments
+from apps.integrations.services import create_sale_fiscal_document
 from apps.operations.models import ApprovalRequest, ApprovalStatus, Receivable
 from apps.operations.services import request_approval, user_can_decide_approval
 from apps.audit.services import record_audit_event
@@ -274,6 +275,7 @@ def checkout(request):
         sale.refresh_from_db()
         if credit_balance > 0:
             create_credit_receivable(sale=sale, amount=credit_balance)
+        create_sale_fiscal_document(sale=sale)
         message = f"Sale {sale.number} completed."
         if change_due:
             message += f" Change due: KES {change_due}."
@@ -577,6 +579,7 @@ def cart_complete(request, sale_id):
     sale.refresh_from_db()
     if credit_balance > 0:
         create_credit_receivable(sale=sale, amount=credit_balance)
+    create_sale_fiscal_document(sale=sale)
     message = f"Sale {sale.number} completed."
     if change_due:
         message += f" Change due: KES {change_due}."

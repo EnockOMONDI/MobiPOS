@@ -20,7 +20,7 @@ from apps.catalog.permissions import can_view_product_costs
 from apps.contacts.models import Contact
 from apps.commissions.models import CommissionAccrual, CommissionPayout
 from apps.expenses.models import Expense
-from apps.integrations.models import IntegrationEvent
+from apps.integrations.models import FiscalDevice, FiscalDocument, IntegrationEvent
 from apps.inventory.models import SerialStatus, StockAdjustment, StockBalance, StockMovement, StockUnit
 from apps.operations.models import ApprovalRequest, Payable, Receivable
 from apps.organizations.models import AgentProfile, Branch, Location, LocationType, Membership, Organization, Role, SubscriptionInvoice
@@ -971,6 +971,8 @@ MODULES = {
     "commission-payouts": ("Commission payouts", CommissionPayout, ("number", "agent", "period_start", "period_end", "amount", "status")),
     "repairs": ("Repairs", RepairTicket, ("number", "customer", "status", "quoted_amount")),
     "integrations": ("Integration events", IntegrationEvent, ("provider", "event_type", "status", "attempts")),
+    "fiscal-devices": ("eTIMS devices", FiscalDevice, ("taxpayer_pin", "branch_office_id", "environment", "status")),
+    "fiscal-documents": ("eTIMS tax receipts", FiscalDocument, ("internal_number", "document_type", "status", "etims_invoice_number")),
     "receivables": ("Receivables", Receivable, ("customer", "sale", "outstanding_amount", "due_on")),
     "payables": ("Payables", Payable, ("supplier", "purchase_order", "outstanding_amount", "due_on")),
     "approvals": ("Approval inbox", ApprovalRequest, ("request_type", "target_type", "status", "requested_by")),
@@ -986,7 +988,7 @@ MODULES = {
     "aged-stock": ("Aged stock", StockUnit, ("serial_number", "product", "location", "status", "created_at")),
 }
 SENSITIVE_MODULES = {
-    "approvals", "branches", "commission-payouts", "integrations", "locations",
+    "approvals", "branches", "commission-payouts", "integrations", "fiscal-devices", "fiscal-documents", "locations",
     "roles", "subscriptions", "users", "agents",
 }
 MODULE_PERMISSIONS = {

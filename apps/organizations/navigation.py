@@ -97,6 +97,8 @@ NAVIGATION_GROUPS = (
         item("Branches", "module-overview", "box", owner_only=True, args=("branches",), requestable=False),
         item("Locations", "module-overview", "box", owner_only=True, args=("locations",), requestable=False),
         item("Subscriptions", "module-overview", "wallet", owner_only=True, args=("subscriptions",), requestable=False),
+        item("eTIMS setup", "etims-settings", "cog", owner_only=True, requestable=False),
+        item("eTIMS tax receipts", "module-overview", "chart", owner_only=True, args=("fiscal-documents",), requestable=False),
         item("Integrations", "module-overview", "cog", owner_only=True, args=("integrations",), requestable=False),
         item("Django administration", "admin:index", "cog", requestable=False, staff_only=True),
     )),

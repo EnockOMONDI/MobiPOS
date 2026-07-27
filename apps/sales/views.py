@@ -7,6 +7,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.integrations.services import create_return_fiscal_document
+from apps.integrations.models import FiscalDocumentType, FiscalProvider
 from apps.operations.forms import InstallmentScheduleForm
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from apps.payments.forms import AdditionalPaymentForm
@@ -25,8 +27,13 @@ def sale_detail(request, sale_id):
         location__in=accessible_locations_for(request.user, request.organization),
     )
     receivable = getattr(sale, "receivable", None)
+    fiscal_document = sale.fiscal_documents.filter(
+        provider=FiscalProvider.ETIMS,
+        document_type=FiscalDocumentType.SALE,
+    ).first()
     return render(request, "sales/detail.html", {
         "sale": sale,
+        "fiscal_document": fiscal_document,
         "payment_form": AdditionalPaymentForm(),
         "return_form": ReturnRequestForm(sale=sale),
         "installment_form": InstallmentScheduleForm(receivable=receivable),
@@ -127,6 +134,7 @@ def return_approve_complete(request, return_id):
             reason=sale_return.reason,
             approved_by=request.user,
         )
+    create_return_fiscal_document(sale_return=sale_return)
     record_audit_event(action="return.completed", actor=request.user, organization=request.organization, target=sale_return, request=request)
     messages.success(request, "Return and refund completed.")
     return redirect("sale-detail", sale_id=sale_return.sale_id)

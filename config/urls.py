@@ -31,6 +31,7 @@ from apps.sales.views import return_approve_complete, sale_add_payment, sale_det
 from apps.expenses.views import expense_approve, expense_create
 from apps.repairs.views import repair_create, repair_detail, repair_update, repair_use_part
 from apps.notifications.views import notification_list, notification_read
+from apps.integrations.views import etims_settings
 from apps.reports.operational import operational_report
 from apps.reports.advanced import exception_report
 from apps.reports.retail import retail_analytics_report
@@ -109,6 +110,7 @@ urlpatterns = [
     path("approval-policies/", approval_policy_list, name="approval-policy-list"),
     path("approval-policies/new/", approval_policy_create, name="approval-policy-create"),
     path("access-requests/new/", access_request_create, name="access-request-create"),
+    path("integrations/etims/", etims_settings, name="etims-settings"),
     path("receivables/<uuid:receivable_id>/installments/", receivable_installment_schedule, name="receivable-installment-schedule"),
     path("catalog/categories/new/", category_create, name="category-create"),
     path("catalog/brands/new/", brand_create, name="brand-create"),

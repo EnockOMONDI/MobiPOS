@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from .adapters import ADAPTERS
 from .models import IntegrationEvent, IntegrationStatus
+from .services import apply_etims_event_result
 
 MAX_ATTEMPTS = 8
 
@@ -30,6 +31,8 @@ def process_integration_event(self, event_id):
         event.error_message = str(exc)
         event.next_retry_at = None if event.status == IntegrationStatus.DEAD else timezone.now() + timedelta(minutes=5)
     event.save(update_fields=["attempts", "response", "status", "error_message", "next_retry_at", "updated_at"])
+    if event.provider == "etims":
+        apply_etims_event_result(event=event)
     return event.response
 
 

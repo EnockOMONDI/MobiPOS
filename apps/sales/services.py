@@ -5,7 +5,6 @@ from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
 
-from apps.integrations.services import queue_integration_event
 from apps.commissions.services import refresh_sale_commissions
 from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
 from apps.inventory.services import post_stock_movement
@@ -57,13 +56,6 @@ def complete_sale(*, sale, actor):
     sale.completed_at = timezone.now()
     sale.save(update_fields=["subtotal", "tax_total", "discount_total", "total", "status", "completed_at", "updated_at"])
     refresh_sale_commissions(sale=sale)
-    queue_integration_event(
-        organization=sale.organization,
-        provider="etims",
-        event_type="invoice.submit",
-        idempotency_key=f"sale-{sale.id}",
-        payload={"sale_number": sale.number, "total": str(sale.total)},
-    )
     return sale
 
 
@@ -148,11 +140,4 @@ def complete_return(*, sale_return, actor):
         sale_return.sale.status = SaleStatus.RETURNED
         sale_return.sale.save(update_fields=["status", "updated_at"])
     sale_return.sale.commissions.update(is_payable=False)
-    queue_integration_event(
-        organization=sale_return.organization,
-        provider="etims",
-        event_type="credit_note.submit",
-        idempotency_key=f"return-{sale_return.id}",
-        payload={"sale_number": sale_return.sale.number, "refund_amount": str(sale_return.refund_amount)},
-    )
     return sale_return
