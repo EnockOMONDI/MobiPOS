@@ -50,9 +50,9 @@ def test_product_features_page_explains_completion_statuses_and_scenarios(client
     assert response.status_code == 200
     assert b"What MobiPOS" in response.content
     assert b"does today." in response.content
-    assert b"Complete" in response.content
-    assert b"Partially complete" in response.content
-    assert b"Planned" in response.content
+    assert b"A clear guide to the workflows" not in response.content
+    assert b"How to read this page" not in response.content
+    assert b"Complete means the workflow" not in response.content
     assert b"Business scenario" in response.content
     assert b"IMEI and serial lifecycle tracking" in response.content
     assert b"Live M-Pesa confirmation and reconciliation" in response.content
