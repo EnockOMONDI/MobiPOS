@@ -5,7 +5,7 @@
   <div>
     <p class="text-sm font-semibold text-red-700">Users and access</p>
     <h1 class="mt-1 text-3xl font-bold tracking-tight">Add organization user</h1>
-    <p class="mt-2 max-w-3xl text-slate-600">Invite a staff member, assign branches and roles, optionally create agent stock custody, and set up an agent or DSA profile in one workflow.</p>
+    <p class="mt-2 max-w-3xl text-slate-600">Create a staff login, assign branches and roles, and optionally set up agent stock custody or a DSA profile in one workflow.</p>
   </div>
   <a href="{% url 'membership-access-list' %}" class="btn-secondary">Back to users</a>
 </div>
@@ -17,13 +17,14 @@
     <div class="md:col-span-2">
       <p class="text-xs font-bold uppercase tracking-wider text-red-700">Profile</p>
       <h2 class="mt-1 text-lg font-bold">User identity</h2>
-      <p class="mt-1 text-sm text-slate-500">The user receives an invitation and sets their own password securely.</p>
+      <p class="mt-1 text-sm text-slate-500">The user is created immediately. Use their email and temporary password for first login.</p>
     </div>
     {% include "components/form_field.html" with field=form.first_name %}
     {% include "components/form_field.html" with field=form.last_name %}
-    {% include "components/form_field.html" with field=form.username %}
     {% include "components/form_field.html" with field=form.email %}
     {% include "components/form_field.html" with field=form.phone_number %}
+    {% include "components/form_field.html" with field=form.password %}
+    {% include "components/form_field.html" with field=form.password_confirm %}
   </section>
 
   <section class="card grid gap-5 p-6 md:grid-cols-2">
@@ -50,7 +51,7 @@
         {% for choice in form.roles %}
           <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
         {% empty %}
-          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Create roles to delegate permissions cleanly.</p>
+          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Default roles are being prepared. Refresh this page if roles do not appear.</p>
         {% endfor %}
       </div>
     </div>
@@ -82,7 +83,7 @@
   </section>
 
   <div class="flex flex-wrap gap-3">
-    <button class="btn-primary" type="submit">Send invitation</button>
+    <button class="btn-primary" type="submit">Create user</button>
     <a href="{% url 'membership-access-list' %}" class="btn-secondary">Cancel</a>
   </div>
 </form>

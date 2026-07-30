@@ -4,5 +4,19 @@
 <p class="text-sm font-semibold text-red-700">Catalog</p>
 <h1 class="mt-1 text-3xl font-bold">{{ title }}</h1>
 <p class="mt-2 text-slate-600">Maintain the product master used by purchasing, inventory, POS, repairs, and reporting.</p>
+{% if is_product_form and not has_categories %}
+  <div class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <p class="font-bold">No active product category is available.</p>
+    <p class="mt-1">Create a category such as Mobile Phones, Accessories, Spare Parts, or Services before adding a product.</p>
+    <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'category-create' %}">Add category</a>
+  </div>
+{% endif %}
+{% if is_product_form and not has_brands %}
+  <div class="mt-3 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+    <p class="font-bold">No active brand is available.</p>
+    <p class="mt-1">Brands are optional, but adding common brands makes filtering, reports, and search clearer.</p>
+    <a class="mt-3 inline-flex font-bold text-blue-950 underline" href="{% url 'brand-create' %}">Add brand</a>
+  </div>
+{% endif %}
 {% include "components/form_card.html" %}
 {% endblock %}

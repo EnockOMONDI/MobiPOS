@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -65,7 +67,24 @@ class OrganizationRegistrationForm(forms.Form):
     username = forms.CharField(max_length=150)
     email = forms.EmailField()
     password = forms.CharField(widget=forms.PasswordInput, min_length=10)
-    plan = forms.ModelChoiceField(queryset=Plan.objects.filter(is_active=True))
+    plan = forms.ModelChoiceField(queryset=Plan.objects.none())
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        pilot_plan, _ = Plan.objects.get_or_create(
+            code="pilot",
+            defaults={
+                "name": "Pilot",
+                "monthly_price": Decimal("0.00"),
+                "limits": {"users": 10, "branches": 3, "locations": 6},
+                "is_active": True,
+            },
+        )
+        if not pilot_plan.is_active:
+            pilot_plan.is_active = True
+            pilot_plan.save(update_fields=["is_active", "updated_at"])
+        self.fields["plan"].queryset = Plan.objects.filter(is_active=True).order_by("monthly_price", "name")
+        self.fields["plan"].initial = pilot_plan
 
     def clean_organization_slug(self):
         slug = self.cleaned_data["organization_slug"]
@@ -89,11 +108,16 @@ class OrganizationRegistrationForm(forms.Form):
 class TenantUserForm(forms.Form):
     first_name = forms.CharField(max_length=150)
     last_name = forms.CharField(max_length=150)
-    username = forms.CharField(max_length=150)
     email = forms.EmailField()
     phone_number = forms.CharField(max_length=32, required=False)
-    branches = forms.ModelMultipleChoiceField(queryset=Branch.objects.none())
-    roles = forms.ModelMultipleChoiceField(queryset=Role.objects.none(), required=False)
+    password = forms.CharField(
+        widget=forms.PasswordInput,
+        min_length=10,
+        help_text="Set a temporary password and share it with the user securely. They can change it after login.",
+    )
+    password_confirm = forms.CharField(widget=forms.PasswordInput, min_length=10, label="Confirm password")
+    branches = forms.ModelMultipleChoiceField(queryset=Branch.objects.none(), widget=forms.CheckboxSelectMultiple)
+    roles = forms.ModelMultipleChoiceField(queryset=Role.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     enable_stock_custody = forms.BooleanField(
         required=False,
         label="Create agent stock custody location",
@@ -136,12 +160,8 @@ class TenantUserForm(forms.Form):
                 status__in=(AgentProfileStatus.PENDING, AgentProfileStatus.ACTIVE),
             ).select_related("membership__user", "branch")
             self.fields["roles"].queryset = Role.objects.filter(organization=organization, is_active=True)
-
-    def clean_username(self):
-        username = self.cleaned_data["username"]
-        if get_user_model().objects.filter(username=username).exists():
-            raise forms.ValidationError("This username is already in use.")
-        return username
+            if not self.is_bound and branch_queryset.count() == 1:
+                self.fields["branches"].initial = list(branch_queryset)
 
     def clean_email(self):
         email = self.cleaned_data["email"]
@@ -151,6 +171,8 @@ class TenantUserForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
+        if cleaned.get("password") and cleaned.get("password") != cleaned.get("password_confirm"):
+            self.add_error("password_confirm", "Passwords do not match.")
         if cleaned.get("enable_stock_custody"):
             custody_branch = cleaned.get("custody_branch")
             branches = cleaned.get("branches")

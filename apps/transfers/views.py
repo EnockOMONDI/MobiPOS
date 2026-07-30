@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -12,6 +12,61 @@ from apps.organizations.permissions import accessible_locations_for, organizatio
 from .forms import AgentAllocationForm, AgentRecallForm, TransferForm
 from .models import StockTransfer, StockTransferLine, TransferDiscrepancy
 from .services import approve_transfer, dispatch_transfer, receive_transfer, resolve_transfer_discrepancy
+
+
+@login_required
+@organization_permission_required("transfers.view_stocktransfer")
+def transfer_list(request):
+    if not request.organization:
+        return redirect("dashboard")
+    locations = accessible_locations_for(request.user, request.organization)
+    transfers = (
+        StockTransfer.objects.filter(
+            Q(source__in=locations) | Q(destination__in=locations),
+            organization=request.organization,
+        )
+        .select_related("source", "destination", "requested_by", "approved_by")
+        .prefetch_related("lines__product", "lines__stock_unit", "discrepancies")
+        .distinct()
+        .order_by("-created_at")
+    )
+    status = request.GET.get("status", "").strip()
+    query = request.GET.get("q", "").strip()
+    if status:
+        transfers = transfers.filter(status=status)
+    if query:
+        transfers = transfers.filter(
+            Q(number__icontains=query)
+            | Q(source__name__icontains=query)
+            | Q(destination__name__icontains=query)
+            | Q(requested_by__first_name__icontains=query)
+            | Q(requested_by__last_name__icontains=query)
+            | Q(lines__product__name__icontains=query)
+            | Q(lines__product__sku__icontains=query)
+            | Q(lines__stock_unit__serial_number__icontains=query)
+            | Q(lines__stock_unit__secondary_serial__icontains=query)
+        ).distinct()
+
+    base_scope = StockTransfer.objects.filter(
+        Q(source__in=locations) | Q(destination__in=locations),
+        organization=request.organization,
+    ).distinct()
+    status_counts = dict(base_scope.values_list("status").annotate(total=Count("id")))
+    membership = getattr(request, "membership", None)
+    can_approve = bool(request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner))
+    can_change = bool(
+        can_approve
+        or user_has_organization_permission(request.user, request.organization, "transfers.change_stocktransfer")
+    )
+    return render(request, "transfers/list.html", {
+        "transfers": transfers[:50],
+        "status": status,
+        "query": query,
+        "status_counts": status_counts,
+        "total_transfers": base_scope.count(),
+        "can_approve": can_approve,
+        "can_change": can_change,
+    })
 
 
 @login_required

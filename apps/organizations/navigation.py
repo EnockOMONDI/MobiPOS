@@ -57,7 +57,7 @@ NAVIGATION_GROUPS = (
         item("Batch IMEI intake", "batch-serial-intake", "sparkles", "inventory.add_stockadjustment"),
         item("Stock movements", "module-overview", "truck", "inventory.view_stockmovement", ("movements",)),
         item("Stock adjustment", "stock-adjustment-create", "wrench", "inventory.add_stockadjustment"),
-        item("Transfers", "module-overview", "truck", "transfers.view_stocktransfer", ("transfers",)),
+        item("Transfers", "transfer-list", "truck", "transfers.view_stocktransfer"),
     )),
     ("Purchasing", "truck", (
         item("New purchase", "purchase-create", "sparkles", "purchasing.add_purchaseorder"),

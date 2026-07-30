@@ -6,8 +6,83 @@ from django.urls import reverse
 from apps.accounts.models import User
 from apps.catalog.models import Product
 from apps.inventory.models import SerialStatus, StockBalance, StockUnit
-from apps.organizations.models import Location, LocationType, Membership, MembershipStatus, Organization, Role
-from apps.transfers.models import StockTransfer, TransferDiscrepancy
+from apps.organizations.models import Branch, Company, Location, LocationType, Membership, MembershipStatus, Organization, Role
+from apps.transfers.models import StockTransfer, TransferDiscrepancy, TransferStatus
+
+
+@pytest.mark.django_db
+def test_transfer_list_uses_dedicated_workspace_cards(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    transfer = (
+        StockTransfer.objects.filter(organization=organization)
+        .prefetch_related("lines__stock_unit", "lines__product")
+        .latest("created_at")
+    )
+    client.force_login(user)
+
+    response = client.get(reverse("transfer-list"))
+
+    assert response.status_code == 200
+    assert b"Device transfers" in response.content
+    assert b"Move phones, accessories and serialized devices" in response.content
+    assert b"New transfer" in response.content
+    assert transfer.number.encode() in response.content
+    assert str(transfer.source).encode() in response.content
+    assert str(transfer.destination).encode() in response.content
+    assert b"Initiated by" in response.content
+    assert b"View details" in response.content
+
+
+@pytest.mark.django_db
+def test_transfer_list_searches_serials_products_locations_and_numbers(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    transfer = (
+        StockTransfer.objects.filter(organization=organization, lines__stock_unit__isnull=False)
+        .select_related("source", "destination")
+        .prefetch_related("lines__stock_unit", "lines__product")
+        .first()
+    )
+    line = transfer.lines.filter(stock_unit__isnull=False).select_related("stock_unit", "product").first()
+    client.force_login(user)
+
+    response = client.get(reverse("transfer-list"), {"q": line.stock_unit.serial_number[:8]})
+
+    assert response.status_code == 200
+    assert transfer.number.encode() in response.content
+    assert line.stock_unit.serial_number.encode() in response.content
+    assert line.product.name.encode() in response.content
+
+
+@pytest.mark.django_db
+def test_transfer_list_is_scoped_to_accessible_organization_locations(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    visible_org = Organization.objects.get(slug="nairobi-mobile-hub")
+    hidden_org = Organization.objects.create(name="Hidden Transfers", slug="hidden-transfers", status="active")
+    hidden_company = Company.objects.create(organization=hidden_org, name="Hidden Ltd", code="HID")
+    hidden_branch = Branch.objects.create(organization=hidden_org, company=hidden_company, name="Hidden Branch", code="HB")
+    hidden_source = Location.objects.create(organization=hidden_org, branch=hidden_branch, name="Hidden Source", code="HS", location_type=LocationType.WAREHOUSE)
+    hidden_destination = Location.objects.create(organization=hidden_org, branch=hidden_branch, name="Hidden Destination", code="HD", location_type=LocationType.POS)
+    StockTransfer.objects.create(
+        organization=hidden_org,
+        number="HIDDEN-TRF-001",
+        source=hidden_source,
+        destination=hidden_destination,
+        requested_by=user,
+        status=TransferStatus.REQUESTED,
+    )
+    visible_transfer = StockTransfer.objects.filter(organization=visible_org).latest("created_at")
+    client.force_login(user)
+
+    response = client.get(reverse("transfer-list"))
+
+    assert response.status_code == 200
+    assert visible_transfer.number.encode() in response.content
+    assert b"HIDDEN-TRF-001" not in response.content
 
 
 @pytest.mark.django_db

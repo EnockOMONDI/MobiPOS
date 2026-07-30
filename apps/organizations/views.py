@@ -16,6 +16,7 @@ from django.views.decorators.http import require_POST
 from apps.audit.services import record_audit_event
 from .forms import AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
 from .permissions import organization_owner_required, organization_permission_required, platform_admin_required
+from .services import ensure_organization_onboarding_defaults, next_available_username
 from .models import (
     Membership,
     MembershipStatus,
@@ -25,6 +26,7 @@ from .models import (
     OrganizationStatus,
     Subscription,
     SubscriptionInvoice,
+    SubscriptionStatus,
     Company,
     Branch,
     Location,
@@ -71,7 +73,7 @@ def register_organization(request):
             name=form.cleaned_data["organization_name"],
             slug=form.cleaned_data["organization_slug"],
             email=form.cleaned_data["email"],
-            status=OrganizationStatus.PENDING,
+            status=OrganizationStatus.ACTIVE,
         )
         user = get_user_model().objects.create_user(
             username=form.cleaned_data["username"],
@@ -96,9 +98,14 @@ def register_organization(request):
             organization=organization, branch=branch, name="Main POS", code="MAIN-POS", location_type="pos"
         )
         membership.branches.add(branch)
+        ensure_organization_onboarding_defaults(organization)
         subscription = Subscription.objects.create(
             organization=organization,
             plan=form.cleaned_data["plan"],
+            status=SubscriptionStatus.ACTIVE,
+            starts_on=timezone.localdate(),
+            renews_on=timezone.localdate() + timedelta(days=30),
+            grace_ends_on=timezone.localdate() + timedelta(days=37),
         )
         SubscriptionInvoice.objects.create(
             organization=organization,
@@ -139,6 +146,7 @@ def tenant_user_create(request):
     from .models import AgentProfileStatus, AgentProfileType
     from .services import enforce_plan_limit, provision_agent_custody_location, upsert_agent_profile
 
+    ensure_organization_onboarding_defaults(request.organization)
     form = TenantUserForm(request.POST or None, organization=request.organization)
     if request.method == "POST" and form.is_valid():
         try:
@@ -154,17 +162,20 @@ def tenant_user_create(request):
             form.add_error(None, error.message)
         else:
             user = get_user_model().objects.create_user(
-                username=form.cleaned_data["username"],
+                username=next_available_username(
+                    email=form.cleaned_data["email"],
+                    first_name=form.cleaned_data["first_name"],
+                    last_name=form.cleaned_data["last_name"],
+                ),
                 email=form.cleaned_data["email"],
+                password=form.cleaned_data["password"],
                 first_name=form.cleaned_data["first_name"],
                 last_name=form.cleaned_data["last_name"],
                 phone_number=form.cleaned_data["phone_number"],
-                is_active=False,
+                is_active=True,
             )
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
             membership = Membership.objects.create(
-                organization=request.organization, user=user, status=MembershipStatus.INVITED,
+                organization=request.organization, user=user, status=MembershipStatus.ACTIVE,
             )
             membership.branches.set(form.cleaned_data["branches"])
             membership.roles.set(form.cleaned_data["roles"])
@@ -189,15 +200,8 @@ def tenant_user_create(request):
                     actor=request.user,
                     request=request,
                 )
-            invitation = Invitation.objects.create(
-                organization=request.organization,
-                membership=membership,
-                invited_by=request.user,
-                expires_at=timezone.now() + timedelta(days=7),
-            )
-            _send_invitation(request, invitation)
-            record_audit_event(action="user.invited", actor=request.user, organization=request.organization, target=user, request=request)
-            messages.success(request, f"Invitation sent to {user.email}.")
+            record_audit_event(action="user.created", actor=request.user, organization=request.organization, target=user, request=request)
+            messages.success(request, f"{user.get_full_name() or user.email} was created and can log in now.")
             return redirect("module-overview", module="users")
     return render(request, "organizations/user_create.html", {"form": form})
 

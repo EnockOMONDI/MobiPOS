@@ -28,7 +28,14 @@ def _create(request, form_class, action, title, template="catalog/create.html"):
         if isinstance(instance, Product):
             return redirect("product-detail", product_id=instance.id)
         return redirect("module-overview", module="products")
-    return render(request, template, {"form": form, "title": title, "submit_label": "Create record"})
+    context = {"form": form, "title": title, "submit_label": "Create record"}
+    if form_class is ProductForm:
+        context.update({
+            "is_product_form": True,
+            "has_categories": form.fields["category"].queryset.exists(),
+            "has_brands": form.fields["brand"].queryset.exists(),
+        })
+    return render(request, template, context)
 
 
 @login_required

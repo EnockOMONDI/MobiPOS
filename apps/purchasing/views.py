@@ -45,7 +45,11 @@ def purchase_create(request):
         record_audit_event(action="purchase.created", actor=request.user, organization=request.organization, target=order, request=request)
         messages.success(request, f"Purchase order {order.number} created.")
         return redirect("purchase-detail", order_id=order.id)
-    return render(request, "purchasing/create.html", {"form": form})
+    return render(request, "purchasing/create.html", {
+        "form": form,
+        "has_suppliers": form.fields["supplier"].queryset.exists(),
+        "has_products": form.fields["product"].queryset.exists(),
+    })
 
 
 @login_required

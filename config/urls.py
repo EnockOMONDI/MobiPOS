@@ -26,7 +26,7 @@ from apps.organizations.views import agent_document_download, agent_document_upl
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
 from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_extract_document, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
-from apps.transfers.views import agent_allocation_create, agent_recall_create, transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_receive
+from apps.transfers.views import agent_allocation_create, agent_recall_create, transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_list, transfer_receive
 from apps.sales.views import return_approve_complete, sale_add_payment, sale_detail, sale_request_return
 from apps.expenses.views import expense_approve, expense_create
 from apps.repairs.views import repair_create, repair_detail, repair_update, repair_use_part
@@ -132,6 +132,7 @@ urlpatterns = [
     path("supplier-returns/new/", supplier_return_create, name="supplier-return-create"),
     path("supplier-returns/<uuid:return_id>/", supplier_return_detail, name="supplier-return-detail"),
     path("supplier-returns/<uuid:return_id>/complete/", supplier_return_complete, name="supplier-return-complete"),
+    path("transfers/", transfer_list, name="transfer-list"),
     path("transfers/new/", transfer_create, name="transfer-create"),
     path("transfers/agent-allocation/new/", agent_allocation_create, name="agent-allocation-create"),
     path("transfers/agent-recall/new/", agent_recall_create, name="agent-recall-create"),

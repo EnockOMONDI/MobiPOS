@@ -16,17 +16,23 @@ def test_owner_can_create_branch_scoped_user(client):
     owner = User.objects.get(username="brian")
     organization = Organization.objects.get(slug="nairobi-mobile-hub")
     branch = Branch.objects.get(organization=organization, code="WST")
+    role = Role.objects.get(organization=organization, code="cashier")
     client.force_login(owner)
 
     response = client.post(reverse("tenant-user-create"), {
         "first_name": "New", "last_name": "Cashier", "username": "newcashier",
-        "email": "newcashier@example.com", "password": "StrongPass123!",
+        "email": "newcashier@example.com", "password": "StrongPass123!", "password_confirm": "StrongPass123!",
         "branches": [branch.id],
+        "roles": [role.id],
     })
 
     membership = Membership.objects.get(organization=organization, user__username="newcashier")
     assert response.status_code == 302
+    assert membership.status == MembershipStatus.ACTIVE
+    assert membership.user.is_active
+    assert membership.user.check_password("StrongPass123!")
     assert list(membership.branches.all()) == [branch]
+    assert list(membership.roles.all()) == [role]
 
 
 @pytest.mark.django_db
@@ -42,12 +48,14 @@ def test_owner_can_create_user_with_agent_stock_custody_location(client):
         "last_name": "Agent",
         "username": "brianagent",
         "email": "brian.agent@example.com",
+        "password": "StrongPass123!",
+        "password_confirm": "StrongPass123!",
         "branches": [branch.id],
         "enable_stock_custody": "on",
         "custody_branch": branch.id,
     })
 
-    membership = Membership.objects.get(organization=organization, user__username="brianagent")
+    membership = Membership.objects.get(organization=organization, user__email="brian.agent@example.com")
     custody_location = Location.objects.get(
         organization=organization,
         custodian_membership=membership,
@@ -73,6 +81,8 @@ def test_owner_can_create_agent_profile_during_user_invite(client):
         "username": "maryagent",
         "email": "mary.agent@example.com",
         "phone_number": "+254700999001",
+        "password": "StrongPass123!",
+        "password_confirm": "StrongPass123!",
         "branches": [branch.id],
         "create_agent_profile": "on",
         "agent_profile_type": AgentProfileType.AGENT,
@@ -82,7 +92,7 @@ def test_owner_can_create_agent_profile_during_user_invite(client):
         "registration_notes": "Field onboarding",
     })
 
-    membership = Membership.objects.get(organization=organization, user__username="maryagent")
+    membership = Membership.objects.get(organization=organization, user__email="mary.agent@example.com")
     profile = AgentProfile.objects.get(organization=organization, membership=membership)
     assert response.status_code == 302
     assert profile.profile_type == AgentProfileType.AGENT
@@ -121,6 +131,8 @@ def test_owner_can_create_dsa_profile_with_supervising_agent(client):
         "last_name": "DSA",
         "username": "janedsa",
         "email": "jane.dsa@example.com",
+        "password": "StrongPass123!",
+        "password_confirm": "StrongPass123!",
         "branches": [branch.id],
         "create_agent_profile": "on",
         "agent_profile_type": AgentProfileType.DSA,
@@ -129,7 +141,7 @@ def test_owner_can_create_dsa_profile_with_supervising_agent(client):
         "legal_name": "Jane DSA",
     })
 
-    profile = AgentProfile.objects.get(organization=organization, membership__user__username="janedsa")
+    profile = AgentProfile.objects.get(organization=organization, membership__user__email="jane.dsa@example.com")
     assert response.status_code == 302
     assert profile.profile_type == AgentProfileType.DSA
     assert profile.supervisor == supervisor

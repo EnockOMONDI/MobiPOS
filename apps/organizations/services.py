@@ -1,11 +1,15 @@
 from datetime import timedelta
 
+from django.contrib.auth.models import Permission
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.db import transaction
 from django.utils.text import slugify
 from django.utils import timezone
 
 from apps.audit.services import record_audit_event
+from apps.catalog.models import Brand, Category
+from apps.contacts.models import Contact, ContactType
 from .models import (
     AgentProfile,
     AgentProfileStatus,
@@ -15,6 +19,7 @@ from .models import (
     MembershipStatus,
     OrganizationStatus,
     OrganizationSetting,
+    Role,
     SubscriptionInvoice,
     SubscriptionInvoiceStatus,
     Subscription,
@@ -23,6 +28,146 @@ from .models import (
 
 
 ALLOW_AGENT_DSA_REGISTRATION_SETTING = "allow_agent_dsa_registration"
+
+
+DEFAULT_ROLE_PERMISSION_CODES = {
+    "manager": (
+        "catalog.add_brand", "catalog.add_category", "catalog.add_product", "catalog.change_product", "catalog.view_product",
+        "contacts.add_contact", "contacts.change_contact", "contacts.view_contact",
+        "expenses.add_expense", "expenses.view_expense",
+        "inventory.add_stockadjustment", "inventory.view_stockbalance", "inventory.view_stockmovement", "inventory.view_stockunit",
+        "organizations.add_agentprofile", "organizations.view_activity_report", "organizations.view_operational_report", "organizations.view_retail_analytics",
+        "payments.add_payment", "payments.view_payment",
+        "purchasing.add_purchaseorder", "purchasing.add_supplierreturn", "purchasing.change_purchaseorder", "purchasing.view_purchasediscrepancy", "purchasing.view_purchaseorder", "purchasing.view_supplierreturn",
+        "repairs.add_repairticket", "repairs.change_repairticket", "repairs.view_repairticket",
+        "sales.add_sale", "sales.add_salereturn", "sales.view_sale", "sales.view_salereturn",
+        "transfers.add_stocktransfer", "transfers.change_stocktransfer", "transfers.view_stocktransfer",
+        "commissions.view_commissionaccrual",
+    ),
+    "cashier": (
+        "catalog.view_product", "contacts.add_contact", "contacts.view_contact",
+        "payments.add_payment", "payments.view_payment", "sales.add_sale", "sales.view_sale",
+    ),
+    "inventory-officer": (
+        "catalog.add_brand", "catalog.add_category", "catalog.add_product", "catalog.change_product", "catalog.view_product",
+        "inventory.add_stockadjustment", "inventory.view_stockbalance", "inventory.view_stockmovement", "inventory.view_stockunit",
+        "purchasing.view_purchaseorder", "transfers.add_stocktransfer", "transfers.change_stocktransfer", "transfers.view_stocktransfer",
+    ),
+    "purchasing-officer": (
+        "catalog.view_product", "contacts.add_contact", "contacts.change_contact", "contacts.view_contact",
+        "purchasing.add_purchaseorder", "purchasing.add_supplierreturn", "purchasing.change_purchaseorder", "purchasing.view_purchasediscrepancy", "purchasing.view_purchaseorder", "purchasing.view_supplierreturn",
+    ),
+    "agent": (
+        "catalog.view_product", "contacts.add_contact", "contacts.view_contact",
+        "inventory.view_stockbalance", "inventory.view_stockunit",
+        "organizations.add_agentprofile", "sales.add_sale", "sales.view_sale", "transfers.view_stocktransfer",
+    ),
+    "direct-sales-agent": (
+        "catalog.view_product", "contacts.add_contact", "contacts.view_contact",
+        "inventory.view_stockunit", "sales.add_sale", "sales.view_sale",
+    ),
+    "technician": (
+        "catalog.view_product", "inventory.view_stockunit",
+        "repairs.add_repairticket", "repairs.change_repairticket", "repairs.view_repairticket",
+    ),
+    "finance": (
+        "contacts.view_contact", "expenses.add_expense", "expenses.view_expense",
+        "organizations.view_activity_report", "organizations.view_operational_report", "organizations.view_retail_analytics",
+        "payments.add_payment", "payments.view_payment", "sales.view_sale", "sales.view_salereturn",
+        "commissions.view_commissionaccrual",
+    ),
+    "viewer": (
+        "catalog.view_product", "contacts.view_contact", "inventory.view_stockbalance", "inventory.view_stockmovement", "inventory.view_stockunit",
+        "organizations.view_operational_report", "payments.view_payment", "purchasing.view_purchaseorder", "sales.view_sale", "transfers.view_stocktransfer",
+    ),
+}
+
+DEFAULT_ROLE_LABELS = {
+    "manager": "Manager",
+    "cashier": "Cashier",
+    "inventory-officer": "Inventory Officer",
+    "purchasing-officer": "Purchasing Officer",
+    "agent": "Agent",
+    "direct-sales-agent": "Direct Sales Agent",
+    "technician": "Technician",
+    "finance": "Finance",
+    "viewer": "Viewer",
+}
+
+DEFAULT_CATEGORIES = (
+    ("phones", "Mobile Phones"),
+    ("accessories", "Accessories"),
+    ("spare-parts", "Spare Parts"),
+    ("services", "Services"),
+)
+
+DEFAULT_BRANDS = ("Samsung", "Tecno", "Infinix", "Itel", "Oppo", "Xiaomi", "Apple", "Generic")
+
+
+def _permissions_for_codes(codes):
+    permission_filter = Q()
+    for permission_code in codes:
+        app_label, codename = permission_code.split(".", maxsplit=1)
+        permission_filter |= Q(content_type__app_label=app_label, codename=codename)
+    if not permission_filter:
+        return Permission.objects.none()
+    return Permission.objects.filter(permission_filter)
+
+
+@transaction.atomic
+def ensure_organization_onboarding_defaults(organization):
+    for code, name in DEFAULT_CATEGORIES:
+        Category.objects.get_or_create(
+            organization=organization,
+            code=code,
+            defaults={"name": name, "is_active": True},
+        )
+    for name in DEFAULT_BRANDS:
+        Brand.objects.get_or_create(
+            organization=organization,
+            name=name,
+            defaults={"is_active": True},
+        )
+    Contact.objects.get_or_create(
+        organization=organization,
+        name="Opening Stock Supplier",
+        contact_type=ContactType.SUPPLIER,
+        defaults={
+            "phone_number": "",
+            "email": "",
+            "address": "Use this supplier for opening stock, or replace it with your real supplier.",
+            "is_active": True,
+        },
+    )
+    roles = {}
+    for code, permission_codes in DEFAULT_ROLE_PERMISSION_CODES.items():
+        role, created = Role.objects.get_or_create(
+            organization=organization,
+            code=code,
+            defaults={
+                "name": DEFAULT_ROLE_LABELS[code],
+                "description": f"Default {DEFAULT_ROLE_LABELS[code].lower()} access profile.",
+                "is_active": True,
+            },
+        )
+        if created or not role.permissions.exists():
+            role.permissions.set(_permissions_for_codes(permission_codes))
+        roles[code] = role
+    return roles
+
+
+def next_available_username(*, email, first_name="", last_name=""):
+    base = slugify((email or "").split("@")[0] or f"{first_name}-{last_name}") or "user"
+    candidate = base[:140]
+    suffix = 1
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    while User.objects.filter(username=candidate).exists():
+        suffix_text = f"-{suffix}"
+        candidate = f"{base[:150 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    return candidate
 
 
 def organization_setting_enabled(organization, key, default=False):
