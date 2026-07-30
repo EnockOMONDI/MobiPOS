@@ -42,6 +42,7 @@
   .doc-quick a:hover { transform:translateY(-3px); border-color:#fca5a5; box-shadow:0 18px 40px rgba(220,38,38,.12); }
   .doc-quick strong { display:block; font-size:18px; letter-spacing:-.035em; }
   .doc-quick span { display:block; margin-top:10px; color:#64748b; font-size:13px; line-height:1.55; }
+  .doc-quick .doc-quick-link { display:inline-flex; align-items:center; margin-top:14px; color:#b91c1c; font-size:12px; font-weight:900; letter-spacing:.02em; }
   .doc-flowchart { margin-top:24px; border-radius:26px; border:1px solid #e2e8f0; background:linear-gradient(135deg,#f8fafc,#fff); padding:22px; overflow:auto; }
   .doc-flow-row { min-width:720px; display:flex; align-items:center; gap:12px; }
   .doc-flow-node { position:relative; min-width:132px; border:1px solid #c7d2fe; border-radius:14px; background:#eef2ff; color:#312e81; padding:13px 12px; text-align:center; font-size:13px; font-weight:950; box-shadow:0 8px 20px rgba(99,102,241,.08); text-decoration:none; }
@@ -127,7 +128,7 @@
   <div class="doc-shell">
     <aside class="doc-sidebar" aria-label="Business flow side navigation">
       <div class="doc-sidebar-head">
-        <span>Quick navigation</span>
+        <span>On this page</span>
         <h2>MobiPOS user journeys</h2>
       </div>
       <nav>
@@ -135,9 +136,7 @@
           <div class="doc-nav-title">Start here</div>
           <a class="doc-nav-link" href="#overview"><span class="doc-dot"></span>Business overview</a>
           <a class="doc-nav-link" href="#quick-navigation"><span class="doc-dot"></span>Choose a journey</a>
-          <a class="doc-nav-link" href="#company-flow"><span class="doc-dot"></span>Complete business flow</a>
           <a class="doc-nav-link" href="#role-flows"><span class="doc-dot"></span>Staff workflows</a>
-          <a class="doc-nav-link" href="#status-roadmap"><span class="doc-dot"></span>What is ready now</a>
         </div>
         <div class="doc-nav-group">
           <div class="doc-nav-title">Business journeys</div>
@@ -159,41 +158,16 @@
         <span class="doc-pill">MobiPOS business flow</span>
         <h1>How MobiPOS <em>runs the business.</em></h1>
         <p class="doc-lead">This page shows how a mobile retail business can run its daily operations in MobiPOS: buying stock, registering IMEIs, moving devices between locations, selling to customers, managing agents and DSAs, handling repairs, tracking credit, and reviewing reports.</p>
-        <p class="doc-lead">The demo account lets you open the same workflows with sample business data, so a client can see how the system works before using it in their own company.</p>
       </section>
 
       <section class="doc-section" id="quick-navigation">
-        <div class="doc-section-head">
-          <div><span class="doc-kicker">Quick navigation</span><h2>Choose the business journey you want to see.</h2></div>
-          <span class="doc-status">Demo account available</span>
-        </div>
-        <p>Each card explains one part of the business in plain language. Open a journey to see what happens, who is involved, and where the demo account can show the workflow inside MobiPOS.</p>
         <div class="doc-quick">
           {% for journey in journeys %}
-            <a href="#{{ journey.slug }}"><strong>{{ journey.title }}</strong><span>{{ journey.purpose|truncatechars:118 }}</span></a>
+            <a href="#{{ journey.slug }}"><strong>{{ journey.title }}</strong><span>{{ journey.purpose|truncatechars:118 }}</span><span class="doc-quick-link">View journey&nbsp;&rarr;</span></a>
           {% endfor %}
         </div>
       </section>
 
-      <section class="doc-section" id="company-flow">
-        <div class="doc-section-head">
-          <div><span class="doc-kicker">Full business flow</span><h2>From supplier purchase to owner visibility.</h2></div>
-          <span class="doc-status">Connected workflow</span>
-        </div>
-        <p>This is the complete MobiPOS operating model. A business can follow stock from supplier purchase to warehouse, branch, agent custody, customer sale, repair, and management reporting without losing accountability.</p>
-        {% for section in flow_sections %}
-          <div class="doc-flowchart" aria-label="{{ section.title }} flowchart">
-            <p class="doc-kicker">{{ section.title }}</p>
-            <p>{{ section.summary }}</p>
-            <div class="doc-flow-row">
-              {% for node in section.nodes %}
-                <a class="doc-flow-node {% if 'Discrepancy' in node.title or 'Check' in node.title %}decision{% endif %}" href="{{ node.demo_url }}"><span>{{ node.title }}</span></a>
-                {% if not forloop.last %}<span class="doc-arrow">→</span>{% endif %}
-              {% endfor %}
-            </div>
-          </div>
-        {% endfor %}
-      </section>
 
       {% for journey in journeys %}
         <section class="doc-section" id="{{ journey.slug }}">
@@ -254,19 +228,6 @@
         </div>
       </section>
 
-      <section class="doc-section" id="status-roadmap">
-        <div class="doc-section-head">
-          <div><span class="doc-kicker">Current status</span><h2>What is ready now and what needs final setup.</h2></div>
-          <span class="doc-status partial">Setup notes</span>
-        </div>
-        <div class="doc-notes">
-          <div class="doc-note">Notifications and approvals are part of the workflow. Final email branding and delivery rules should be set for each client before launch.</div>
-          <div class="doc-note">Cash, card, bank, credit and M-Pesa reference recording are available in the workflow. Live M-Pesa confirmation and automatic reconciliation still need provider setup.</div>
-          <div class="doc-note">eTIMS is planned for tax compliance, but live submission to the tax provider is not active yet.</div>
-          <div class="doc-note">Offline invoices should be handled carefully. The recommended approach is to keep them as controlled drafts until the system can confirm and sync them safely.</div>
-          <div class="doc-note">Before a full production rollout, the client should confirm media storage, backups, monitoring, error reporting and recovery procedures.</div>
-        </div>
-      </section>
 
       <section class="doc-final">
         <div><h2>Ready to explore the business flow.</h2><p>Start with the journey cards, then open Brian's demo account to see how the workflows operate with sample data.</p></div>

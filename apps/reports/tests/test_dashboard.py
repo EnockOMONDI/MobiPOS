@@ -66,10 +66,13 @@ def test_business_flow_page_handles_empty_database_and_keeps_nodes_clickable(cli
     assert b"How MobiPOS" in response.content
     assert b"runs the business." in response.content
     assert b"MobiPOS business flow" in response.content
-    assert b"Quick navigation" in response.content
+    assert b"Quick navigation" not in response.content
+    assert b"The demo account lets you open" not in response.content
+    assert b"Each card explains one part" not in response.content
+    assert b"View journey" in response.content
     assert b"Role-based flows" in response.content
     assert b"Business flow" in response.content
-    assert b"Current status" in response.content
+    assert b"Current status" not in response.content
     assert b"No seeded organization yet" not in response.content
     assert b"boardrooms" not in response.content
     assert b"Presentation ready" not in response.content
@@ -99,17 +102,17 @@ def test_business_flow_page_uses_rich_seeded_demo_data(client):
     assert b"Field Agent" in response.content
     assert b"Direct Sales Agent" in response.content
     assert b"Technician" in response.content
-    assert b"Supplier Purchase" in response.content
-    assert b"Batch IMEI Intake" in response.content
-    assert b"Agent Allocation" in response.content
-    assert b"Activity Report" in response.content
+    assert b"Create supplier purchase" in response.content
+    assert b"Register IMEIs in batch" in response.content
+    assert b"Allocate to agent" in response.content
+    assert b"Review activity" in response.content
     assert b"Full Business Flow" in response.content
     assert b"Purchasing And Stock Intake Journey" in response.content
     assert b"Inventory, Transfer And Custody Journey" in response.content
     assert b"POS, Payments And Credit Journey" in response.content
     assert b"Agent And DSA Journey" in response.content
     assert b"After-Sales, Audit And Reporting Journey" in response.content
-    assert b"Live M-Pesa confirmation and automatic reconciliation still need provider setup" in response.content
+    assert b"Live M-Pesa confirmation and automatic reconciliation still need provider setup" not in response.content
 
 
 @pytest.mark.django_db
@@ -124,7 +127,10 @@ def test_business_flow_page_renders_for_authenticated_demo_owner(client):
 
     assert response.status_code == 200
     assert b"MobiPOS business flow" in response.content
-    assert b"Quick navigation" in response.content
+    assert b"Quick navigation" not in response.content
+    assert b"The demo account lets you open" not in response.content
+    assert b"Each card explains one part" not in response.content
+    assert b"View journey" in response.content
     assert b"Full Business Flow" in response.content
     assert b"Role-based flows" in response.content
 
