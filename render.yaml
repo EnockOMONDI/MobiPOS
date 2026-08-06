@@ -27,6 +27,42 @@ services:
         sync: false
       - key: INTEGRATION_MODE
         value: disabled
+      - key: PRIVILEGED_OTP_REQUIRED
+        value: "false"
+      - key: POS_AUTO_OPEN_SESSION
+        value: "false"
+      - key: EMAIL_DELIVERY_REQUIRED
+        value: "false"
+      - key: EMAIL_BACKEND
+        sync: false
+      - key: EMAIL_HOST
+        sync: false
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_HOST_USER
+        sync: false
+      - key: EMAIL_HOST_PASSWORD
+        sync: false
+      - key: EMAIL_USE_TLS
+        value: "true"
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: MEDIA_STORAGE_REQUIRED
+        value: "false"
+      - key: MEDIA_STORAGE_BACKEND
+        sync: false
+      - key: UPLOADCARE_PUBLIC_KEY
+        sync: false
+      - key: UPLOADCARE_SECRET_KEY
+        sync: false
+      - key: UPLOADCARE_SIGNED_UPLOADS
+        value: "false"
+      - key: UPLOADCARE_SIGNED_DELIVERY
+        value: "false"
+      - key: UPLOADCARE_SIGNING_SECRET
+        sync: false
+      - key: UPLOADCARE_CDN_BASE_URL
+        value: https://ucarecdn.com
   - type: worker
     name: mobipos-worker
     runtime: python
@@ -45,6 +81,12 @@ services:
         value: "true"
       - key: INTEGRATION_MODE
         value: disabled
+      - key: MEDIA_STORAGE_BACKEND
+        sync: false
+      - key: UPLOADCARE_PUBLIC_KEY
+        sync: false
+      - key: UPLOADCARE_SECRET_KEY
+        sync: false
   - type: worker
     name: mobipos-scheduler
     runtime: python
@@ -63,3 +105,9 @@ services:
         value: "true"
       - key: INTEGRATION_MODE
         value: disabled
+      - key: MEDIA_STORAGE_BACKEND
+        sync: false
+      - key: UPLOADCARE_PUBLIC_KEY
+        sync: false
+      - key: UPLOADCARE_SECRET_KEY
+        sync: false

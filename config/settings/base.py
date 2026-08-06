@@ -139,6 +139,18 @@ STORAGES = {
 }
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_STORAGE_BACKEND = os.environ.get("MEDIA_STORAGE_BACKEND", "local")
+UPLOADCARE_PUBLIC_KEY = os.environ.get("UPLOADCARE_PUBLIC_KEY", "")
+UPLOADCARE_SECRET_KEY = os.environ.get("UPLOADCARE_SECRET_KEY", "")
+UPLOADCARE_STORE = os.environ.get("UPLOADCARE_STORE", "1")
+UPLOADCARE_SIGNED_UPLOADS = os.environ.get("UPLOADCARE_SIGNED_UPLOADS", "false").lower() == "true"
+UPLOADCARE_SIGNED_DELIVERY = os.environ.get("UPLOADCARE_SIGNED_DELIVERY", "false").lower() == "true"
+UPLOADCARE_SIGNING_SECRET = os.environ.get("UPLOADCARE_SIGNING_SECRET", "")
+UPLOADCARE_SIGNED_URL_TTL = int(os.environ.get("UPLOADCARE_SIGNED_URL_TTL", "300"))
+UPLOADCARE_CDN_BASE_URL = os.environ.get("UPLOADCARE_CDN_BASE_URL", "https://ucarecdn.com")
+UPLOADCARE_UPLOAD_TIMEOUT = int(os.environ.get("UPLOADCARE_UPLOAD_TIMEOUT", "30"))
+if MEDIA_STORAGE_BACKEND == "uploadcare":
+    STORAGES["default"] = {"BACKEND": "config.storage.UploadcareMediaStorage"}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
@@ -196,6 +208,14 @@ USERTOUR_TOKEN = os.environ.get("USERTOUR_TOKEN", "")
 USERTOUR_DEMO_ONLY = os.environ.get("USERTOUR_DEMO_ONLY", "true").lower() == "true"
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "MobiPOS <no-reply@mobipos.local>")
+SERVER_EMAIL = os.environ.get("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() == "true"
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 
 LOGGING = {
     "version": 1,

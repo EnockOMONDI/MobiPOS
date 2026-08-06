@@ -22,8 +22,18 @@ if not BACKGROUND_WORKERS_ENABLED and not os.environ.get("REDIS_URL"):
 INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "disabled")
 if INTEGRATION_MODE == "sandbox":
     raise ImproperlyConfigured("Sandbox integration adapters cannot run in production.")
-PRIVILEGED_OTP_REQUIRED = True
-POS_AUTO_OPEN_SESSION = False
+PRIVILEGED_OTP_REQUIRED = os.environ.get("PRIVILEGED_OTP_REQUIRED", "true").lower() == "true"
+POS_AUTO_OPEN_SESSION = os.environ.get("POS_AUTO_OPEN_SESSION", "false").lower() == "true"
+EMAIL_DELIVERY_REQUIRED = os.environ.get("EMAIL_DELIVERY_REQUIRED", "false").lower() == "true"
+if EMAIL_DELIVERY_REQUIRED and EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend":  # noqa: F405
+    raise ImproperlyConfigured("Production email delivery requires a real EMAIL_BACKEND.")
+if EMAIL_DELIVERY_REQUIRED and EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend" and not EMAIL_HOST:  # noqa: F405
+    raise ImproperlyConfigured("SMTP email delivery requires EMAIL_HOST.")
+MEDIA_STORAGE_REQUIRED = os.environ.get("MEDIA_STORAGE_REQUIRED", "false").lower() == "true"
+if MEDIA_STORAGE_REQUIRED and MEDIA_STORAGE_BACKEND == "local":  # noqa: F405
+    raise ImproperlyConfigured("Production persistent media storage requires MEDIA_STORAGE_BACKEND=uploadcare.")
+if MEDIA_STORAGE_BACKEND == "uploadcare" and not UPLOADCARE_PUBLIC_KEY:  # noqa: F405
+    raise ImproperlyConfigured("Uploadcare media storage requires UPLOADCARE_PUBLIC_KEY.")
 
 DEBUG = False
 SECURE_SSL_REDIRECT = True
