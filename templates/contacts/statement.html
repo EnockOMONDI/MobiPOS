@@ -7,7 +7,17 @@
     <h1 class="mt-1 text-3xl font-bold">{{ contact.name }}</h1>
     <p class="mt-2 text-slate-600">{{ contact.get_contact_type_display }} · Generated from live sales, payments, receivables, and payables.</p>
   </div>
-  <button onclick="window.print()" class="btn-secondary">Print statement</button>
+  <div class="flex flex-wrap gap-3">
+    <details class="relative">
+      <summary class="btn-primary cursor-pointer list-none">Download</summary>
+      <div class="absolute right-0 z-20 mt-2 w-44 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+        <a class="block rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="?format=pdf">PDF</a>
+        <a class="block rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="?format=xlsx">Excel (.xlsx)</a>
+        <a class="block rounded-xl px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href="?format=csv">CSV</a>
+      </div>
+    </details>
+    <button onclick="window.print()" class="btn-secondary">Print</button>
+  </div>
 </div>
 <div class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
   <div class="card p-5"><p class="text-xs font-bold uppercase tracking-wider text-slate-400">Sales</p><p class="mt-2 text-2xl font-bold">KES {{ sales_total }}</p></div>

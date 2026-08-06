@@ -116,3 +116,27 @@ def test_contact_statement_is_tenant_scoped_and_renders_finance_sections(client)
     assert b"Receivables" in response.content
     assert b"Payables" in response.content
     assert forbidden.status_code == 404
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("export_format", "content_type", "signature"),
+    [
+        ("csv", "text/csv", b"Contact,"),
+        ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", b"PK"),
+        ("pdf", "application/pdf", b"%PDF"),
+    ],
+)
+def test_contact_statement_export_downloads(client, export_format, content_type, signature):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    contact = Contact.objects.filter(organization=organization, contact_type__in=("supplier", "both")).first()
+    client.force_login(owner)
+
+    response = client.get(reverse("contact-statement", args=[contact.id]), {"format": export_format})
+
+    assert response.status_code == 200
+    assert response["Content-Type"].startswith(content_type)
+    assert response["Content-Disposition"].startswith("attachment;")
+    assert response.content.startswith(signature)
