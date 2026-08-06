@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.audit.models import AuditEvent
@@ -17,7 +18,19 @@ from .models import Product
 from .forms import BrandForm, CategoryForm, ProductForm
 
 
+def _safe_next_url(request):
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return ""
+
+
 def _create(request, form_class, action, title, template="catalog/create.html"):
+    next_url = _safe_next_url(request)
     form = form_class(request.POST or None, request.FILES or None, organization=request.organization)
     if request.method == "POST" and form.is_valid():
         instance = form.save(commit=False)
@@ -25,10 +38,18 @@ def _create(request, form_class, action, title, template="catalog/create.html"):
         instance.save()
         record_audit_event(action=action, actor=request.user, organization=request.organization, target=instance, request=request)
         messages.success(request, f"{instance} created.")
+        if next_url:
+            return redirect(next_url)
         if isinstance(instance, Product):
             return redirect("product-detail", product_id=instance.id)
         return redirect("module-overview", module="products")
-    context = {"form": form, "title": title, "submit_label": "Create record"}
+    context = {
+        "form": form,
+        "title": title,
+        "submit_label": "Create record",
+        "next_url": next_url,
+        "cancel_url": next_url or None,
+    }
     if form_class is ProductForm:
         context.update({
             "is_product_form": True,

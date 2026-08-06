@@ -44,10 +44,13 @@ class PurchaseOrderForm(forms.Form):
             self.fields["supplier"].queryset = Contact.objects.filter(
                 organization=organization, contact_type__in=("supplier", "both"), is_active=True
             )
-            self.fields["destination"].queryset = accessible_locations_for(user, organization)
+            destination_queryset = accessible_locations_for(user, organization)
+            self.fields["destination"].queryset = destination_queryset
             self.fields["product"].queryset = Product.objects.filter(
                 organization=organization, is_purchasable=True, is_active=True
             )
+            if not self.is_bound and destination_queryset.count() == 1:
+                self.fields["destination"].initial = destination_queryset.first()
             for index in range(2, self.MAX_LINES + 1):
                 self.fields[f"product_{index}"] = forms.ModelChoiceField(
                     queryset=self.fields["product"].queryset,

@@ -423,6 +423,8 @@ class BranchCreateForm(forms.Form):
         super().__init__(*args, **kwargs)
         if organization:
             self.fields["company"].queryset = Company.objects.filter(organization=organization, is_active=True)
+            if not self.is_bound and self.fields["company"].queryset.count() == 1:
+                self.fields["company"].initial = self.fields["company"].queryset.first()
 
     def clean_code(self):
         code = self.cleaned_data["code"].upper()
@@ -441,6 +443,8 @@ class LocationCreateForm(forms.Form):
         super().__init__(*args, **kwargs)
         if organization:
             self.fields["branch"].queryset = Branch.objects.filter(organization=organization, is_active=True)
+            if not self.is_bound and self.fields["branch"].queryset.count() == 1:
+                self.fields["branch"].initial = self.fields["branch"].queryset.first()
 
     def clean_code(self):
         from .models import Location

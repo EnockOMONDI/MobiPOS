@@ -1,8 +1,60 @@
 {% extends "base.html" %}
-{% block title %}Add customer or supplier | MobiPOS{% endblock %}
+
+{% block title %}{{ title }} | MobiPOS{% endblock %}
+
 {% block content %}
-<p class="text-sm font-semibold text-red-700">Customers and suppliers</p>
-<h1 class="mt-1 text-3xl font-bold">{{ title }}</h1>
-<p class="mt-2 text-slate-600">Maintain identity, contact, tax, payment terms, and credit settings.</p>
-{% include "components/form_card.html" %}
+  <div class="mb-6 max-w-4xl">
+    <p class="text-sm font-semibold text-red-700">Customers and suppliers</p>
+    <h1 class="mt-1 text-3xl font-bold">{{ title }}</h1>
+    {% if requested_type == "supplier" %}
+      <p class="mt-2 text-slate-600">
+        Add the supplier that sells stock to your business. This will be available immediately when creating purchase orders and supplier returns.
+      </p>
+    {% elif requested_type == "customer" %}
+      <p class="mt-2 text-slate-600">
+        Add a customer for sales, credit limits, statements, and follow-up.
+      </p>
+    {% else %}
+      <p class="mt-2 text-slate-600">
+        Create a customer, supplier, or a contact that can be used for both sales and purchasing.
+      </p>
+    {% endif %}
+  </div>
+
+  <form method="post" class="max-w-5xl space-y-5">
+    {% csrf_token %}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    {% if form.non_field_errors %}
+      <div class="rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <section class="card p-6 sm:p-8">
+      <div class="mb-6">
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Contact identity</p>
+        <h2 class="mt-1 text-xl font-bold">Who the business deals with</h2>
+      </div>
+      <div class="grid gap-5 md:grid-cols-2">
+        {% include "components/form_field.html" with field=form.contact_type %}
+        {% include "components/form_field.html" with field=form.name %}
+        {% include "components/form_field.html" with field=form.phone_number %}
+        {% include "components/form_field.html" with field=form.email %}
+        {% include "components/form_field.html" with field=form.tax_number %}
+        {% include "components/form_field.html" with field=form.payment_terms_days %}
+        {% include "components/form_field.html" with field=form.credit_limit %}
+        {% include "components/form_field.html" with field=form.is_active %}
+        <div class="md:col-span-2">
+          {% include "components/form_field.html" with field=form.address %}
+        </div>
+      </div>
+    </section>
+
+    <div class="flex flex-wrap gap-3">
+      <button class="btn-primary" type="submit">{{ submit_label|default:"Create contact" }}</button>
+      {% if cancel_url %}
+        <a class="btn-secondary" href="{{ cancel_url }}">Cancel</a>
+      {% else %}
+        <a class="btn-secondary" href="{% url 'module-overview' 'contacts' %}">Cancel</a>
+      {% endif %}
+    </div>
+  </form>
 {% endblock %}

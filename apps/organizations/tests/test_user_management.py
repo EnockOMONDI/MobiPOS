@@ -36,6 +36,21 @@ def test_owner_can_create_branch_scoped_user(client):
 
 
 @pytest.mark.django_db
+def test_user_create_page_links_to_branch_and_role_setup(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    client.force_login(owner)
+
+    response = client.get(reverse("tenant-user-create"))
+
+    assert response.status_code == 200
+    assert b"Add branch" in response.content
+    assert reverse("branch-create") in response.content.decode()
+    assert b"Add role" in response.content
+    assert reverse("role-create") in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_owner_can_create_user_with_agent_stock_custody_location(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="brian")
@@ -177,6 +192,40 @@ def test_owner_branch_and_pos_creation_enforce_plan_limits(client):
     })
     assert response.status_code == 200
     assert not Branch.objects.filter(organization=organization, code="THIRD").exists()
+
+
+@pytest.mark.django_db
+def test_branch_and_location_setup_forms_preselect_single_parent_and_return_to_purchase(client):
+    organization = Organization.objects.create(name="Setup Flow", slug="setup-flow", status="active")
+    owner = User.objects.create_user(username="setup-flow-owner", email="setup-flow-owner@example.com")
+    company = Company.objects.create(organization=organization, name="Setup Flow Company", code="SETUP")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main Branch", code="MAIN")
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(branch)
+    client.force_login(owner)
+
+    branch_response = client.get(reverse("branch-create"))
+    location_response = client.get(reverse("location-create"))
+    create_response = client.post(reverse("location-create"), {
+        "branch": branch.id,
+        "name": "Return Warehouse",
+        "code": "RETURN-WH",
+        "location_type": LocationType.WAREHOUSE,
+        "next": reverse("purchase-create"),
+    })
+
+    assert branch_response.status_code == 200
+    assert f'<option value="{company.id}" selected>'.encode() in branch_response.content
+    assert location_response.status_code == 200
+    assert f'<option value="{branch.id}" selected>'.encode() in location_response.content
+    assert create_response.status_code == 302
+    assert create_response.url == reverse("purchase-create")
+    assert Location.objects.filter(organization=organization, code="RETURN-WH").exists()
 
 
 @pytest.mark.django_db

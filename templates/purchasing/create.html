@@ -2,20 +2,38 @@
 {% block title %}New purchase | MobiPOS{% endblock %}
 {% block content %}
 <p class="text-sm font-semibold text-red-700">Purchasing</p><h1 class="mt-1 text-3xl font-bold">New multi-line purchase order</h1><p class="mt-2 text-slate-600">Add up to five products in one controlled order. Leave unused additional item rows blank.</p>
-{% if not has_suppliers or not has_products %}
+<div class="mt-5 flex flex-wrap gap-3">
+  <a class="btn-secondary" href="{% url 'contact-create' %}?type=supplier&next={% url 'purchase-create' %}">Add supplier</a>
+  <a class="btn-secondary" href="{% url 'product-create' %}?next={% url 'purchase-create' %}">Add product</a>
+  <a class="btn-secondary" href="{% url 'location-create' %}?next={% url 'purchase-create' %}">Add warehouse or POS location</a>
+</div>
+{% if not has_suppliers or not has_real_suppliers or not has_products or not has_destinations %}
   <div class="mt-6 grid gap-3 md:grid-cols-2">
     {% if not has_suppliers %}
       <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <p class="font-bold">No active supplier is available.</p>
         <p class="mt-1">Create a supplier contact before raising a purchase order.</p>
-        <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'contact-create' %}">Add supplier</a>
+        <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'contact-create' %}?type=supplier&next={% url 'purchase-create' %}">Add supplier</a>
+      </div>
+    {% elif not has_real_suppliers %}
+      <div class="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+        <p class="font-bold">Add your real supplier before going live.</p>
+        <p class="mt-1">The opening stock supplier is only a setup helper. Add the actual company or person you buy from for cleaner reports and payable tracking.</p>
+        <a class="mt-3 inline-flex font-bold text-blue-950 underline" href="{% url 'contact-create' %}?type=supplier&next={% url 'purchase-create' %}">Add supplier</a>
+      </div>
+    {% endif %}
+    {% if not has_destinations %}
+      <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+        <p class="font-bold">No purchase destination is available.</p>
+        <p class="mt-1">Create a warehouse, POS, or stock room location before receiving stock.</p>
+        <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'location-create' %}?next={% url 'purchase-create' %}">Add location</a>
       </div>
     {% endif %}
     {% if not has_products %}
       <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
         <p class="font-bold">No purchasable product is available.</p>
         <p class="mt-1">Add the phone, accessory, or part first, then return to this purchase.</p>
-        <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'product-create' %}">Add product</a>
+        <a class="mt-3 inline-flex font-bold text-amber-950 underline" href="{% url 'product-create' %}?next={% url 'purchase-create' %}">Add product</a>
       </div>
     {% endif %}
   </div>

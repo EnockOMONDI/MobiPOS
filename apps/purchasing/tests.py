@@ -6,10 +6,11 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from apps.catalog.models import Product
+from apps.catalog.models import Category, Product
 from apps.contacts.models import Contact
 from apps.inventory.models import StockBalance
 from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization, Role
+from apps.purchasing.forms import PurchaseOrderForm
 from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, SupplierReturn
 from apps.operations.models import Payable
 
@@ -61,6 +62,70 @@ def test_purchase_create_supports_multiple_lines(client):
     assert response.status_code == 302
     assert order.lines.count() == 2
     assert set(order.lines.values_list("product_id", flat=True)) == {product.id for product in products}
+
+
+@pytest.mark.django_db
+def test_purchase_form_auto_selects_only_available_destination():
+    organization = Organization.objects.create(name="Setup Tenant", slug="setup-tenant", status="active")
+    owner = User.objects.create_user(username="setup-owner", email="setup-owner@example.com")
+    company = Company.objects.create(organization=organization, name="Setup Company", code="SETUP")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main Branch", code="MAIN")
+    location = Location.objects.create(organization=organization, branch=branch, name="Main POS", code="MAIN-POS")
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(branch)
+    Contact.objects.create(organization=organization, contact_type="supplier", name="Setup Supplier")
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    Product.objects.create(organization=organization, category=category, name="Demo Phone", sku="DEMO-PHONE")
+
+    form = PurchaseOrderForm(organization=organization, user=owner)
+
+    assert list(form.fields["destination"].queryset) == [location]
+    assert form.fields["destination"].initial == location
+
+
+@pytest.mark.django_db
+def test_purchase_create_page_links_setup_actions_back_to_purchase(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    client.force_login(user)
+
+    response = client.get(reverse("purchase-create"))
+    content = response.content.decode()
+
+    assert response.status_code == 200
+    assert f"{reverse('contact-create')}?type=supplier&next={reverse('purchase-create')}" in content
+    assert f"{reverse('product-create')}?next={reverse('purchase-create')}" in content
+    assert f"{reverse('location-create')}?next={reverse('purchase-create')}" in content
+
+
+@pytest.mark.django_db
+def test_purchase_create_guides_owner_when_only_opening_stock_supplier_exists(client):
+    organization = Organization.objects.create(name="Supplier Setup", slug="supplier-setup", status="active")
+    owner = User.objects.create_user(username="supplier-owner", email="supplier-owner@example.com")
+    company = Company.objects.create(organization=organization, name="Supplier Company", code="SUP")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main Branch", code="MAIN")
+    Location.objects.create(organization=organization, branch=branch, name="Main Warehouse", code="MAIN-WH", location_type="warehouse")
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(branch)
+    Contact.objects.create(organization=organization, contact_type="supplier", name="Opening Stock Supplier")
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    Product.objects.create(organization=organization, category=category, name="Demo Phone", sku="DEMO-PHONE")
+    client.force_login(owner)
+
+    response = client.get(reverse("purchase-create"))
+
+    assert response.status_code == 200
+    assert b"Add your real supplier before going live" in response.content
 
 
 @pytest.mark.django_db

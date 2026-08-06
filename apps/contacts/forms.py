@@ -9,9 +9,11 @@ class ContactForm(forms.ModelForm):
         exclude = ("organization",)
         widgets = {"address": forms.Textarea}
 
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, initial_type="", **kwargs):
         super().__init__(*args, **kwargs)
         self.organization = organization
+        if initial_type in {"customer", "supplier", "both"} and not self.is_bound:
+            self.fields["contact_type"].initial = initial_type
 
     def _validate_unique_value(self, field, message):
         value = self.cleaned_data.get(field, "")

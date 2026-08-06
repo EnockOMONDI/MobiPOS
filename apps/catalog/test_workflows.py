@@ -40,6 +40,36 @@ def test_owner_can_create_catalog_and_contact_records(client):
 
 
 @pytest.mark.django_db
+def test_product_create_returns_to_safe_purchase_setup_flow(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    category = Category.objects.get(organization=organization, code="phones")
+    client.force_login(owner)
+
+    response = client.post(reverse("product-create"), {
+        "category": category.id,
+        "name": "Return Flow Phone",
+        "sku": "RETURN-FLOW-PHONE",
+        "is_serialized": "on",
+        "is_stocked": "on",
+        "is_sellable": "on",
+        "is_purchasable": "on",
+        "is_active": "on",
+        "reorder_level": "1",
+        "cost_price": "10000",
+        "selling_price": "12500",
+        "tax_rate": "16",
+        "warranty_days": "365",
+        "next": reverse("purchase-create"),
+    })
+
+    assert response.status_code == 302
+    assert response.url == reverse("purchase-create")
+    assert Product.objects.filter(organization=organization, sku="RETURN-FLOW-PHONE").exists()
+
+
+@pytest.mark.django_db
 def test_duplicate_catalog_identifiers_are_form_errors(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="brian")

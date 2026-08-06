@@ -34,18 +34,24 @@
       <p class="mt-1 text-sm text-slate-500">Branch assignment controls where the user works. Multiple roles combine into one effective access profile.</p>
     </div>
     <div>
-      <p class="text-sm font-semibold text-slate-700">Branches <span class="text-red-700">*</span></p>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-slate-700">Branches <span class="text-red-700">*</span></p>
+        <a href="{% url 'branch-create' %}" class="text-sm font-bold text-red-700 hover:text-red-800">Add branch</a>
+      </div>
       {% if form.branches.errors %}<div class="mt-2 text-sm font-semibold text-red-700">{{ form.branches.errors }}</div>{% endif %}
       <div class="mt-3 grid gap-2">
         {% for choice in form.branches %}
           <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>
         {% empty %}
-          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Create an active branch before inviting users.</p>
+          <p class="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">Create an active branch before adding users.</p>
         {% endfor %}
       </div>
     </div>
     <div>
-      <p class="text-sm font-semibold text-slate-700">Roles</p>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="text-sm font-semibold text-slate-700">Roles</p>
+        <a href="{% url 'role-create' %}" class="text-sm font-bold text-red-700 hover:text-red-800">Add role</a>
+      </div>
       {% if form.roles.errors %}<div class="mt-2 text-sm font-semibold text-red-700">{{ form.roles.errors }}</div>{% endif %}
       <div class="mt-3 grid gap-2">
         {% for choice in form.roles %}

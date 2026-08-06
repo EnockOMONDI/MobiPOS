@@ -1,5 +1,6 @@
 <form method="post" enctype="multipart/form-data" class="card mt-6 max-w-3xl space-y-5 p-6 sm:p-8">
   {% csrf_token %}
+  {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
   {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm text-red-700">{{ form.non_field_errors }}</div>{% endif %}
   {{ form.as_p }}
   <div class="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-5">

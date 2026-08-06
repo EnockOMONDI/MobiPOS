@@ -3,6 +3,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from apps.audit.models import AuditEvent
@@ -13,19 +14,42 @@ from .forms import ContactForm
 from .models import Contact
 
 
+def _safe_next_url(request):
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return ""
+
+
 @login_required
 @organization_permission_required("contacts.add_contact")
 @transaction.atomic
 def contact_create(request):
-    form = ContactForm(request.POST or None, organization=request.organization)
+    requested_type = request.GET.get("type", "") or request.POST.get("contact_type", "")
+    next_url = _safe_next_url(request)
+    form = ContactForm(request.POST or None, organization=request.organization, initial_type=requested_type)
     if request.method == "POST" and form.is_valid():
         contact = form.save(commit=False)
         contact.organization = request.organization
         contact.save()
         record_audit_event(action="contact.created", actor=request.user, organization=request.organization, target=contact, request=request)
         messages.success(request, "Contact created.")
+        if next_url:
+            return redirect(next_url)
         return redirect("contact-detail", contact_id=contact.id)
-    return render(request, "contacts/create.html", {"form": form, "title": "Add customer or supplier", "submit_label": "Create contact"})
+    title = "Add supplier" if requested_type == "supplier" else "Add customer" if requested_type == "customer" else "Add customer or supplier"
+    return render(request, "contacts/create.html", {
+        "form": form,
+        "title": title,
+        "submit_label": "Create contact",
+        "next_url": next_url,
+        "cancel_url": next_url or None,
+        "requested_type": requested_type,
+    })
 
 
 @login_required

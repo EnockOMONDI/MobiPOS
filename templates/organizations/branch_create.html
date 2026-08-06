@@ -1,10 +1,43 @@
 {% extends "base.html" %}
+
 {% block title %}Add branch | MobiPOS{% endblock %}
+
 {% block content %}
-<h1 class="text-3xl font-bold">Add branch</h1>
-<p class="mt-2 text-slate-600">Branch creation is controlled by the active subscription plan.</p>
-<form method="post" class="mt-6 max-w-2xl space-y-4 rounded-xl border bg-white p-6 shadow-sm">
-  {% csrf_token %}{{ form.as_p }}
-  <button class="rounded-lg bg-red-700 px-5 py-3 text-white" type="submit">Create branch</button>
-</form>
+  <div class="mb-6 max-w-4xl">
+    <p class="text-sm font-semibold text-red-700">Business setup</p>
+    <h1 class="mt-1 text-3xl font-bold">Add branch</h1>
+    <p class="mt-2 text-slate-600">
+      Create a shop, outlet, office, or business unit. Users can later be assigned to the branches they are allowed to operate.
+    </p>
+  </div>
+
+  <form method="post" class="max-w-4xl space-y-5">
+    {% csrf_token %}
+    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+    {% if form.non_field_errors %}
+      <div class="rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    <section class="card p-6 sm:p-8">
+      <div class="mb-6">
+        <p class="text-xs font-bold uppercase tracking-wider text-red-700">Branch details</p>
+        <h2 class="mt-1 text-xl font-bold">Where this business operates</h2>
+        <p class="mt-1 text-sm text-slate-500">
+          Use short branch codes such as CBD, WST, TRM, or MOMBASA. These appear in reports, transfers, and user assignments.
+        </p>
+      </div>
+      <div class="grid gap-5 md:grid-cols-2">
+        {% include "components/form_field.html" with field=form.company %}
+        {% include "components/form_field.html" with field=form.name %}
+        {% include "components/form_field.html" with field=form.code %}
+        {% include "components/form_field.html" with field=form.phone_number %}
+        {% include "components/form_field.html" with field=form.email %}
+      </div>
+    </section>
+
+    <div class="flex flex-wrap gap-3">
+      <button class="btn-primary" type="submit">Create branch</button>
+      <a class="btn-secondary" href="{{ next_url|default:'/' }}">Cancel</a>
+    </div>
+  </form>
 {% endblock %}

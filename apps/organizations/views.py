@@ -10,6 +10,7 @@ from django.db import transaction
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
@@ -61,6 +62,17 @@ def _active_supervising_agent_profile(request):
     if profile.profile_type != AgentProfileType.AGENT or profile.status != AgentProfileStatus.ACTIVE:
         return None
     return profile
+
+
+def _safe_next_url(request):
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return ""
 
 
 @transaction.atomic
@@ -590,6 +602,7 @@ def branch_create(request):
     from django.core.exceptions import ValidationError
     from .services import enforce_plan_limit
 
+    next_url = _safe_next_url(request)
     form = BranchCreateForm(request.POST or None, organization=request.organization)
     if request.method == "POST" and form.is_valid():
         try:
@@ -604,8 +617,10 @@ def branch_create(request):
             branch = Branch.objects.create(organization=request.organization, is_active=True, **form.cleaned_data)
             request.membership.branches.add(branch)
             record_audit_event(action="branch.created", actor=request.user, organization=request.organization, target=branch, request=request)
+            if next_url:
+                return redirect(next_url)
             return redirect("module-overview", module="branches")
-    return render(request, "organizations/branch_create.html", {"form": form})
+    return render(request, "organizations/branch_create.html", {"form": form, "next_url": next_url})
 
 
 @login_required
@@ -616,6 +631,7 @@ def location_create(request):
     from .models import LocationType
     from .services import enforce_plan_limit
 
+    next_url = _safe_next_url(request)
     form = LocationCreateForm(request.POST or None, organization=request.organization)
     if request.method == "POST" and form.is_valid():
         if form.cleaned_data["location_type"] == LocationType.POS:
@@ -629,11 +645,13 @@ def location_create(request):
                 )
             except ValidationError as error:
                 form.add_error(None, error.message)
-                return render(request, "organizations/location_create.html", {"form": form})
+                return render(request, "organizations/location_create.html", {"form": form, "next_url": next_url})
         location = Location.objects.create(organization=request.organization, is_active=True, **form.cleaned_data)
         record_audit_event(action="location.created", actor=request.user, organization=request.organization, target=location, request=request)
+        if next_url:
+            return redirect(next_url)
         return redirect("module-overview", module="locations")
-    return render(request, "organizations/location_create.html", {"form": form})
+    return render(request, "organizations/location_create.html", {"form": form, "next_url": next_url})
 
 
 @login_required

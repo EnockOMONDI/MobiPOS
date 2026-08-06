@@ -57,6 +57,43 @@ def test_contact_duplicate_validation_and_lifecycle(client):
 
 
 @pytest.mark.django_db
+def test_contact_create_can_open_as_supplier_flow(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    client.force_login(owner)
+
+    response = client.get(reverse("contact-create"), {"type": "supplier"})
+
+    assert response.status_code == 200
+    assert b"Add supplier" in response.content
+    assert b'<option value="supplier" selected>' in response.content
+
+
+@pytest.mark.django_db
+def test_contact_create_returns_to_safe_purchase_setup_flow(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    client.force_login(owner)
+
+    response = client.post(reverse("contact-create"), {
+        "contact_type": "supplier",
+        "name": "Return Flow Supplier",
+        "phone_number": "+254700111222",
+        "email": "return.supplier@example.com",
+        "tax_number": "P000111222X",
+        "credit_limit": 0,
+        "payment_terms_days": 14,
+        "is_active": "on",
+        "next": reverse("purchase-create"),
+    })
+
+    assert response.status_code == 302
+    assert response.url == reverse("purchase-create")
+    assert Contact.objects.filter(organization=organization, name="Return Flow Supplier").exists()
+
+
+@pytest.mark.django_db
 def test_contact_statement_is_tenant_scoped_and_renders_finance_sections(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="brian")

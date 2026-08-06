@@ -67,3 +67,23 @@ def test_product_register_column_controls_and_pdf_export(client):
     assert pdf_response.status_code == 200
     assert pdf_response["Content-Type"] == "application/pdf"
     assert pdf_response.content.startswith(b"%PDF")
+
+
+@pytest.mark.django_db
+def test_owner_register_pages_show_setup_create_actions(client):
+    call_command("seed_demo_data")
+    client.force_login(User.objects.get(username="brian"))
+
+    branches = client.get(reverse("module-overview", args=["branches"]))
+    locations = client.get(reverse("module-overview", args=["locations"]))
+    contacts = client.get(reverse("module-overview", args=["contacts"]))
+
+    assert branches.status_code == 200
+    assert b"Add branch" in branches.content
+    assert reverse("branch-create") in branches.content.decode()
+    assert locations.status_code == 200
+    assert b"Add location" in locations.content
+    assert reverse("location-create") in locations.content.decode()
+    assert contacts.status_code == 200
+    assert b"Add customer or supplier" in contacts.content
+    assert reverse("contact-create") in contacts.content.decode()

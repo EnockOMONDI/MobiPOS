@@ -48,6 +48,8 @@ def purchase_create(request):
     return render(request, "purchasing/create.html", {
         "form": form,
         "has_suppliers": form.fields["supplier"].queryset.exists(),
+        "has_real_suppliers": form.fields["supplier"].queryset.exclude(name__iexact="Opening Stock Supplier").exists(),
+        "has_destinations": form.fields["destination"].queryset.exists(),
         "has_products": form.fields["product"].queryset.exists(),
     })
 

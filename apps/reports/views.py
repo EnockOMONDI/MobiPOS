@@ -1,6 +1,6 @@
 import csv
 from datetime import timedelta
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -738,6 +738,76 @@ def _owner_activity_queryset(request):
     )
 
 
+def _owner_setup_steps(organization):
+    purchase_url = reverse("purchase-create")
+    steps = [
+        {
+            "key": "branch",
+            "title": "Confirm your branch",
+            "description": "A branch represents a shop, outlet, office, or business unit.",
+            "complete": Branch.objects.filter(organization=organization, is_active=True).exists(),
+            "action_label": "Add branch",
+            "action_url": reverse("branch-create"),
+        },
+        {
+            "key": "location",
+            "title": "Create selling and stock locations",
+            "description": "Locations show where stock sits, such as a POS counter, warehouse, repair desk, or agent custody.",
+            "complete": Location.objects.filter(organization=organization, is_active=True).exists(),
+            "action_label": "Add location",
+            "action_url": reverse("location-create"),
+        },
+        {
+            "key": "users",
+            "title": "Add your team",
+            "description": "Create staff accounts and assign the branches and roles they should use.",
+            "complete": Membership.objects.filter(organization=organization, status="active").count() > 1,
+            "action_label": "Add user",
+            "action_url": reverse("tenant-user-create"),
+        },
+        {
+            "key": "supplier",
+            "title": "Add a supplier",
+            "description": "Supplier records make purchasing, payables, returns, and stock history traceable.",
+            "complete": Contact.objects.filter(
+                organization=organization,
+                contact_type__in=("supplier", "both"),
+                is_active=True,
+            ).exclude(name__iexact="Opening Stock Supplier").exists(),
+            "action_label": "Add supplier",
+            "action_url": f"{reverse('contact-create')}?{urlencode({'type': 'supplier'})}",
+        },
+        {
+            "key": "product",
+            "title": "Add products",
+            "description": "Create the phones, accessories, parts, and services your team will purchase and sell.",
+            "complete": Product.objects.filter(organization=organization, is_active=True, is_purchasable=True).exists(),
+            "action_label": "Add product",
+            "action_url": reverse("product-create"),
+        },
+        {
+            "key": "purchase",
+            "title": "Create the first purchase",
+            "description": "Record incoming supplier stock before receiving quantities or IMEIs.",
+            "complete": PurchaseOrder.objects.filter(organization=organization).exists(),
+            "action_label": "New purchase",
+            "action_url": purchase_url,
+        },
+        {
+            "key": "stock",
+            "title": "Receive stock or IMEIs",
+            "description": "Register available stock so the POS, transfers, and reports have reliable inventory.",
+            "complete": StockUnit.objects.filter(organization=organization).exists()
+            or StockBalance.objects.filter(organization=organization, quantity__gt=0).exists(),
+            "action_label": "Batch IMEI intake",
+            "action_url": reverse("batch-serial-intake"),
+        },
+    ]
+    for index, step in enumerate(steps, start=1):
+        step["number"] = index
+    return steps
+
+
 def dashboard(request):
     if not request.user.is_authenticated:
         return render(request, "marketing/landing.html", {
@@ -804,6 +874,9 @@ def dashboard(request):
             ).select_related("source", "destination")[:5],
         }
         membership = getattr(request, "membership", None)
+        setup_steps = []
+        if membership and membership.is_owner:
+            setup_steps = _owner_setup_steps(organization)
         if request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner):
             latest_activity = _owner_activity_queryset(request).select_related("actor", "organization")[:8]
     elif request.user.is_platform_admin or request.user.is_superuser:
@@ -828,6 +901,7 @@ def dashboard(request):
         latest_sales = Sale.objects.select_related("customer", "agent").prefetch_related("lines__product", "lines__stock_unit").order_by("-created_at")[:8]
         pending_actions = {"purchase_receipts": [], "transfer_receipts": []}
         latest_activity = _owner_activity_queryset(request).select_related("actor", "organization")[:8]
+        setup_steps = []
     else:
         metrics = dict.fromkeys(
             (
@@ -842,11 +916,15 @@ def dashboard(request):
         )
         latest_sales = []
         pending_actions = {"purchase_receipts": [], "transfer_receipts": []}
+        setup_steps = []
     return render(request, "dashboard.html", {
         "metrics": metrics,
         "latest_sales": latest_sales,
         "pending_actions": pending_actions,
         "latest_activity": latest_activity,
+        "owner_setup_steps": setup_steps,
+        "owner_setup_complete_count": sum(1 for step in setup_steps if step["complete"]),
+        "owner_setup_total": len(setup_steps),
     })
 
 
@@ -1027,6 +1105,19 @@ MODULE_DETAIL_URLS = {
     "repairs": "repair-detail",
     "sessions": "session-detail",
     "agents": "agent-profile-detail",
+}
+
+MODULE_CREATE_ACTIONS = {
+    "branches": {"label": "Add branch", "url_name": "branch-create"},
+    "locations": {"label": "Add location", "url_name": "location-create"},
+    "contacts": {"label": "Add customer or supplier", "url_name": "contact-create"},
+    "roles": {"label": "Add role", "url_name": "role-create"},
+    "purchases": {"label": "New purchase", "url_name": "purchase-create"},
+    "supplier-returns": {"label": "New supplier return", "url_name": "supplier-return-create"},
+    "transfers": {"label": "New transfer", "url_name": "transfer-create"},
+    "expenses": {"label": "New expense", "url_name": "expense-create"},
+    "repairs": {"label": "New repair", "url_name": "repair-create"},
+    "commission-payouts": {"label": "New payout", "url_name": "commission-payout-create"},
 }
 
 
@@ -1299,6 +1390,12 @@ def module_overview(request, module):
         return response
     page_obj = Paginator(queryset, 25).get_page(request.GET.get("page"))
     detail_url_name = MODULE_DETAIL_URLS.get(module)
+    create_action = MODULE_CREATE_ACTIONS.get(module)
+    if create_action:
+        create_action = {
+            **create_action,
+            "url": reverse(create_action["url_name"]),
+        }
     rows = [{
         "values": [getattr(item, field) for field in fields],
         "detail_url": reverse(detail_url_name, args=[item.pk]) if detail_url_name else "",
@@ -1315,6 +1412,7 @@ def module_overview(request, module):
             "status": status,
             "supports_status_filter": any(field.name == "is_active" for field in model._meta.fields),
             "has_detail_pages": bool(detail_url_name),
+            "create_action": create_action,
         },
     )
 
