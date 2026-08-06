@@ -2,6 +2,7 @@ import pytest
 from django.core.exceptions import PermissionDenied
 from django.test import RequestFactory, override_settings
 from django.contrib.auth.models import Permission
+from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.accounts.models import User
 from apps.organizations.models import Branch, Company, Membership, MembershipStatus, Organization, Role
@@ -70,7 +71,7 @@ def test_non_owner_is_limited_to_assigned_branches():
 
 @pytest.mark.django_db
 @override_settings(PRIVILEGED_OTP_REQUIRED=True)
-def test_owner_privileged_action_requires_verified_otp():
+def test_owner_privileged_action_without_authenticator_redirects_to_mfa_setup():
     user = User.objects.create_user(username="otp-owner", email="otp-owner@example.com")
     organization = Organization.objects.create(name="OTP Org", slug="otp-org", status="active")
     membership = Membership.objects.create(
@@ -85,7 +86,30 @@ def test_owner_privileged_action_requires_verified_otp():
     response = protected(request)
 
     assert response.status_code == 302
+    assert response.url.startswith("/accounts/mfa/setup/")
+    assert "next=%2F" in response.url
+
+
+@pytest.mark.django_db
+@override_settings(PRIVILEGED_OTP_REQUIRED=True)
+def test_owner_privileged_action_with_authenticator_redirects_to_mfa_verify():
+    user = User.objects.create_user(username="verified-otp-owner", email="verified-otp-owner@example.com")
+    TOTPDevice.objects.create(user=user, name="MobiPOS", confirmed=True)
+    organization = Organization.objects.create(name="Verified OTP Org", slug="verified-otp-org", status="active")
+    membership = Membership.objects.create(
+        user=user, organization=organization, status=MembershipStatus.ACTIVE, is_owner=True,
+    )
+    request = RequestFactory().post("/")
+    request.user = user
+    request.membership = membership
+
+    protected = organization_owner_required(lambda request: "ok")
+
+    response = protected(request)
+
+    assert response.status_code == 302
     assert response.url.startswith("/accounts/mfa/verify/")
+    assert "next=%2F" in response.url
 
 
 @pytest.mark.django_db

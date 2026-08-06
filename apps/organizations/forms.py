@@ -4,6 +4,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.db.models import Q
+from django.utils.text import slugify
 
 from .models import AgentDocument, AgentDocumentType, AgentProfile, AgentProfileStatus, AgentProfileType, Branch, Company, LocationType, Membership, Organization, Plan, Role
 
@@ -61,10 +62,8 @@ def tenant_role_permission_queryset():
 
 class OrganizationRegistrationForm(forms.Form):
     organization_name = forms.CharField(max_length=200)
-    organization_slug = forms.SlugField(max_length=200)
     first_name = forms.CharField(max_length=150)
     last_name = forms.CharField(max_length=150)
-    username = forms.CharField(max_length=150)
     email = forms.EmailField()
     password = forms.CharField(widget=forms.PasswordInput, min_length=10)
     plan = forms.ModelChoiceField(queryset=Plan.objects.none())
@@ -86,23 +85,35 @@ class OrganizationRegistrationForm(forms.Form):
         self.fields["plan"].queryset = Plan.objects.filter(is_active=True).order_by("monthly_price", "name")
         self.fields["plan"].initial = pilot_plan
 
-    def clean_organization_slug(self):
-        slug = self.cleaned_data["organization_slug"]
-        if Organization.objects.filter(slug=slug).exists():
-            raise forms.ValidationError("This organization URL is already in use.")
-        return slug
-
-    def clean_username(self):
-        username = self.cleaned_data["username"]
-        if get_user_model().objects.filter(username=username).exists():
-            raise forms.ValidationError("This username is already in use.")
-        return username
-
     def clean_email(self):
         email = self.cleaned_data["email"]
         if get_user_model().objects.filter(email=email).exists():
             raise forms.ValidationError("This email is already in use.")
         return email
+
+    def generated_organization_slug(self):
+        base = slugify(self.cleaned_data["organization_name"])[:180] or "organization"
+        candidate = base
+        suffix = 2
+        while Organization.objects.filter(slug=candidate).exists():
+            suffix_text = f"-{suffix}"
+            candidate = f"{base[:200 - len(suffix_text)]}{suffix_text}"
+            suffix += 1
+        return candidate
+
+    def generated_username(self):
+        email = self.cleaned_data.get("email", "")
+        first_name = self.cleaned_data.get("first_name", "")
+        last_name = self.cleaned_data.get("last_name", "")
+        base = slugify((email or "").split("@")[0] or f"{first_name}-{last_name}") or "owner"
+        candidate = base[:140]
+        suffix = 2
+        User = get_user_model()
+        while User.objects.filter(username=candidate).exists():
+            suffix_text = f"-{suffix}"
+            candidate = f"{base[:150 - len(suffix_text)]}{suffix_text}"
+            suffix += 1
+        return candidate
 
 
 class TenantUserForm(forms.Form):

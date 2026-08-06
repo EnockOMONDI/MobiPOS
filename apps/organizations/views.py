@@ -83,12 +83,12 @@ def register_organization(request):
     if request.method == "POST" and form.is_valid():
         organization = Organization.objects.create(
             name=form.cleaned_data["organization_name"],
-            slug=form.cleaned_data["organization_slug"],
+            slug=form.generated_organization_slug(),
             email=form.cleaned_data["email"],
             status=OrganizationStatus.ACTIVE,
         )
         user = get_user_model().objects.create_user(
-            username=form.cleaned_data["username"],
+            username=form.generated_username(),
             email=form.cleaned_data["email"],
             password=form.cleaned_data["password"],
             first_name=form.cleaned_data["first_name"],

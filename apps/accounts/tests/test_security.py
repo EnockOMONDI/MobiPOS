@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.contrib.sessions.models import Session
 from django.urls import reverse
@@ -31,3 +33,41 @@ def test_user_can_revoke_another_session(client):
     assert response.status_code == 302
     assert not Session.objects.filter(session_key=other.session_key).exists()
     assert not UserSession.objects.filter(pk=tracked.id).exists()
+
+
+@pytest.mark.django_db
+def test_mfa_setup_preserves_safe_next_url(client):
+    user = User.objects.create_user(username="mfa-setup-owner", email="mfa-setup@example.com")
+    client.force_login(user)
+
+    response = client.get(f"{reverse('mfa-setup')}?next=/branches/new/")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert 'name="next" value="/branches/new/"' in content
+
+
+@pytest.mark.django_db
+def test_mfa_setup_rejects_unsafe_next_url(client):
+    user = User.objects.create_user(username="unsafe-mfa-setup-owner", email="unsafe-mfa-setup@example.com")
+    client.force_login(user)
+
+    response = client.get(f"{reverse('mfa-setup')}?next=https://evil.example/branches/new/")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    setup_form = re.search(r"<form method=\"post\" class=\"mt-6 space-y-4\">(?P<form>.*?)</form>", content, re.S).group("form")
+    assert 'name="next"' not in setup_form
+
+
+@pytest.mark.django_db
+def test_mfa_verify_links_unenrolled_user_to_setup_with_next(client):
+    user = User.objects.create_user(username="unenrolled-owner", email="unenrolled@example.com")
+    client.force_login(user)
+
+    response = client.get(f"{reverse('mfa-verify')}?next=/branches/new/")
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert reverse("mfa-setup") in content
+    assert "next=/branches/new/" in content or "next=%2Fbranches%2Fnew%2F" in content

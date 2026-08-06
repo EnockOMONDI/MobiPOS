@@ -1,6 +1,7 @@
 from .models import MembershipStatus
 from .models import Branch, Location
 from functools import wraps
+from urllib.parse import urlencode
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
 
@@ -10,6 +11,17 @@ def _otp_is_verified(request):
     verifier = getattr(user, "is_verified", None)
     session = getattr(request, "session", {})
     return bool((verifier and verifier()) or session.get("mfa_recovery_verified"))
+
+
+def _mfa_redirect_for_privileged_action(request):
+    from django.shortcuts import redirect
+    from django.urls import reverse
+
+    from apps.accounts.services import confirmed_totp_device
+
+    next_url = request.get_full_path()
+    destination = "mfa-verify" if confirmed_totp_device(request.user) else "mfa-setup"
+    return redirect(f"{reverse(destination)}?{urlencode({'next': next_url})}")
 
 
 def active_membership_for(user, organization):
@@ -114,9 +126,7 @@ def organization_owner_required(view):
         membership = getattr(request, "membership", None)
         if request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner):
             if settings.PRIVILEGED_OTP_REQUIRED and not _otp_is_verified(request):
-                from django.shortcuts import redirect
-                from django.urls import reverse
-                return redirect(f"{reverse('mfa-verify')}?next={request.get_full_path()}")
+                return _mfa_redirect_for_privileged_action(request)
             return view(request, *args, **kwargs)
         raise PermissionDenied("Organization owner access is required.")
     return wrapped
@@ -154,9 +164,7 @@ def platform_admin_required(view):
     def wrapped(request, *args, **kwargs):
         if request.user.is_authenticated and (request.user.is_superuser or request.user.is_platform_admin):
             if settings.PRIVILEGED_OTP_REQUIRED and not _otp_is_verified(request):
-                from django.shortcuts import redirect
-                from django.urls import reverse
-                return redirect(f"{reverse('mfa-verify')}?next={request.get_full_path()}")
+                return _mfa_redirect_for_privileged_action(request)
             return view(request, *args, **kwargs)
         raise PermissionDenied("Platform administrator access is required.")
     return wrapped

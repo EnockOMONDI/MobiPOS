@@ -29,6 +29,13 @@ def security_settings(request):
 
 @login_required
 def mfa_setup(request):
+    next_url = request.POST.get("next") or request.GET.get("next") or ""
+    if next_url and not url_has_allowed_host_and_scheme(
+        next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = ""
     device = TOTPDevice.objects.filter(user=request.user, confirmed=False).first()
     if not device:
         device = TOTPDevice.objects.create(user=request.user, name="MobiPOS", confirmed=False)
@@ -42,8 +49,8 @@ def mfa_setup(request):
             otp_login(request, device)
             codes = generate_recovery_codes(user=request.user)
             record_audit_event(action="identity.mfa_enabled", actor=request.user, request=request)
-            return render(request, "accounts/recovery_codes.html", {"codes": codes})
-    return render(request, "accounts/mfa_setup.html", {"device": device, "form": form})
+            return render(request, "accounts/recovery_codes.html", {"codes": codes, "continue_url": next_url or None})
+    return render(request, "accounts/mfa_setup.html", {"device": device, "form": form, "next_url": next_url})
 
 
 @login_required
@@ -77,7 +84,12 @@ def mfa_verify(request):
     return render(
         request,
         "accounts/mfa_verify.html",
-        {"device": device, "token_form": token_form, "recovery_form": recovery_form},
+        {
+            "device": device,
+            "token_form": token_form,
+            "recovery_form": recovery_form,
+            "next_url": request.GET.get("next") or "",
+        },
     )
 
 
