@@ -85,6 +85,48 @@ def test_product_features_page_explains_completion_statuses_and_scenarios(client
 
 
 @pytest.mark.django_db
+def test_help_center_explains_business_terms_for_authenticated_users(client):
+    organization = Organization.objects.create(name="Help Retailer", slug="help-retailer", status="active")
+    user = User.objects.create_user(username="help-owner", email="help-owner@example.com")
+    Membership.objects.create(user=user, organization=organization, status=MembershipStatus.ACTIVE, is_owner=True)
+    client.force_login(user)
+
+    response = client.get(reverse("help-center"))
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "How MobiPOS works" in content
+    assert "Serialized Product" in content
+    assert "Tick the serialized checkbox" in content
+    assert "Non-Serialized Product" in content
+    assert "Branch" in content
+    assert "Location" in content
+    assert "Supplier Statement" in content
+    assert "Search help" in content
+
+
+@pytest.mark.django_db
+def test_help_center_requires_login(client):
+    response = client.get(reverse("help-center"))
+
+    assert response.status_code == 302
+    assert response.url.startswith("/accounts/login/")
+
+
+@pytest.mark.django_db
+def test_authenticated_top_bar_links_to_help_center(client):
+    organization = Organization.objects.create(name="Top Help", slug="top-help", status="active")
+    user = User.objects.create_user(username="top-help-owner", email="top-help@example.com")
+    Membership.objects.create(user=user, organization=organization, status=MembershipStatus.ACTIVE, is_owner=True)
+    client.force_login(user)
+
+    response = client.get(reverse("dashboard"))
+
+    assert response.status_code == 200
+    assert reverse("help-center") in response.content.decode()
+
+
+@pytest.mark.django_db
 def test_business_flow_page_handles_empty_database_and_keeps_nodes_clickable(client):
     response = client.get(reverse("business-flow"))
 
