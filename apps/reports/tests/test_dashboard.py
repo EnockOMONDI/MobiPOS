@@ -19,7 +19,8 @@ def test_dashboard_serves_public_landing_for_anonymous_users(client):
 
     assert response.status_code == 200
     assert b"Run your mobile business" in response.content
-    assert b"Try Demo Version Now" in response.content
+    assert b"Sign In" in response.content
+    assert b"https://kipekeestudio.co.ke/accounts/login/" in response.content
 
 
 @pytest.mark.django_db
@@ -65,7 +66,8 @@ def test_login_demo_page_does_not_expose_platform_admin_credentials(client):
     response = client.get(f"{reverse('login')}?demo=platformadmin")
 
     assert response.status_code == 200
-    assert b"DemoPass123!" in response.content
+    assert b"Track every IMEI from supplier to sale, every payment, every transfer and every staff action in one place." in response.content
+    assert b"DemoPass123!" not in response.content
     assert b"AdminPass123!" not in response.content
 
 
@@ -147,7 +149,8 @@ def test_business_flow_page_handles_empty_database_and_keeps_nodes_clickable(cli
     assert reverse("purchase-create") in response.content.decode()
     assert reverse("batch-serial-intake") in response.content.decode()
     assert reverse("agent-network-report") in response.content.decode()
-    assert "demo=brian&amp;next=/purchases/new/" in response.content.decode()
+    assert "demo=brian" not in response.content.decode()
+    assert f"{reverse('login')}?next=/purchases/new/" in response.content.decode()
 
 
 @pytest.mark.django_db

@@ -942,8 +942,8 @@ def _business_flow_counts(organization):
     }
 
 
-def _demo_url(url):
-    return f"{reverse('login')}?demo=brian&next={quote(url, safe='/?=&')}"
+def _login_next_url(url):
+    return f"{reverse('login')}?next={quote(url, safe='/?=&')}"
 
 
 def _node(title, summary, metric, url_name, *, args=None, status="Implemented", query=""):
@@ -955,7 +955,7 @@ def _node(title, summary, metric, url_name, *, args=None, status="Implemented", 
         "summary": summary,
         "metric": metric,
         "url": url,
-        "demo_url": _demo_url(url),
+        "demo_url": _login_next_url(url),
         "status": status,
     }
 
@@ -1130,13 +1130,13 @@ def _business_role_flows(counts):
         },
     ]
     for role in roles:
-        role["steps"] = [(label, _demo_url(url)) for label, url in role["steps"]]
+        role["steps"] = [(label, _login_next_url(url)) for label, url in role["steps"]]
     return roles
 
 
 def _journey_step(label, detail, url_name, *, args=None, status="Complete"):
     url = reverse(url_name, args=args or [])
-    return {"label": label, "detail": detail, "url": _demo_url(url), "status": status}
+    return {"label": label, "detail": detail, "url": _login_next_url(url), "status": status}
 
 
 def _business_journeys(counts):

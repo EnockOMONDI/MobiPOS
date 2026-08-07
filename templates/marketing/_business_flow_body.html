@@ -120,7 +120,7 @@
         <a href="{% url 'dashboard' %}">Home</a>
         <a href="{% url 'product-features' %}">Features</a>
         <a href="#quick-navigation">Quick Navigation</a>
-        <a href="{% url 'demo-access' %}" class="doc-demo">Access Demo</a>
+        <a href="https://kipekeestudio.co.ke/accounts/login/" class="doc-demo">Sign In</a>
       </nav>
     </div>
   </header>
@@ -196,7 +196,7 @@
               <article class="doc-step">
                 <span class="doc-step-num">{{ forloop.counter }}</span>
                 <div><h3>{{ step.label }}</h3><p>{{ step.detail }}</p></div>
-                <a href="{{ step.url }}">Open demo ↗</a>
+                <a href="{{ step.url }}">Open workflow ↗</a>
               </article>
             {% endfor %}
           </div>
@@ -221,7 +221,7 @@
               <p>{{ role.focus }}</p>
               <div class="role-proof">{% for item in role.proof %}<span>{{ item }}</span>{% endfor %}</div>
               <div class="role-links">
-                {% for label, url in role.steps %}<a href="{{ url }}"><span>{{ label }}</span><span>Open demo ↗</span></a>{% endfor %}
+                {% for label, url in role.steps %}<a href="{{ url }}"><span>{{ label }}</span><span>Open workflow ↗</span></a>{% endfor %}
               </div>
             </article>
           {% endfor %}
@@ -230,8 +230,8 @@
 
 
       <section class="doc-final">
-        <div><h2>Ready to explore the business flow.</h2><p>Start with the journey cards, then open Brian's demo account to see how the workflows operate with sample data.</p></div>
-        <a href="{% url 'login' %}?demo=brian">Access Brian Demo</a>
+        <div><h2>Ready to explore the business flow.</h2><p>Start with the journey cards, then sign in to open the workflows inside MobiPOS.</p></div>
+        <a href="https://kipekeestudio.co.ke/accounts/login/">Sign In</a>
       </section>
     </main>
   </div>

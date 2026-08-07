@@ -66,14 +66,14 @@
         </span>
         <span>MobiPOS</span>
       </a>
-      <div class="login-pill">Demo access for Kenyan mobile retail teams</div>
+      <div class="login-pill">Secure access for Kenyan mobile retail teams</div>
       <h2 class="login-title">
-        Access the owner demo.
-        <em>See every IMEI, sale and agent action.</em>
+        Welcome back.
+        <em>Your business is ready.</em>
       </h2>
-      <p class="login-copy">Use Brian’s demo account to enter a guided MobiPOS workspace with sample inventory, purchases, transfers, POS sales, commissions, reports and audit visibility.</p>
-      <div class="login-proof" aria-label="Demo highlights">
-        <div class="login-proof-card"><strong>4k</strong><span>sample IMEI-ready stock records</span></div>
+      <p class="login-copy">Track every IMEI from supplier to sale, every payment, every transfer and every staff action in one place.</p>
+      <div class="login-proof" aria-label="MobiPOS workspace highlights">
+        <div class="login-proof-card"><strong>IMEI</strong><span>serialized stock visibility from purchase to sale</span></div>
         <div class="login-proof-card"><strong>360°</strong><span>owner visibility across users and branches</span></div>
         <div class="login-proof-card"><strong>KES</strong><span>Kenya-first sales, credit and reporting</span></div>
       </div>
@@ -87,13 +87,6 @@
         </div>
         <div class="login-status" aria-hidden="true">↗</div>
       </div>
-
-      {% if request.GET.demo %}
-        <div class="login-demo">
-          <p><strong>Demo account selected:</strong> {{ request.GET.demo }}</p>
-          <p class="mt-1">Password: <strong>DemoPass123!</strong></p>
-        </div>
-      {% endif %}
 
       {% if form.non_field_errors %}
         <div class="login-errors">
@@ -109,7 +102,7 @@
           {% if form.username.errors %}
             <p class="login-help text-red-700">{{ form.username.errors|striptags }}</p>
           {% else %}
-            <p class="login-help">For the guided demo, use <strong>brian</strong>.</p>
+            <p class="login-help">Use the username assigned to your MobiPOS account.</p>
           {% endif %}
         </div>
         <div class="login-field">
@@ -118,30 +111,19 @@
           {% if form.password.errors %}
             <p class="login-help text-red-700">{{ form.password.errors|striptags }}</p>
           {% else %}
-            <p class="login-help">Demo password: <strong>DemoPass123!</strong></p>
+            <p class="login-help">Enter your password. Contact your organization owner if you need access.</p>
           {% endif %}
         </div>
-        <button type="submit" class="login-submit">Enter MobiPOS demo</button>
+        <button type="submit" class="login-submit">Sign in to MobiPOS</button>
       </form>
 
       <div class="login-links">
         <a href="{% url 'password-reset' %}">Forgot password?</a>
         <a href="{% url 'register-organization' %}">Register organization</a>
       </div>
-      <a href="{% url 'demo-access' %}" class="login-secondary">View all demo accounts</a>
-      <div class="login-mini"><span class="login-dot"></span><span>Demo data is seeded for safe product exploration.</span></div>
+      <a href="{% url 'dashboard' %}" class="login-secondary">Back to website</a>
+      <div class="login-mini"><span class="login-dot"></span><span>Your workspace connects stock, sales, users and reports.</span></div>
     </section>
   </div>
 </div>
-
-{% if request.GET.demo %}
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const username = document.querySelector("input[name='username']");
-      const password = document.querySelector("input[name='password']");
-      if (username && !username.value) username.value = "{{ request.GET.demo|escapejs }}";
-      if (password && !password.value) password.value = "DemoPass123!";
-    });
-  </script>
-{% endif %}
 {% endblock %}
