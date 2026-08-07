@@ -134,7 +134,7 @@ def register_organization(request):
             target=organization,
             request=request,
         )
-        send_owner_welcome_email(user=user, organization=organization)
+        transaction.on_commit(lambda: send_owner_welcome_email(user=user, organization=organization))
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return redirect("dashboard")
     return render(request, "registration/register.html", {"form": form})
@@ -215,7 +215,13 @@ def tenant_user_create(request):
                     request=request,
                 )
             record_audit_event(action="user.created", actor=request.user, organization=request.organization, target=user, request=request)
-            send_staff_account_created_email(user=user, organization=request.organization, created_by=request.user)
+            transaction.on_commit(
+                lambda: send_staff_account_created_email(
+                    user=user,
+                    organization=request.organization,
+                    created_by=request.user,
+                )
+            )
             messages.success(request, f"{user.get_full_name() or user.email} was created and can log in now.")
             return redirect("module-overview", module="users")
     return render(request, "organizations/user_create.html", {"form": form})

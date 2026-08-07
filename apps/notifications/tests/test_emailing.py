@@ -1,5 +1,6 @@
 import pytest
 from django.core import mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
@@ -18,20 +19,21 @@ EMAIL_SETTINGS = {
 
 @pytest.mark.django_db
 @override_settings(**EMAIL_SETTINGS)
-def test_owner_registration_sends_branded_welcome_email(client):
+def test_owner_registration_sends_branded_welcome_email(client, django_capture_on_commit_callbacks):
     plan = Plan.objects.create(name="Starter", code="starter", monthly_price=1000)
 
-    response = client.post(
-        reverse("register-organization"),
-        {
-            "organization_name": "Email Retailer",
-            "first_name": "Email",
-            "last_name": "Owner",
-            "email": "email.owner@example.com",
-            "password": "SecurePass123!",
-            "plan": plan.id,
-        },
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            reverse("register-organization"),
+            {
+                "organization_name": "Email Retailer",
+                "first_name": "Email",
+                "last_name": "Owner",
+                "email": "email.owner@example.com",
+                "password": "SecurePass123!",
+                "plan": plan.id,
+            },
+        )
 
     assert response.status_code == 302
     assert len(mail.outbox) == 1
@@ -44,7 +46,35 @@ def test_owner_registration_sends_branded_welcome_email(client):
 
 @pytest.mark.django_db
 @override_settings(**EMAIL_SETTINGS)
-def test_staff_creation_sends_account_ready_email(client):
+def test_owner_registration_succeeds_when_welcome_email_times_out(client, monkeypatch, django_capture_on_commit_callbacks):
+    plan = Plan.objects.create(name="Starter", code="starter", monthly_price=1000)
+
+    def raise_timeout(self, *args, **kwargs):
+        raise TimeoutError("SMTP timed out")
+
+    monkeypatch.setattr(EmailMultiAlternatives, "send", raise_timeout)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            reverse("register-organization"),
+            {
+                "organization_name": "Timeout Retailer",
+                "first_name": "Timeout",
+                "last_name": "Owner",
+                "email": "timeout.owner@example.com",
+                "password": "SecurePass123!",
+                "plan": plan.id,
+            },
+        )
+
+    assert response.status_code == 302
+    assert Organization.objects.filter(slug="timeout-retailer").exists()
+    assert User.objects.filter(email="timeout.owner@example.com").exists()
+
+
+@pytest.mark.django_db
+@override_settings(**EMAIL_SETTINGS)
+def test_staff_creation_sends_account_ready_email(client, django_capture_on_commit_callbacks):
     call_command("seed_demo_data")
     owner = User.objects.get(username="brian")
     organization = Organization.objects.get(slug="nairobi-mobile-hub")
@@ -52,18 +82,19 @@ def test_staff_creation_sends_account_ready_email(client):
     role = Role.objects.get(organization=organization, code="cashier")
     client.force_login(owner)
 
-    response = client.post(
-        reverse("tenant-user-create"),
-        {
-            "first_name": "Email",
-            "last_name": "Cashier",
-            "email": "email.cashier@example.com",
-            "password": "StrongPass123!",
-            "password_confirm": "StrongPass123!",
-            "branches": [branch.id],
-            "roles": [role.id],
-        },
-    )
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            reverse("tenant-user-create"),
+            {
+                "first_name": "Email",
+                "last_name": "Cashier",
+                "email": "email.cashier@example.com",
+                "password": "StrongPass123!",
+                "password_confirm": "StrongPass123!",
+                "branches": [branch.id],
+                "roles": [role.id],
+            },
+        )
 
     assert response.status_code == 302
     assert len(mail.outbox) == 1
@@ -72,6 +103,40 @@ def test_staff_creation_sends_account_ready_email(client):
     assert "account for Nairobi Mobile Hub is ready" in message.subject
     assert "temporary password is not included" in message.body
     assert "Sign in" in message.alternatives[0][0]
+
+
+@pytest.mark.django_db
+@override_settings(**EMAIL_SETTINGS)
+def test_staff_creation_succeeds_when_account_email_times_out(client, monkeypatch, django_capture_on_commit_callbacks):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    branch = Branch.objects.get(organization=organization, code="WST")
+    role = Role.objects.get(organization=organization, code="cashier")
+    client.force_login(owner)
+
+    def raise_timeout(self, *args, **kwargs):
+        raise TimeoutError("SMTP timed out")
+
+    monkeypatch.setattr(EmailMultiAlternatives, "send", raise_timeout)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            reverse("tenant-user-create"),
+            {
+                "first_name": "Timeout",
+                "last_name": "Cashier",
+                "email": "timeout.cashier@example.com",
+                "password": "StrongPass123!",
+                "password_confirm": "StrongPass123!",
+                "branches": [branch.id],
+                "roles": [role.id],
+            },
+        )
+
+    assert response.status_code == 302
+    membership = Membership.objects.get(organization=organization, user__email="timeout.cashier@example.com")
+    assert membership.status == "active"
 
 
 @pytest.mark.django_db

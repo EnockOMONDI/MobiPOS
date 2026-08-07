@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+import logging
+import smtplib
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
@@ -12,6 +14,8 @@ from django.utils.html import strip_tags
 
 from apps.audit.models import AuditEvent
 from apps.organizations.models import Membership, MembershipStatus, Organization
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -45,7 +49,13 @@ def send_branded_email(*, subject: str, template_name: str, context: dict, recip
         to=list(recipients),
     )
     message.attach_alternative(html_body, "text/html")
-    sent_count = message.send(fail_silently=not getattr(settings, "EMAIL_DELIVERY_REQUIRED", False))
+    try:
+        sent_count = message.send(fail_silently=False)
+    except (OSError, TimeoutError, smtplib.SMTPException):
+        logger.exception("Email delivery failed for template %s to %s", template_name, ", ".join(recipients))
+        if getattr(settings, "EMAIL_RAISE_DELIVERY_ERRORS", False):
+            raise
+        sent_count = 0
     return EmailResult(recipients=recipients, sent_count=sent_count)
 
 
