@@ -1,0 +1,14 @@
+Welcome to MobiPOS, {{ user.first_name|default:user.username }}.
+
+Your owner account for {{ organization.name }} is ready.
+
+Good first steps:
+1. Edit the example branch and POS location to match your real shop.
+2. Add your team and assign the roles they should use.
+3. Add suppliers, products and IMEIs before making the first sale.
+
+Open dashboard:
+{{ dashboard_url }}
+
+Open help center:
+{{ help_url }}

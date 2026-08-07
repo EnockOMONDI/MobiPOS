@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block email_title %}MobiPOS{% endblock %}</title>
+</head>
+<body style="margin:0;background:#f8fafc;color:#0f172a;font-family:Inter,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border:1px solid #e2e8f0;border-radius:28px;overflow:hidden;box-shadow:0 24px 60px rgba(15,23,42,.08);">
+          <tr>
+            <td style="padding:28px 32px;background:#ffffff;border-bottom:1px solid #e2e8f0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align:middle;">
+                    <div style="display:inline-block;width:44px;height:44px;border-radius:16px;background:#dc2626;color:#ffffff;text-align:center;line-height:44px;font-weight:900;font-size:20px;">M</div>
+                    <span style="display:inline-block;margin-left:12px;vertical-align:middle;font-size:22px;font-weight:900;color:#0f172a;">MobiPOS</span>
+                  </td>
+                  <td align="right" style="font-size:12px;font-weight:700;color:#64748b;">Kenya-first retail operations</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 32px;">
+              {% block email_body %}{% endblock %}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px;background:#f8fafc;border-top:1px solid #e2e8f0;color:#64748b;font-size:13px;line-height:20px;">
+              <strong style="color:#0f172a;">MobiPOS</strong><br>
+              Track IMEIs, stock movement, payments, staff actions and owner reports from one workspace.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

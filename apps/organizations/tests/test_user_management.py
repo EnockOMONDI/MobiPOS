@@ -229,6 +229,52 @@ def test_branch_and_location_setup_forms_preselect_single_parent_and_return_to_p
 
 
 @pytest.mark.django_db
+def test_owner_can_edit_signup_example_branch_and_location(client):
+    organization = Organization.objects.create(name="Example Setup", slug="example-setup", status="active")
+    owner = User.objects.create_user(username="example-owner", email="example-owner@example.com")
+    company = Company.objects.create(organization=organization, name="Example Company", code="MAIN")
+    branch = Branch.objects.create(organization=organization, company=company, name="Example Branch", code="EXAMPLE")
+    location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="Example POS",
+        code="EXAMPLE-POS",
+        location_type=LocationType.POS,
+    )
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(branch)
+    client.force_login(owner)
+
+    branch_response = client.post(reverse("branch-update", args=[branch.id]), {
+        "company": company.id,
+        "name": "Mombasa Shop",
+        "code": "MSA",
+        "phone_number": "0725 435 536",
+        "email": "mombasa@mobipos.com",
+    })
+    location_response = client.post(reverse("location-update", args=[location.id]), {
+        "branch": branch.id,
+        "name": "Mombasa POS Counter",
+        "code": "MSA-POS",
+        "location_type": LocationType.POS,
+    })
+
+    branch.refresh_from_db()
+    location.refresh_from_db()
+    assert branch_response.status_code == 302
+    assert location_response.status_code == 302
+    assert branch.name == "Mombasa Shop"
+    assert branch.code == "MSA"
+    assert location.name == "Mombasa POS Counter"
+    assert location.code == "MSA-POS"
+
+
+@pytest.mark.django_db
 def test_tenant_role_form_excludes_framework_and_privileged_permissions():
     queryset = RoleCreateForm.base_fields["permissions"].queryset
     app_labels = set(queryset.values_list("content_type__app_label", flat=True))

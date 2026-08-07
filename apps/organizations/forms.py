@@ -425,43 +425,96 @@ class AgentDSARegistrationForm(forms.Form):
 
 class BranchCreateForm(forms.Form):
     company = forms.ModelChoiceField(queryset=Company.objects.none())
-    name = forms.CharField(max_length=200)
-    code = forms.CharField(max_length=32)
-    email = forms.EmailField(required=False)
-    phone_number = forms.CharField(max_length=32, required=False)
+    name = forms.CharField(
+        max_length=200,
+        label="Branch name",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. Mombasa Shop"}),
+    )
+    code = forms.CharField(
+        max_length=32,
+        label="Branch code",
+        help_text="Use a short code for reports, receipts and stock movements. Examples: MSA, CBD, TRM.",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. MSA"}),
+    )
+    email = forms.EmailField(
+        required=False,
+        label="Branch email",
+        widget=forms.EmailInput(attrs={"placeholder": "e.g. mombasa@mobipos.com"}),
+    )
+    phone_number = forms.CharField(
+        max_length=32,
+        required=False,
+        label="Branch phone number",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. 0725 435 536"}),
+    )
 
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, instance=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.organization = organization
         if organization:
             self.fields["company"].queryset = Company.objects.filter(organization=organization, is_active=True)
-            if not self.is_bound and self.fields["company"].queryset.count() == 1:
-                self.fields["company"].initial = self.fields["company"].queryset.first()
+            if not self.is_bound:
+                if instance:
+                    self.fields["company"].initial = instance.company_id
+                    self.fields["name"].initial = instance.name
+                    self.fields["code"].initial = instance.code
+                    self.fields["email"].initial = instance.email
+                    self.fields["phone_number"].initial = instance.phone_number
+                elif self.fields["company"].queryset.count() == 1:
+                    self.fields["company"].initial = self.fields["company"].queryset.first()
+        self.instance = instance
 
     def clean_code(self):
         code = self.cleaned_data["code"].upper()
-        if self.fields["company"].queryset.filter(branches__code=code).exists():
+        branches = Branch.objects.filter(organization=self.organization, code=code)
+        if self.instance:
+            branches = branches.exclude(id=self.instance.id)
+        if branches.exists():
             raise forms.ValidationError("This branch code is already in use.")
         return code
 
 
 class LocationCreateForm(forms.Form):
     branch = forms.ModelChoiceField(queryset=Branch.objects.none())
-    name = forms.CharField(max_length=200)
-    code = forms.CharField(max_length=32)
-    location_type = forms.ChoiceField(choices=LocationType.choices)
+    name = forms.CharField(
+        max_length=200,
+        label="Location name",
+        help_text="A location is where stock sits inside a branch: POS counter, warehouse, repair bench, or agent custody.",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. Mombasa Warehouse"}),
+    )
+    code = forms.CharField(
+        max_length=32,
+        label="Location code",
+        help_text="Use a short code that combines the branch and stock area. Examples: MSA-WH, CBD-POS, TRM-REPAIR.",
+        widget=forms.TextInput(attrs={"placeholder": "e.g. MSA-WH"}),
+    )
+    location_type = forms.ChoiceField(
+        choices=LocationType.choices,
+        help_text="Choose how this location is used for stock control.",
+    )
 
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, instance=None, **kwargs):
         super().__init__(*args, **kwargs)
+        self.organization = organization
         if organization:
             self.fields["branch"].queryset = Branch.objects.filter(organization=organization, is_active=True)
-            if not self.is_bound and self.fields["branch"].queryset.count() == 1:
-                self.fields["branch"].initial = self.fields["branch"].queryset.first()
+            if not self.is_bound:
+                if instance:
+                    self.fields["branch"].initial = instance.branch_id
+                    self.fields["name"].initial = instance.name
+                    self.fields["code"].initial = instance.code
+                    self.fields["location_type"].initial = instance.location_type
+                elif self.fields["branch"].queryset.count() == 1:
+                    self.fields["branch"].initial = self.fields["branch"].queryset.first()
+        self.instance = instance
 
     def clean_code(self):
         from .models import Location
         code = self.cleaned_data["code"].upper()
-        organizations = self.fields["branch"].queryset.values_list("organization_id", flat=True)
-        if Location.objects.filter(organization_id__in=organizations, code=code).exists():
+        locations = Location.objects.filter(organization=self.organization, code=code)
+        if self.instance:
+            locations = locations.exclude(id=self.instance.id)
+        if locations.exists():
             raise forms.ValidationError("This location code is already in use.")
         return code
 

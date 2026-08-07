@@ -1,0 +1,19 @@
+{% extends "emails/base.html" %}
+{% block email_title %}Welcome to MobiPOS{% endblock %}
+{% block email_body %}
+  <p style="margin:0 0 12px;color:#dc2626;font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;">Owner account created</p>
+  <h1 style="margin:0;color:#0f172a;font-size:34px;line-height:40px;font-weight:900;">Welcome, {{ user.first_name|default:user.username }}.</h1>
+  <p style="margin:18px 0 0;color:#475569;font-size:17px;line-height:28px;">Your owner account for <strong style="color:#0f172a;">{{ organization.name }}</strong> is ready. You can now prepare your business for live operations by confirming branches, locations, users, suppliers, products and stock intake.</p>
+  <div style="margin:28px 0;padding:22px;border:1px solid #e2e8f0;border-radius:22px;background:#f8fafc;">
+    <p style="margin:0 0 10px;color:#0f172a;font-size:16px;font-weight:900;">Good first steps</p>
+    <ol style="margin:0;padding-left:20px;color:#475569;font-size:15px;line-height:26px;">
+      <li>Edit the example branch and POS location to match your real shop.</li>
+      <li>Add your team and assign the roles they should use.</li>
+      <li>Add suppliers, products and IMEIs before making the first sale.</li>
+    </ol>
+  </div>
+  <p style="margin:28px 0 0;">
+    <a href="{{ dashboard_url }}" style="display:inline-block;border-radius:999px;background:#0f172a;color:#ffffff;padding:15px 24px;text-decoration:none;font-weight:900;">Open dashboard</a>
+    <a href="{{ help_url }}" style="display:inline-block;margin-left:10px;border-radius:999px;border:1px solid #cbd5e1;color:#0f172a;padding:14px 22px;text-decoration:none;font-weight:900;">Open help center</a>
+  </p>
+{% endblock %}

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load report_labels %}
 
 {% block title %}Dashboard | MobiPOS{% endblock %}
 
@@ -204,8 +205,8 @@
             <tr>
               <td class="whitespace-nowrap px-4 py-3">{{ event.created_at|date:"d M H:i" }}</td>
               <td class="px-4 py-3">{% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}System{% endif %}</td>
-              <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ event.action }}</span></td>
-              <td class="px-4 py-3 text-slate-500">{{ event.target_type|default:"—" }}</td>
+              <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ event.action|business_action }}</span></td>
+              <td class="px-4 py-3 text-slate-500">{% if event.target_type %}{{ event.target_type|business_target }}{% else %}—{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

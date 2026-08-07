@@ -1,0 +1,26 @@
+{% extends "emails/base.html" %}
+{% block email_title %}Daily MobiPOS activity summary{% endblock %}
+{% block email_body %}
+  <p style="margin:0 0 12px;color:#dc2626;font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;">Daily owner summary</p>
+  <h1 style="margin:0;color:#0f172a;font-size:32px;line-height:38px;font-weight:900;">{{ organization.name }} had {{ event_count }} recorded action{{ event_count|pluralize }}.</h1>
+  <p style="margin:18px 0 0;color:#475569;font-size:16px;line-height:26px;">This summary covers activity from {{ start|date:"d M Y H:i" }} to {{ end|date:"d M Y H:i" }}.</p>
+  <div style="margin:28px 0;border:1px solid #e2e8f0;border-radius:22px;overflow:hidden;">
+    {% if events %}
+      {% for event in events %}
+        <div style="padding:16px 18px;border-bottom:{% if not forloop.last %}1px solid #e2e8f0{% else %}0{% endif %};">
+          <p style="margin:0;color:#0f172a;font-size:15px;font-weight:900;">{{ event.action|capfirst }}</p>
+          <p style="margin:5px 0 0;color:#64748b;font-size:13px;line-height:20px;">
+            {{ event.created_at|date:"d M H:i" }} · {{ event.actor.get_full_name|default:event.actor.username|default:"System" }}
+            {% if event.message %}<br>{{ event.message }}{% endif %}
+          </p>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div style="padding:18px;color:#64748b;font-size:15px;">No owner-visible activity was recorded in this period.</div>
+    {% endif %}
+  </div>
+  <p style="margin:28px 0 0;">
+    <a href="{{ activity_url }}" style="display:inline-block;border-radius:999px;background:#0f172a;color:#ffffff;padding:15px 24px;text-decoration:none;font-weight:900;">Open activity report</a>
+    <a href="{{ dashboard_url }}" style="display:inline-block;margin-left:10px;border-radius:999px;border:1px solid #cbd5e1;color:#0f172a;padding:14px 22px;text-decoration:none;font-weight:900;">Open dashboard</a>
+  </p>
+{% endblock %}

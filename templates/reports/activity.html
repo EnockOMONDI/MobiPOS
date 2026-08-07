@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load report_labels %}
 
 {% block title %}Activity report | MobiPOS{% endblock %}
 
@@ -22,7 +23,7 @@
     <select name="action" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
       <option value="">All actions</option>
       {% for value in available_actions %}
-        <option value="{{ value }}"{% if selected_action == value %} selected{% endif %}>{{ value }}</option>
+        <option value="{{ value }}"{% if selected_action == value %} selected{% endif %}>{{ value|business_action }}</option>
       {% endfor %}
     </select>
   </label>
@@ -57,7 +58,7 @@
   <article class="card p-5">
     <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Top action</p>
     {% with first_action=action_summary.0 %}
-      <p class="mt-2 text-xl font-bold">{{ first_action.action|default:"No activity" }}</p>
+      <p class="mt-2 text-xl font-bold">{% if first_action.action %}{{ first_action.action|business_action }}{% else %}No activity{% endif %}</p>
       <p class="text-sm text-slate-500">{{ first_action.total|default:0 }} event{{ first_action.total|default:0|pluralize }}</p>
     {% endwith %}
   </article>
@@ -98,7 +99,7 @@
     <div class="mt-4 space-y-2">
       {% for row in action_summary %}
         <div class="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 text-sm">
-          <span class="font-medium">{{ row.action }}</span>
+          <span class="font-medium">{{ row.action|business_action }}</span>
           <strong>{{ row.total }}</strong>
         </div>
       {% empty %}
@@ -145,10 +146,10 @@
                 <span class="font-semibold">System</span>
               {% endif %}
             </td>
-            <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ event.action }}</span></td>
+            <td class="px-4 py-3"><span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{{ event.action|business_action }}</span></td>
             <td class="px-4 py-3">
               {% if event.target_type or event.target_id %}
-                <span>{{ event.target_type|default:"Record" }}</span>
+                <span>{% if event.target_type %}{{ event.target_type|business_target }}{% else %}Record{% endif %}</span>
                 <span class="block max-w-[18rem] truncate text-xs text-slate-500">{{ event.target_id }}</span>
               {% else %}—{% endif %}
             </td>

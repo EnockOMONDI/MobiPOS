@@ -18,11 +18,11 @@ from django.contrib import admin
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.auth import views as auth_views
-from django.urls import include, path
+from django.urls import include, path, reverse_lazy
 
 from apps.reports.views import activity_report, business_flow, dashboard, demo_access, help_center, product_features
 from apps.reports.views import global_search, imei_history, module_overview
-from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, invitation_accept, invitation_resend, invitation_revoke, location_create, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
+from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, branch_update, invitation_accept, invitation_resend, invitation_revoke, location_create, location_update, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
 from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_extract_document, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
@@ -65,7 +65,9 @@ urlpatterns = [
     path("agents/dsas/new/", agent_dsa_create, name="agent-dsa-create"),
     path("agent-documents/<uuid:document_id>/download/", agent_document_download, name="agent-document-download"),
     path("branches/new/", branch_create, name="branch-create"),
+    path("branches/<uuid:branch_id>/edit/", branch_update, name="branch-update"),
     path("locations/new/", location_create, name="location-create"),
+    path("locations/<uuid:location_id>/edit/", location_update, name="location-update"),
     path("roles/new/", role_create, name="role-create"),
     path("pos/checkout/", checkout, name="pos-checkout"),
     path("pos/sessions/open/", open_session, name="session-open"),
@@ -146,7 +148,16 @@ urlpatterns = [
     path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("accounts/password/change/", auth_views.PasswordChangeView.as_view(success_url="/accounts/security/"), name="password-change"),
-    path("accounts/password/reset/", auth_views.PasswordResetView.as_view(), name="password-reset"),
+    path(
+        "accounts/password/reset/",
+        auth_views.PasswordResetView.as_view(
+            email_template_name="registration/password_reset_email.html",
+            html_email_template_name="registration/password_reset_email_html.html",
+            subject_template_name="registration/password_reset_subject.txt",
+            success_url=reverse_lazy("password-reset-done"),
+        ),
+        name="password-reset",
+    ),
     path("accounts/password/reset/done/", auth_views.PasswordResetDoneView.as_view(), name="password-reset-done"),
     path("accounts/password/reset/<uidb64>/<token>/", auth_views.PasswordResetConfirmView.as_view(), name="password-reset-confirm"),
     path("accounts/password/reset/complete/", auth_views.PasswordResetCompleteView.as_view(), name="password-reset-complete"),

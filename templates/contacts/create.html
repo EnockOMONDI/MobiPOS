@@ -32,6 +32,13 @@
       <div class="mb-6">
         <p class="text-xs font-bold uppercase tracking-wider text-red-700">Contact identity</p>
         <h2 class="mt-1 text-xl font-bold">Who the business deals with</h2>
+        {% if requested_type == "supplier" %}
+          <p class="mt-1 text-sm text-slate-500">Suppliers appear on purchases, supplier returns, payables and supplier statements. Add the KRA PIN when available for clean records.</p>
+        {% elif requested_type == "customer" %}
+          <p class="mt-1 text-sm text-slate-500">Customers appear on sales, credit follow-up, receivables, payments and customer statements.</p>
+        {% else %}
+          <p class="mt-1 text-sm text-slate-500">Choose whether this contact is a customer, supplier, or both.</p>
+        {% endif %}
       </div>
       <div class="grid gap-5 md:grid-cols-2">
         {% include "components/form_field.html" with field=form.contact_type %}

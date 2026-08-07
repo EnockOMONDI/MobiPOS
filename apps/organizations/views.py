@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.notifications.emailing import send_owner_welcome_email, send_staff_account_created_email
 from .forms import AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
 from .permissions import organization_owner_required, organization_permission_required, platform_admin_required
 from .services import ensure_organization_onboarding_defaults, next_available_username
@@ -104,10 +105,10 @@ def register_organization(request):
             organization=organization, name=f"{organization.name} Company", code="MAIN"
         )
         branch = Branch.objects.create(
-            organization=organization, company=company, name="Main Branch", code="MAIN"
+            organization=organization, company=company, name="Example Branch", code="EXAMPLE"
         )
         Location.objects.create(
-            organization=organization, branch=branch, name="Main POS", code="MAIN-POS", location_type="pos"
+            organization=organization, branch=branch, name="Example POS", code="EXAMPLE-POS", location_type="pos"
         )
         membership.branches.add(branch)
         ensure_organization_onboarding_defaults(organization)
@@ -133,6 +134,7 @@ def register_organization(request):
             target=organization,
             request=request,
         )
+        send_owner_welcome_email(user=user, organization=organization)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
         return redirect("dashboard")
     return render(request, "registration/register.html", {"form": form})
@@ -213,6 +215,7 @@ def tenant_user_create(request):
                     request=request,
                 )
             record_audit_event(action="user.created", actor=request.user, organization=request.organization, target=user, request=request)
+            send_staff_account_created_email(user=user, organization=request.organization, created_by=request.user)
             messages.success(request, f"{user.get_full_name() or user.email} was created and can log in now.")
             return redirect("module-overview", module="users")
     return render(request, "organizations/user_create.html", {"form": form})
@@ -626,6 +629,39 @@ def branch_create(request):
 @login_required
 @organization_owner_required
 @transaction.atomic
+def branch_update(request, branch_id):
+    branch = get_object_or_404(
+        Branch.objects.select_for_update(),
+        id=branch_id,
+        organization=request.organization,
+    )
+    next_url = _safe_next_url(request)
+    form = BranchCreateForm(request.POST or None, organization=request.organization, instance=branch)
+    if request.method == "POST" and form.is_valid():
+        for field in ("company", "name", "code", "email", "phone_number"):
+            setattr(branch, field, form.cleaned_data[field])
+        branch.save(update_fields=["company", "name", "code", "email", "phone_number", "updated_at"])
+        request.membership.branches.add(branch)
+        record_audit_event(
+            action="branch.updated",
+            actor=request.user,
+            organization=request.organization,
+            target=branch,
+            request=request,
+        )
+        if next_url:
+            return redirect(next_url)
+        return redirect("module-overview", module="branches")
+    return render(
+        request,
+        "organizations/branch_create.html",
+        {"form": form, "next_url": next_url, "branch": branch, "is_edit": True},
+    )
+
+
+@login_required
+@organization_owner_required
+@transaction.atomic
 def location_create(request):
     from django.core.exceptions import ValidationError
     from .models import LocationType
@@ -652,6 +688,38 @@ def location_create(request):
             return redirect(next_url)
         return redirect("module-overview", module="locations")
     return render(request, "organizations/location_create.html", {"form": form, "next_url": next_url})
+
+
+@login_required
+@organization_owner_required
+@transaction.atomic
+def location_update(request, location_id):
+    location = get_object_or_404(
+        Location.objects.select_for_update(),
+        id=location_id,
+        organization=request.organization,
+    )
+    next_url = _safe_next_url(request)
+    form = LocationCreateForm(request.POST or None, organization=request.organization, instance=location)
+    if request.method == "POST" and form.is_valid():
+        for field in ("branch", "name", "code", "location_type"):
+            setattr(location, field, form.cleaned_data[field])
+        location.save(update_fields=["branch", "name", "code", "location_type", "updated_at"])
+        record_audit_event(
+            action="location.updated",
+            actor=request.user,
+            organization=request.organization,
+            target=location,
+            request=request,
+        )
+        if next_url:
+            return redirect(next_url)
+        return redirect("module-overview", module="locations")
+    return render(
+        request,
+        "organizations/location_create.html",
+        {"form": form, "next_url": next_url, "location": location, "is_edit": True},
+    )
 
 
 @login_required

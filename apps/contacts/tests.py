@@ -140,3 +140,7 @@ def test_contact_statement_export_downloads(client, export_format, content_type,
     assert response["Content-Type"].startswith(content_type)
     assert response["Content-Disposition"].startswith("attachment;")
     assert response.content.startswith(signature)
+    if export_format == "pdf":
+        assert b"MobiPOS" in response.content
+        assert organization.name.encode() in response.content
+        assert b"Supplier and Customer Statement" in response.content

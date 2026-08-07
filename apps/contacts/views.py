@@ -14,7 +14,7 @@ from openpyxl import Workbook
 from apps.audit.models import AuditEvent
 from apps.audit.services import record_audit_event
 from apps.organizations.permissions import organization_permission_required
-from apps.reports.exporting import build_simple_pdf, safe_csv_row
+from apps.reports.exporting import build_statement_pdf, safe_csv_row
 
 from .forms import ContactForm
 from .models import Contact
@@ -148,8 +148,16 @@ def _contact_statement_pdf_response(context):
     contact = context["contact"]
     headers = ["Section", "Date", "Reference", "Status", "Debit", "Credit"]
     response = HttpResponse(
-        build_simple_pdf(
-            title=f"MobiPOS Statement - {contact.name}",
+        build_statement_pdf(
+            title="Supplier and Customer Statement",
+            organization=contact.organization,
+            contact=contact,
+            summary={
+                "sales_total": context["sales_total"],
+                "payments_total": context["payments_total"],
+                "receivable_total": context["receivable_total"],
+                "payable_total": context["payable_total"],
+            },
             headers=headers,
             rows=_contact_statement_export_rows(context),
         ),

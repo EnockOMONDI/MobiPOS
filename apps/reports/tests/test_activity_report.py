@@ -34,6 +34,8 @@ def test_owner_activity_report_includes_org_and_member_login_events(client):
     response = client.get(reverse("activity-report"))
 
     assert response.status_code == 200
+    assert b"Product updated" in response.content
+    assert b"User logged in" in response.content
     assert b"product.updated" in response.content
     assert b"auth.login" in response.content
     assert b"renny@example.com" in response.content
@@ -68,4 +70,5 @@ def test_platform_admin_activity_report_is_platform_wide(client):
 
     assert response.status_code == 200
     assert b"Tenant event" in response.content
+    assert b"Failed login attempt" in response.content
     assert b"auth.login_failed" in response.content

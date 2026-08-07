@@ -28,8 +28,13 @@ def test_owner_dashboard_shows_guided_setup_checklist(client):
     organization = Organization.objects.create(name="Fresh Retailer", slug="fresh-retailer", status="active")
     owner = User.objects.create_user(username="fresh-owner", email="fresh-owner@example.com")
     company = Company.objects.create(organization=organization, name="Fresh Company", code="FRESH")
-    branch = Branch.objects.create(organization=organization, company=company, name="Main Branch", code="MAIN")
-    Location.objects.create(organization=organization, branch=branch, name="Main POS", code="MAIN-POS")
+    branch = Branch.objects.create(organization=organization, company=company, name="Example Branch", code="EXAMPLE")
+    location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="Example POS",
+        code="EXAMPLE-POS",
+    )
     membership = Membership.objects.create(
         organization=organization,
         user=owner,
@@ -44,6 +49,11 @@ def test_owner_dashboard_shows_guided_setup_checklist(client):
     assert response.status_code == 200
     assert b"Owner setup" in response.content
     assert b"Get the business ready for live operations" in response.content
+    assert b"0 / 7" in response.content
+    assert b"Edit branch" in response.content
+    assert b"Edit location" in response.content
+    assert reverse("branch-update", args=[branch.id]) in response.content.decode()
+    assert reverse("location-update", args=[location.id]) in response.content.decode()
     assert b"Add supplier" in response.content
     assert b"Add product" in response.content
     assert reverse("purchase-create") in response.content.decode()

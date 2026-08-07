@@ -1314,24 +1314,66 @@ def _owner_activity_queryset(request):
     )
 
 
+def _starter_branches(organization):
+    return Branch.objects.filter(
+        organization=organization,
+        is_active=True,
+    ).filter(
+        Q(name__iexact="Example Branch", code__iexact="EXAMPLE")
+        | Q(name__iexact="Main Branch", code__iexact="MAIN")
+    )
+
+
+def _starter_locations(organization):
+    return Location.objects.filter(
+        organization=organization,
+        is_active=True,
+    ).filter(
+        Q(name__iexact="Example POS", code__iexact="EXAMPLE-POS")
+        | Q(name__iexact="Main POS", code__iexact="MAIN-POS")
+    )
+
+
+def _real_branches(organization):
+    return Branch.objects.filter(organization=organization, is_active=True).exclude(
+        id__in=_starter_branches(organization).values("id")
+    )
+
+
+def _real_locations(organization):
+    return Location.objects.filter(organization=organization, is_active=True).exclude(
+        id__in=_starter_locations(organization).values("id")
+    )
+
+
 def _owner_setup_steps(organization):
     purchase_url = reverse("purchase-create")
+    starter_branch = _starter_branches(organization).first()
+    starter_location = _starter_locations(organization).first()
     steps = [
         {
             "key": "branch",
             "title": "Confirm your branch",
             "description": "A branch represents a shop, outlet, office, or business unit.",
-            "complete": Branch.objects.filter(organization=organization, is_active=True).exists(),
-            "action_label": "Add branch",
-            "action_url": reverse("branch-create"),
+            "complete": _real_branches(organization).exists(),
+            "action_label": "Edit branch" if starter_branch else "Add branch",
+            "action_url": (
+                reverse("branch-update", args=[starter_branch.id])
+                if starter_branch
+                else reverse("branch-create")
+            ),
         },
         {
             "key": "location",
             "title": "Create selling and stock locations",
             "description": "Locations show where stock sits, such as a POS counter, warehouse, repair desk, or agent custody.",
-            "complete": Location.objects.filter(organization=organization, is_active=True).exists(),
-            "action_label": "Add location",
-            "action_url": reverse("location-create"),
+            "complete": _real_locations(organization).exists(),
+            "action_label": "Edit location" if starter_location else "Add location",
+            "action_url": (
+                reverse("location-update", args=[starter_location.id])
+                if starter_location
+                else reverse("location-create")
+            ),
         },
         {
             "key": "users",

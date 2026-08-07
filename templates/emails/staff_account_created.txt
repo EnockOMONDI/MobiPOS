@@ -1,0 +1,17 @@
+Hi {{ user.first_name|default:user.username }},
+
+Your MobiPOS account for {{ organization.name }} is ready.
+
+Added by:
+{{ created_by.get_full_name|default:created_by.username }}
+
+Username:
+{{ user.username }}
+
+For your security, your temporary password is not included in this email. Get it directly from your organization owner or manager.
+
+Sign in:
+{{ login_url }}
+
+Reset password:
+{{ password_reset_url }}

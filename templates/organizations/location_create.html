@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Add location | MobiPOS{% endblock %}
+{% block title %}{% if is_edit %}Edit location{% else %}Add location{% endif %} | MobiPOS{% endblock %}
 
 {% block content %}
   <div class="mb-6 max-w-4xl">
     <p class="text-sm font-semibold text-red-700">Business setup</p>
-    <h1 class="mt-1 text-3xl font-bold">Add stock location</h1>
+    <h1 class="mt-1 text-3xl font-bold">{% if is_edit %}Edit stock location{% else %}Add stock location{% endif %}</h1>
     <p class="mt-2 text-slate-600">
       Create the places where stock can sit or move through: POS counters, warehouses, repair benches, in-transit holding, and agent custody.
     </p>
@@ -23,7 +23,7 @@
         <p class="text-xs font-bold uppercase tracking-wider text-red-700">Location details</p>
         <h2 class="mt-1 text-xl font-bold">Where stock will be tracked</h2>
         <p class="mt-1 text-sm text-slate-500">
-          Examples: Main Warehouse, CBD POS Counter, Repair Desk, Westlands In Transit, or Mary Agent Custody.
+          A location sits under a branch and shows exactly where stock is held. Examples: Main Warehouse, CBD POS Counter, Repair Desk, Westlands In Transit, or Mary Agent Custody.
         </p>
       </div>
       <div class="grid gap-5 md:grid-cols-2">
@@ -35,7 +35,7 @@
     </section>
 
     <div class="flex flex-wrap gap-3">
-      <button class="btn-primary" type="submit">Create location</button>
+      <button class="btn-primary" type="submit">{% if is_edit %}Save location{% else %}Create location{% endif %}</button>
       <a class="btn-secondary" href="{{ next_url|default:'/' }}">Cancel</a>
     </div>
   </form>

@@ -87,3 +87,26 @@ def test_owner_register_pages_show_setup_create_actions(client):
     assert contacts.status_code == 200
     assert b"Add customer or supplier" in contacts.content
     assert reverse("contact-create") in contacts.content.decode()
+
+
+@pytest.mark.django_db
+def test_setup_forms_show_business_friendly_examples(client):
+    call_command("seed_demo_data")
+    client.force_login(User.objects.get(username="brian"))
+
+    branch_response = client.get(reverse("branch-create"))
+    location_response = client.get(reverse("location-create"))
+    supplier_response = client.get(reverse("contact-create"), {"type": "supplier"})
+
+    assert branch_response.status_code == 200
+    assert b"e.g. Mombasa Shop" in branch_response.content
+    assert b"e.g. MSA" in branch_response.content
+    assert b"e.g. mombasa@mobipos.com" in branch_response.content
+    assert b"Examples: MSA, CBD, TRM." in branch_response.content
+    assert location_response.status_code == 200
+    assert b"e.g. Mombasa Warehouse" in location_response.content
+    assert b"e.g. MSA-WH" in location_response.content
+    assert b"location sits under a branch" in location_response.content
+    assert supplier_response.status_code == 200
+    assert b"Tax number / KRA PIN" in supplier_response.content
+    assert b"e.g. P051234567A" in supplier_response.content

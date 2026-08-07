@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Add branch | MobiPOS{% endblock %}
+{% block title %}{% if is_edit %}Edit branch{% else %}Add branch{% endif %} | MobiPOS{% endblock %}
 
 {% block content %}
   <div class="mb-6 max-w-4xl">
     <p class="text-sm font-semibold text-red-700">Business setup</p>
-    <h1 class="mt-1 text-3xl font-bold">Add branch</h1>
+    <h1 class="mt-1 text-3xl font-bold">{% if is_edit %}Edit branch{% else %}Add branch{% endif %}</h1>
     <p class="mt-2 text-slate-600">
       Create a shop, outlet, office, or business unit. Users can later be assigned to the branches they are allowed to operate.
     </p>
@@ -23,7 +23,7 @@
         <p class="text-xs font-bold uppercase tracking-wider text-red-700">Branch details</p>
         <h2 class="mt-1 text-xl font-bold">Where this business operates</h2>
         <p class="mt-1 text-sm text-slate-500">
-          Use short branch codes such as CBD, WST, TRM, or MOMBASA. These appear in reports, transfers, and user assignments.
+          A branch is a shop, outlet or business unit such as Nairobi CBD, Mombasa Shop or TRM. Use short branch codes such as CBD, MSA, TRM or WST. These appear in reports, transfers and user assignments.
         </p>
       </div>
       <div class="grid gap-5 md:grid-cols-2">
@@ -36,7 +36,7 @@
     </section>
 
     <div class="flex flex-wrap gap-3">
-      <button class="btn-primary" type="submit">Create branch</button>
+      <button class="btn-primary" type="submit">{% if is_edit %}Save branch{% else %}Create branch{% endif %}</button>
       <a class="btn-secondary" href="{{ next_url|default:'/' }}">Cancel</a>
     </div>
   </form>

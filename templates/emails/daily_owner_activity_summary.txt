@@ -1,0 +1,21 @@
+Daily MobiPOS activity summary for {{ organization.name }}
+
+{{ organization.name }} had {{ event_count }} recorded action{{ event_count|pluralize }}.
+
+Period:
+{{ start|date:"d M Y H:i" }} to {{ end|date:"d M Y H:i" }}
+
+Recent activity:
+{% if events %}
+{% for event in events %}
+- {{ event.created_at|date:"d M H:i" }}: {{ event.action }} by {{ event.actor.get_full_name|default:event.actor.username|default:"System" }}{% if event.message %} - {{ event.message }}{% endif %}
+{% endfor %}
+{% else %}
+No owner-visible activity was recorded in this period.
+{% endif %}
+
+Open activity report:
+{{ activity_url }}
+
+Open dashboard:
+{{ dashboard_url }}

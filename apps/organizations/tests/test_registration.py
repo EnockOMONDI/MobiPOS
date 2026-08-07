@@ -31,8 +31,12 @@ def test_self_service_registration_creates_active_owner_tenant(client):
     assert subscription.plan == plan
     assert subscription.starts_on
     assert subscription.renews_on
-    assert Branch.objects.filter(organization=organization).exists()
-    assert Location.objects.filter(organization=organization, location_type="pos").exists()
+    branch = Branch.objects.get(organization=organization)
+    assert branch.name == "Example Branch"
+    assert branch.code == "EXAMPLE"
+    location = Location.objects.get(organization=organization, location_type="pos")
+    assert location.name == "Example POS"
+    assert location.code == "EXAMPLE-POS"
     assert SubscriptionInvoice.objects.get(organization=organization).amount == 1000
     assert Role.objects.filter(organization=organization, code="cashier").exists()
     assert Role.objects.filter(organization=organization, code="inventory-officer").exists()
