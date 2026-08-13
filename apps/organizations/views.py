@@ -16,7 +16,7 @@ from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
 from apps.notifications.emailing import send_owner_welcome_email, send_staff_account_created_email
-from .forms import AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
+from .forms import AgedStockPolicyForm, AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
 from .permissions import organization_owner_required, organization_permission_required, platform_admin_required
 from .services import ensure_organization_onboarding_defaults, next_available_username
 from .models import (
@@ -74,6 +74,64 @@ def _safe_next_url(request):
     ):
         return next_url
     return ""
+
+
+@login_required
+@organization_owner_required
+def aged_stock_policy_update(request):
+    from apps.inventory.aging import (
+        default_aged_stock_policy,
+        get_aged_stock_policy,
+        save_aged_stock_policy,
+    )
+
+    policy = get_aged_stock_policy(request.organization)
+    form = AgedStockPolicyForm(request.POST or None, policy=policy)
+    if request.method == "POST":
+        if "use_recommended" in request.POST:
+            setting = save_aged_stock_policy(
+                request.organization,
+                fresh_max=4,
+                aging_max=15,
+                slow_max=30,
+                critical_max=60,
+            )
+            record_audit_event(
+                action="aged_stock_policy.reviewed",
+                actor=request.user,
+                organization=request.organization,
+                target=setting,
+                metadata={"policy": default_aged_stock_policy(reviewed=True)},
+                request=request,
+            )
+            messages.success(request, "Recommended aged-stock rules are now active.")
+            return redirect("dashboard")
+        if form.is_valid():
+            setting = save_aged_stock_policy(
+                request.organization,
+                fresh_max=form.cleaned_data["fresh_max"],
+                aging_max=form.cleaned_data["aging_max"],
+                slow_max=form.cleaned_data["slow_max"],
+                critical_max=form.cleaned_data["critical_max"],
+            )
+            record_audit_event(
+                action="aged_stock_policy.updated",
+                actor=request.user,
+                organization=request.organization,
+                target=setting,
+                metadata={"policy": setting.value},
+                request=request,
+            )
+            messages.success(request, "Aged-stock rules updated.")
+            return redirect("dashboard")
+    return render(
+        request,
+        "organizations/aged_stock_policy.html",
+        {
+            "form": form,
+            "policy": policy,
+        },
+    )
 
 
 @transaction.atomic

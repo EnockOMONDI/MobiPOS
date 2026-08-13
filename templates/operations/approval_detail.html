@@ -1,21 +1,81 @@
 {% extends "base.html" %}
+
 {% block title %}Approval request | MobiPOS{% endblock %}
+
 {% block content %}
-<h1 class="text-3xl font-bold">{{ approval.display_type }}</h1>
-<div class="mt-6 rounded-xl border bg-white p-6 shadow-sm">
-  <p><strong>Reason:</strong> {{ approval.reason }}</p>
-  <p><strong>Requested by:</strong> {{ approval.requested_by }}</p>
-  {% if approval.request_type == "access_request" %}<p><strong>Requested access:</strong> {{ approval.requested_permission_code }}</p>{% endif %}
-  <p><strong>Status:</strong> {{ approval.get_status_display }}</p>
-  {% if approval.decision_notes %}<p><strong>Decision notes:</strong> {{ approval.decision_notes }}</p>{% endif %}
-  {% if approval.status == "pending" %}
-  <form method="post" action="{% url 'approval-decide' approval.id %}" class="mt-5 space-y-3">{% csrf_token %}
-    <label class="block"><span class="text-sm font-semibold text-slate-700">Decision notes</span><textarea name="decision_notes" rows="3" class="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"></textarea></label>
-    <div class="flex gap-3">
-      <button name="decision" value="approved" class="rounded bg-emerald-700 px-4 py-2 text-white">Approve</button>
-      <button name="decision" value="rejected" class="rounded bg-red-700 px-4 py-2 text-white">Reject</button>
-    </div>
-  </form>
-  {% endif %}
-</div>
+  <div class="mb-6">
+    <p class="text-sm font-medium text-red-700">Approval request</p>
+    <h1 class="text-3xl font-bold">{{ approval.display_type }}</h1>
+    <p class="mt-2 max-w-3xl text-slate-600">Approve only when the business reason is clear. Rejected requests stay visible in the audit trail.</p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+    <section class="card p-6">
+      <h2 class="text-2xl font-bold">Request details</h2>
+      <dl class="mt-5 space-y-4 text-sm">
+        <div class="grid gap-1 border-b pb-3 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Reason</dt>
+          <dd>{{ approval.reason }}</dd>
+        </div>
+        <div class="grid gap-1 border-b pb-3 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Requested by</dt>
+          <dd>{{ approval.requested_by.get_full_name|default:approval.requested_by.username }}</dd>
+        </div>
+        {% if approval.request_type == "access_request" %}
+        <div class="grid gap-1 border-b pb-3 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Requested access</dt>
+          <dd>{{ approval.requested_permission_code }}</dd>
+        </div>
+        {% endif %}
+        {% if approval.branch %}
+        <div class="grid gap-1 border-b pb-3 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Branch</dt>
+          <dd>{{ approval.branch.name }}</dd>
+        </div>
+        {% endif %}
+        <div class="grid gap-1 border-b pb-3 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Status</dt>
+          <dd>{{ approval.get_status_display }}</dd>
+        </div>
+        {% if approval.decision_notes %}
+        <div class="grid gap-1 md:grid-cols-[180px_1fr]">
+          <dt class="font-semibold text-slate-500">Decision notes</dt>
+          <dd>{{ approval.decision_notes }}</dd>
+        </div>
+        {% endif %}
+      </dl>
+    </section>
+
+    <aside class="space-y-4">
+      <div class="card p-6">
+        <h2 class="text-xl font-bold">What approval means</h2>
+        {% if approval.request_type == "aged_stock_action" %}
+          <p class="mt-3 text-slate-600">Approval authorizes the aged-stock recommendation. The team must still complete the actual transfer, discount, supplier return, campaign or write-off from the correct operational page.</p>
+        {% elif approval.request_type == "access_request" %}
+          <p class="mt-3 text-slate-600">Approval grants the requested permission through a managed role for this user.</p>
+        {% else %}
+          <p class="mt-3 text-slate-600">Approval records the owner decision and lets the team proceed according to the organization policy.</p>
+        {% endif %}
+      </div>
+
+      {% if approval.status == "pending" and can_decide %}
+        <form method="post" action="{% url 'approval-decide' approval.id %}" class="card space-y-4 p-6">
+          {% csrf_token %}
+          <label class="block">
+            <span class="text-sm font-semibold text-slate-700">Decision notes</span>
+            <textarea name="decision_notes" rows="4" class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm" placeholder="Example: Approved transfer to TRM because this model sells faster there."></textarea>
+          </label>
+          <div class="flex flex-wrap gap-3">
+            <button name="decision" value="approved" class="rounded-xl bg-emerald-700 px-4 py-2 font-bold text-white">Approve</button>
+            <button name="decision" value="rejected" class="rounded-xl bg-red-700 px-4 py-2 font-bold text-white">Reject</button>
+          </div>
+        </form>
+      {% elif approval.status == "pending" %}
+        <div class="card p-6">
+          <h2 class="text-xl font-bold">Waiting for approval</h2>
+          <p class="mt-3 text-slate-600">This request is waiting for an eligible owner or approver. You can follow the status here.</p>
+        </div>
+      {% endif %}
+    </aside>
+  </div>
 {% endblock %}

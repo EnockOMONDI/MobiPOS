@@ -3,6 +3,26 @@ from django import forms
 from apps.catalog.models import Product
 from apps.organizations.permissions import accessible_locations_for
 
+from .models import AgedStockActionType
+
+
+class AgedStockActionForm(forms.Form):
+    action_type = forms.ChoiceField(
+        choices=AgedStockActionType.choices,
+        label="Recommended action",
+        help_text="Choose what the manager wants to do with this old stock.",
+    )
+    reason = forms.CharField(
+        widget=forms.Textarea(attrs={"rows": 4}),
+        help_text="Explain why this stock needs action. Example: This model has not moved in Westlands but sells faster at TRM.",
+    )
+    next_step = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        label="Suggested next step",
+        help_text="Optional. Example: Transfer to TRM, approve a 5% discount, or return to supplier if still eligible.",
+    )
+
 
 class StockAdjustmentForm(forms.Form):
     product = forms.ModelChoiceField(queryset=Product.objects.none())

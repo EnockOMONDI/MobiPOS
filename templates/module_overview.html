@@ -11,8 +11,8 @@
         {% if create_action %}
           <a class="btn-primary" href="{{ create_action.url }}">{{ create_action.label }}</a>
         {% endif %}
-        <a class="btn-secondary" href="?format=csv{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Export CSV</a>
-        <a class="btn-secondary" href="?format=pdf{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Export PDF</a>
+        <a class="btn-secondary" href="?format=csv{% if active_querystring %}&{{ active_querystring }}{% endif %}">Export CSV</a>
+        <a class="btn-secondary" href="?format=pdf{% if active_querystring %}&{{ active_querystring }}{% endif %}">Export PDF</a>
         <button type="button" class="btn-secondary" onclick="window.print()">Print</button>
       </div>
     </div>
@@ -30,8 +30,19 @@
       </select>
     </label>
     {% endif %}
+    {% for control in filter_controls %}
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ control.label }}</span>
+      <select name="{{ control.name }}" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+        <option value="">All</option>
+        {% for option_value, option_label in control.options %}
+          <option value="{{ option_value }}" {% if control.value == option_value %}selected{% endif %}>{{ option_label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
     <button class="btn-primary">Apply filters</button>
-    {% if query or status %}<a class="btn-secondary" href="{{ request.path }}">Clear</a>{% endif %}
+    {% if clear_filters %}<a class="btn-secondary" href="{{ request.path }}">Clear</a>{% endif %}
   </form>
   <details class="card mb-5 p-4">
     <summary class="cursor-pointer text-sm font-bold text-slate-700">Column visibility</summary>
@@ -47,11 +58,24 @@
   <div class="card overflow-x-auto">
     <table class="min-w-full text-left text-sm" data-column-table="module-{{ title|slugify }}">
       <thead class="border-b bg-slate-50">
-        <tr>{% for header in headers %}<th class="px-4 py-3 font-semibold">{{ header }}</th>{% endfor %}{% if has_detail_pages %}<th class="px-4 py-3 text-right font-semibold">Actions</th>{% endif %}</tr>
+        <tr>{% for header in headers %}<th class="px-4 py-3 font-semibold">{{ header }}</th>{% endfor %}{% if has_detail_pages or has_row_actions %}<th class="px-4 py-3 text-right font-semibold">Actions</th>{% endif %}</tr>
       </thead>
       <tbody class="divide-y">
         {% for row in rows %}
-          <tr class="transition hover:bg-slate-50">{% for value in row.values %}<td class="px-4 py-3">{% if value is True %}<span class="status-badge status-badge-active">Yes</span>{% elif value is False %}<span class="status-badge">No</span>{% else %}{{ value|default:"—" }}{% endif %}</td>{% endfor %}{% if row.detail_url %}<td class="px-4 py-3 text-right"><a href="{{ row.detail_url }}" class="font-semibold text-red-700">View</a></td>{% endif %}</tr>
+          <tr class="transition hover:bg-slate-50">
+            {% for value in row.values %}<td class="px-4 py-3">{% if value is True %}<span class="status-badge status-badge-active">Yes</span>{% elif value is False %}<span class="status-badge">No</span>{% else %}{{ value|default:"—" }}{% endif %}</td>{% endfor %}
+            {% if has_detail_pages or has_row_actions %}
+              <td class="px-4 py-3 text-right">
+                <div class="flex flex-wrap justify-end gap-2">
+                  {% if row.detail_url %}<a href="{{ row.detail_url }}" class="font-semibold text-red-700">View</a>{% endif %}
+                  {% if row.action_url %}<a href="{{ row.action_url }}" class="rounded-full border border-red-200 px-3 py-1 text-xs font-bold text-red-700">{{ row.action_label|default:"Action" }}</a>{% endif %}
+                  {% if row.action_status %}
+                    {% if row.action_detail_url %}<a href="{{ row.action_detail_url }}" class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">{{ row.action_status }}</a>{% else %}<span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ row.action_status }}</span>{% endif %}
+                  {% endif %}
+                </div>
+              </td>
+            {% endif %}
+          </tr>
         {% empty %}
           <tr><td class="px-4 py-8 text-center text-slate-500" colspan="{{ headers|length|add:1 }}">No matching records.</td></tr>
         {% endfor %}
@@ -65,11 +89,11 @@
       </p>
       <div class="flex items-center gap-2">
         {% if page_obj.has_previous %}
-          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Previous</a>
+          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.previous_page_number }}{% if active_querystring %}&{{ active_querystring }}{% endif %}">Previous</a>
         {% endif %}
         <span class="px-2 text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
         {% if page_obj.has_next %}
-          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if status %}&status={{ status }}{% endif %}">Next</a>
+          <a class="rounded-lg border bg-white px-3 py-2 font-medium" href="?page={{ page_obj.next_page_number }}{% if active_querystring %}&{{ active_querystring }}{% endif %}">Next</a>
         {% endif %}
       </div>
     </nav>

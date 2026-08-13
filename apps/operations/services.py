@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal
 
 from django.db import models, transaction
+from django.urls import reverse
 from django.utils import timezone
 
 from apps.organizations.forms import TENANT_ROLE_PERMISSION_CODES
@@ -57,6 +58,91 @@ def _policy_snapshot(policy):
     }
 
 
+def approval_business_summary(approval):
+    labels = {
+        "access_request": "Access request",
+        "credit_sale": "Credit sale approval",
+        "discount": "Discount approval",
+        "expense": "Expense approval",
+        "stock_adjustment": "Stock adjustment approval",
+        "aged_stock_action": "Aged-stock action approval",
+    }
+    title = labels.get(approval.request_type, approval.display_type)
+    requested_by = approval.requested_by.get_full_name() or approval.requested_by.get_username()
+    branch = f" for {approval.branch.name}" if approval.branch_id else ""
+    return {
+        "title": title,
+        "requester": requested_by,
+        "branch": approval.branch.name if approval.branch_id else "",
+        "message": f"{requested_by} requested {title.lower()}{branch}.",
+        "reason": approval.reason,
+    }
+
+
+def eligible_approver_memberships(approval):
+    memberships = (
+        Membership.objects.filter(
+            organization=approval.organization,
+            status="active",
+            user__is_active=True,
+        )
+        .select_related("user")
+        .prefetch_related("roles")
+    )
+    eligible = []
+    seen = set()
+    for membership in memberships:
+        if approval.policy_id and approval.policy.require_separate_approver and membership.user_id == approval.requested_by_id:
+            continue
+        if membership.is_owner:
+            allowed = True
+        elif approval.policy_id:
+            allowed = approval.policy.approver_roles.filter(id__in=membership.roles.values("id")).exists()
+        else:
+            allowed = False
+        if allowed and membership.user_id not in seen:
+            eligible.append(membership)
+            seen.add(membership.user_id)
+    return eligible
+
+
+def notify_approval_requested(approval):
+    from apps.notifications.emailing import send_approval_request_email
+    from apps.notifications.models import Notification
+
+    summary = approval_business_summary(approval)
+    link = reverse("approval-detail", args=[approval.id])
+    memberships = eligible_approver_memberships(approval)
+    for membership in memberships:
+        Notification.objects.create(
+            organization=approval.organization,
+            recipient=membership.user,
+            title=summary["title"],
+            message=f"{summary['message']} Reason: {summary['reason']}",
+            link=link,
+        )
+    recipients = [membership.user.email for membership in memberships if membership.user.email]
+    transaction.on_commit(lambda: send_approval_request_email(approval=approval, recipients=recipients))
+
+
+def notify_approval_decided(approval):
+    from apps.notifications.emailing import send_approval_decision_email
+    from apps.notifications.models import Notification
+
+    status = approval.get_status_display().lower()
+    title = f"{approval.display_type} {status}"
+    link = reverse("approval-detail", args=[approval.id])
+    Notification.objects.create(
+        organization=approval.organization,
+        recipient=approval.requested_by,
+        title=title,
+        message=f"Your {approval.display_type.lower()} request was {status}.",
+        link=link,
+    )
+    recipients = [approval.requested_by.email] if approval.requested_by.email else []
+    transaction.on_commit(lambda: send_approval_decision_email(approval=approval, recipients=recipients))
+
+
 @transaction.atomic
 def request_approval(*, organization, request_type, target, requested_by, reason, amount=Decimal("0"), branch=None):
     policy = matching_approval_policy(
@@ -92,6 +178,7 @@ def request_approval(*, organization, request_type, target, requested_by, reason
         policy_snapshot=_policy_snapshot(policy),
         previous_request=previous,
     )
+    notify_approval_requested(approval)
     return approval
 
 
@@ -169,6 +256,7 @@ def request_permission_access(*, organization, user, permission_code, reason):
         requested_by=user,
         previous_request=previous,
     )
+    notify_approval_requested(approval)
     return approval
 
 

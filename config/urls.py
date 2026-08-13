@@ -22,7 +22,7 @@ from django.urls import include, path, reverse_lazy
 
 from apps.reports.views import activity_report, business_flow, dashboard, demo_access, help_center, product_features
 from apps.reports.views import global_search, imei_history, module_overview
-from apps.organizations.views import agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, branch_update, invitation_accept, invitation_resend, invitation_revoke, location_create, location_update, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
+from apps.organizations.views import aged_stock_policy_update, agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, branch_update, invitation_accept, invitation_resend, invitation_revoke, location_create, location_update, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
 from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
 from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_extract_document, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
@@ -36,7 +36,7 @@ from apps.reports.operational import operational_report
 from apps.reports.advanced import exception_report
 from apps.reports.retail import retail_analytics_report
 from apps.reports.agent_network import agent_network_report
-from apps.inventory.views import batch_serial_intake, device_search, stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
+from apps.inventory.views import aged_stock_action_create, batch_serial_intake, device_search, stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
 from apps.commissions.views import commission_payout_approve, commission_payout_create, commission_payout_detail, commission_payout_pay
 from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox, approval_policy_create, approval_policy_list, receivable_installment_schedule
 from apps.catalog.views import brand_create, category_create, product_create, product_detail, product_toggle_active, product_update
@@ -68,6 +68,7 @@ urlpatterns = [
     path("branches/<uuid:branch_id>/edit/", branch_update, name="branch-update"),
     path("locations/new/", location_create, name="location-create"),
     path("locations/<uuid:location_id>/edit/", location_update, name="location-update"),
+    path("settings/aged-stock-policy/", aged_stock_policy_update, name="aged-stock-policy"),
     path("roles/new/", role_create, name="role-create"),
     path("pos/checkout/", checkout, name="pos-checkout"),
     path("pos/sessions/open/", open_session, name="session-open"),
@@ -99,6 +100,7 @@ urlpatterns = [
     path("reports/exceptions/", exception_report, name="exception-report"),
     path("reports/activity/", activity_report, name="activity-report"),
     path("inventory/adjustments/new/", stock_adjustment_create, name="stock-adjustment-create"),
+    path("inventory/aged-stock/<uuid:stock_unit_id>/actions/new/", aged_stock_action_create, name="aged-stock-action-create"),
     path("inventory/devices/search/", device_search, name="device-search"),
     path("inventory/adjustments/<uuid:adjustment_id>/", stock_adjustment_detail, name="stock-adjustment-detail"),
     path("inventory/adjustments/<uuid:adjustment_id>/complete/", stock_adjustment_complete, name="stock-adjustment-complete"),

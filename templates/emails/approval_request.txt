@@ -1,0 +1,10 @@
+Approval needed
+
+{{ approval.requested_by.get_full_name|default:approval.requested_by.username }} requested approval for {{ approval.display_type }}.
+
+Business: {{ organization.name }}
+{% if approval.branch %}Branch: {{ approval.branch.name }}
+{% endif %}Reason: {{ approval.reason }}
+
+Review request:
+{{ approval_url }}

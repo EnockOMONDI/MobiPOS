@@ -1,7 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.commissions.models import CommissionAccrual, CommissionRule
@@ -49,7 +51,7 @@ def test_owner_dashboard_shows_guided_setup_checklist(client):
     assert response.status_code == 200
     assert b"Owner setup" in response.content
     assert b"Get the business ready for live operations" in response.content
-    assert b"0 / 7" in response.content
+    assert b"0 / 8" in response.content
     assert b"Edit branch" in response.content
     assert b"Edit location" in response.content
     assert reverse("branch-update", args=[branch.id]) in response.content.decode()
@@ -57,6 +59,144 @@ def test_owner_dashboard_shows_guided_setup_checklist(client):
     assert b"Add supplier" in response.content
     assert b"Add product" in response.content
     assert reverse("purchase-create") in response.content.decode()
+    assert b"Set aged-stock rules" in response.content
+    assert reverse("aged-stock-policy") in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_owner_can_review_aged_stock_policy_and_dashboard_uses_threshold(client):
+    organization = Organization.objects.create(name="Age Policy", slug="age-policy", status="active")
+    owner = User.objects.create_user(username="age-owner", email="age-owner@example.com")
+    company = Company.objects.create(organization=organization, name="Age Company", code="AGE")
+    branch = Branch.objects.create(organization=organization, company=company, name="CBD", code="CBD")
+    location = Location.objects.create(
+        organization=organization,
+        branch=branch,
+        name="CBD POS",
+        code="CBD-POS",
+        location_type=LocationType.POS,
+    )
+    Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    ).branches.add(branch)
+    category = Category.objects.create(organization=organization, name="Phones", code="phones")
+    product = Product.objects.create(
+        organization=organization,
+        category=category,
+        name="Samsung A15",
+        sku="A15",
+        is_serialized=True,
+    )
+    five_day_unit = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location,
+        serial_number="AGE-0005",
+        status=SerialStatus.AVAILABLE,
+    )
+    ten_day_unit = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location,
+        serial_number="AGE-0010",
+        status=SerialStatus.AVAILABLE,
+    )
+    StockUnit.objects.filter(id=five_day_unit.id).update(created_at=timezone.now() - timedelta(days=5))
+    StockUnit.objects.filter(id=ten_day_unit.id).update(created_at=timezone.now() - timedelta(days=10))
+    client.force_login(owner)
+
+    dashboard = client.get(reverse("dashboard"))
+
+    assert dashboard.context["metrics"]["aged_stock"] == 2
+    assert dashboard.context["metrics"]["aged_stock_start_day"] == 5
+
+    response = client.post(
+        reverse("aged-stock-policy"),
+        {
+            "fresh_max": 9,
+            "aging_max": 15,
+            "slow_max": 30,
+            "critical_max": 60,
+        },
+        follow=True,
+    )
+
+    assert response.status_code == 200
+    assert response.context["metrics"]["aged_stock"] == 1
+    assert response.context["metrics"]["aged_stock_start_day"] == 10
+
+
+@pytest.mark.django_db
+def test_aged_stock_module_uses_policy_buckets_and_filters(client):
+    organization = Organization.objects.create(name="Aged Register", slug="aged-register", status="active")
+    owner = User.objects.create_user(username="aged-register-owner", email="aged-register@example.com")
+    company = Company.objects.create(organization=organization, name="Aged Register Ltd", code="ARL")
+    cbd = Branch.objects.create(organization=organization, company=company, name="Nairobi CBD", code="CBD")
+    trm = Branch.objects.create(organization=organization, company=company, name="TRM", code="TRM")
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    membership.branches.add(cbd, trm)
+    cbd_pos = Location.objects.create(
+        organization=organization,
+        branch=cbd,
+        name="CBD POS",
+        code="CBD-POS",
+        location_type=LocationType.POS,
+    )
+    trm_agent = Location.objects.create(
+        organization=organization,
+        branch=trm,
+        name="TRM Agent Custody",
+        code="TRM-AGENT",
+        location_type=LocationType.AGENT,
+        custodian_membership=membership,
+    )
+    phones = Category.objects.create(organization=organization, name="Phones", code="phones")
+    accessories = Category.objects.create(organization=organization, name="Accessories", code="accessories")
+    phone = Product.objects.create(organization=organization, category=phones, name="iPhone 13", sku="IP13", is_serialized=True)
+    accessory = Product.objects.create(organization=organization, category=accessories, name="Serialized Router", sku="ROUTER", is_serialized=True)
+    phone_unit = StockUnit.objects.create(
+        organization=organization,
+        product=phone,
+        location=trm_agent,
+        serial_number="AGED-PHONE-001",
+        status=SerialStatus.AVAILABLE,
+    )
+    fresh_unit = StockUnit.objects.create(
+        organization=organization,
+        product=phone,
+        location=cbd_pos,
+        serial_number="FRESH-PHONE-001",
+        status=SerialStatus.AVAILABLE,
+    )
+    accessory_unit = StockUnit.objects.create(
+        organization=organization,
+        product=accessory,
+        location=cbd_pos,
+        serial_number="AGED-ROUTER-001",
+        status=SerialStatus.AVAILABLE,
+    )
+    StockUnit.objects.filter(id=phone_unit.id).update(created_at=timezone.now() - timedelta(days=20))
+    StockUnit.objects.filter(id=fresh_unit.id).update(created_at=timezone.now() - timedelta(days=2))
+    StockUnit.objects.filter(id=accessory_unit.id).update(created_at=timezone.now() - timedelta(days=40))
+    client.force_login(owner)
+
+    response = client.get(reverse("module-overview", args=["aged-stock"]), {"branch": trm.id})
+
+    assert response.status_code == 200
+    content = response.content.decode()
+    assert "AGED-PHONE-001" in content
+    assert "Slow" in content
+    assert "FRESH-PHONE-001" not in content
+    assert "AGED-ROUTER-001" not in content
+    assert response.context["filter_controls"]
 
 
 @pytest.mark.django_db
@@ -114,6 +254,8 @@ def test_help_center_explains_business_terms_for_authenticated_users(client):
     assert "Branch" in content
     assert "Location" in content
     assert "Supplier Statement" in content
+    assert "Aged Stock" in content
+    assert "Fresh, Aging, Slow, Critical and Attention" in content
     assert "Search help" in content
 
 

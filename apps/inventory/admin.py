@@ -1,6 +1,6 @@
 from django.contrib import admin
 from apps.organizations.admin import OrganizationOwnedAdmin
-from .models import StockAdjustment, StockBalance, StockMovement, StockUnit
+from .models import AgedStockAction, StockAdjustment, StockBalance, StockMovement, StockUnit
 
 
 @admin.register(StockUnit)
@@ -28,5 +28,12 @@ class StockMovementAdmin(OrganizationOwnedAdmin):
 
 admin.site.register(StockBalance, OrganizationOwnedAdmin)
 admin.site.register(StockAdjustment, OrganizationOwnedAdmin)
+
+
+@admin.register(AgedStockAction)
+class AgedStockActionAdmin(OrganizationOwnedAdmin):
+    list_display = ("stock_unit", "action_type", "status", "proposed_by", "approved_by", "organization")
+    list_filter = ("organization", "action_type", "status")
+    search_fields = ("stock_unit__serial_number", "stock_unit__secondary_serial", "stock_unit__product__name", "reason")
 
 # Register your models here.

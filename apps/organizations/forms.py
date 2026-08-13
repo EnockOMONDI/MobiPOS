@@ -519,6 +519,59 @@ class LocationCreateForm(forms.Form):
         return code
 
 
+class AgedStockPolicyForm(forms.Form):
+    fresh_max = forms.IntegerField(
+        min_value=0,
+        label="Fresh stock ends after",
+        help_text="Recommended: 4 days. Stock is still new and expected to move normally.",
+    )
+    aging_max = forms.IntegerField(
+        min_value=1,
+        label="Aging stock ends after",
+        help_text="Recommended: 15 days. Managers should start watching this stock.",
+    )
+    slow_max = forms.IntegerField(
+        min_value=2,
+        label="Slow stock ends after",
+        help_text="Recommended: 30 days. Consider transfer, campaign or discount.",
+    )
+    critical_max = forms.IntegerField(
+        min_value=3,
+        label="Critical stock ends after",
+        help_text="Recommended: 60 days. Owner review is recommended.",
+    )
+
+    def __init__(self, *args, policy=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({
+                "class": "w-28 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold",
+            })
+        if policy and not self.is_bound:
+            by_code = {bucket["code"]: bucket for bucket in policy.get("buckets", [])}
+            self.fields["fresh_max"].initial = by_code.get("fresh", {}).get("max_days", 4)
+            self.fields["aging_max"].initial = by_code.get("aging", {}).get("max_days", 15)
+            self.fields["slow_max"].initial = by_code.get("slow", {}).get("max_days", 30)
+            self.fields["critical_max"].initial = by_code.get("critical", {}).get("max_days", 60)
+
+    def clean(self):
+        cleaned = super().clean()
+        values = [
+            cleaned.get("fresh_max"),
+            cleaned.get("aging_max"),
+            cleaned.get("slow_max"),
+            cleaned.get("critical_max"),
+        ]
+        if any(value is None for value in values):
+            return cleaned
+        fresh_max, aging_max, slow_max, critical_max = values
+        if not fresh_max < aging_max < slow_max < critical_max:
+            raise forms.ValidationError(
+                "Use increasing day ranges, for example 4, 15, 30 and 60."
+            )
+        return cleaned
+
+
 class RoleCreateForm(forms.Form):
     name = forms.CharField(max_length=100)
     code = forms.SlugField(max_length=100)

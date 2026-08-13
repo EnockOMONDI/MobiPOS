@@ -1,0 +1,17 @@
+{% extends "emails/base.html" %}
+
+{% block preheader %}A MobiPOS approval needs your review.{% endblock %}
+
+{% block content %}
+  <h1>Approval needed</h1>
+  <p>{{ approval.requested_by.get_full_name|default:approval.requested_by.username }} requested approval for <strong>{{ approval.display_type }}</strong>.</p>
+  <div class="panel">
+    <p><strong>Business:</strong> {{ organization.name }}</p>
+    {% if approval.branch %}<p><strong>Branch:</strong> {{ approval.branch.name }}</p>{% endif %}
+    <p><strong>Reason:</strong> {{ approval.reason }}</p>
+  </div>
+  <p>
+    <a class="button" href="{{ approval_url }}">Review request</a>
+  </p>
+  <p class="muted">Approve only if the action is valid for the business and the supporting reason is clear.</p>
+{% endblock %}

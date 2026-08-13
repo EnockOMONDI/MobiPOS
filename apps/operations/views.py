@@ -12,16 +12,21 @@ from apps.organizations.permissions import organization_owner_required
 
 from .forms import ApprovalPolicyForm, InstallmentScheduleForm
 from .models import ApprovalPolicy, ApprovalRequest, ApprovalStatus, Receivable
-from .services import grant_requested_access, replace_installment_schedule, request_permission_access, user_can_decide_approval
+from .services import grant_requested_access, notify_approval_decided, replace_installment_schedule, request_permission_access, user_can_decide_approval
 
 
 @login_required
 def approval_inbox(request):
     candidates = ApprovalRequest.objects.filter(organization=request.organization).select_related(
-        "requested_by", "decided_by", "policy"
+        "requested_by", "decided_by", "policy", "branch"
     ).prefetch_related("policy__approver_roles")[:250]
     approvals = [approval for approval in candidates if user_can_decide_approval(user=request.user, approval=approval)]
-    return render(request, "operations/approval_inbox.html", {"approvals": approvals})
+    return render(request, "operations/approval_inbox.html", {
+        "approvals": approvals,
+        "pending_count": sum(1 for approval in approvals if approval.status == ApprovalStatus.PENDING),
+        "approved_count": sum(1 for approval in approvals if approval.status == ApprovalStatus.APPROVED),
+        "rejected_count": sum(1 for approval in approvals if approval.status == ApprovalStatus.REJECTED),
+    })
 
 
 @login_required
@@ -31,9 +36,10 @@ def approval_detail(request, approval_id):
         id=approval_id,
         organization=request.organization,
     )
-    if not user_can_decide_approval(user=request.user, approval=approval):
+    can_decide = user_can_decide_approval(user=request.user, approval=approval)
+    if not can_decide and approval.requested_by_id != request.user.id:
         raise PermissionDenied("You are not an eligible approver for this request.")
-    return render(request, "operations/approval_detail.html", {"approval": approval})
+    return render(request, "operations/approval_detail.html", {"approval": approval, "can_decide": can_decide})
 
 
 @login_required
@@ -57,6 +63,19 @@ def approval_decide(request, approval_id):
     approval.save(update_fields=["status", "decided_by", "decided_at", "decision_notes", "updated_at"])
     if decision == ApprovalStatus.APPROVED:
         grant_requested_access(approval=approval)
+    if approval.request_type == "aged_stock_action":
+        from apps.inventory.aging import sync_aged_stock_action_from_approval
+
+        aged_stock_action = sync_aged_stock_action_from_approval(approval=approval)
+        if aged_stock_action:
+            record_audit_event(
+                action=f"aged_stock_action.{decision}",
+                actor=request.user,
+                organization=request.organization,
+                target=aged_stock_action,
+                request=request,
+            )
+    notify_approval_decided(approval)
     record_audit_event(action=f"approval.{decision}", actor=request.user, organization=request.organization, target=approval, request=request)
     messages.success(request, f"Approval request {decision}.")
     return redirect("approval-detail", approval_id=approval.id)

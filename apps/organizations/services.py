@@ -116,6 +116,9 @@ def _permissions_for_codes(codes):
 
 @transaction.atomic
 def ensure_organization_onboarding_defaults(organization):
+    from apps.inventory.aging import ensure_aged_stock_policy
+
+    ensure_aged_stock_policy(organization)
     for code, name in DEFAULT_CATEGORIES:
         Category.objects.get_or_create(
             organization=organization,

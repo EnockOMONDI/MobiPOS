@@ -21,7 +21,8 @@ from apps.contacts.models import Contact
 from apps.commissions.models import CommissionAccrual, CommissionPayout
 from apps.expenses.models import Expense
 from apps.integrations.models import FiscalDevice, FiscalDocument, IntegrationEvent
-from apps.inventory.models import SerialStatus, StockAdjustment, StockBalance, StockMovement, StockUnit
+from apps.inventory.aging import active_aged_stock_action_statuses, age_days_for, aged_stock_cutoff, bucket_choices, bucket_for_age, first_aged_stock_day, get_aged_stock_policy
+from apps.inventory.models import AgedStockAction, SerialStatus, StockAdjustment, StockBalance, StockMovement, StockUnit
 from apps.operations.models import ApprovalRequest, Payable, Receivable
 from apps.organizations.models import AgentProfile, Branch, Location, LocationType, Membership, Organization, Role, SubscriptionInvoice
 from apps.organizations.permissions import accessible_branches_for, organization_permission_required, user_has_organization_permission
@@ -261,6 +262,22 @@ HELP_TOPICS = [
             "Corrections are handled through reversals or new corrective movements.",
         ],
         "why": "It gives management a trustworthy record for audits and disputes.",
+    },
+    {
+        "section": "Products and Inventory",
+        "title": "Aged Stock",
+        "summary": "Aged stock is available stock that has stayed in the business longer than the owner expects.",
+        "example": "If the business policy says stock starts aging after 5 days, a phone received 8 days ago appears as Aging stock.",
+        "steps": [
+            "The owner opens Set Aged-Stock Rules from the setup checklist or settings page.",
+            "The owner can use the recommended policy or adjust the day ranges for Fresh, Aging, Slow, Critical and Attention.",
+            "MobiPOS checks available serialized stock against those day ranges.",
+            "The dashboard shows how many devices need review.",
+            "The Aged Stock report can be filtered by branch, category, agent custody and age status.",
+            "Managers can request a clear action for one old IMEI, such as transfer, campaign, discount, supplier return or write-off.",
+            "Owners approve or reject the request from the approval inbox before the team completes the actual stock action.",
+        ],
+        "why": "It helps owners act before stock becomes dead capital while keeping sensitive decisions approved, visible and audited.",
     },
     {
         "section": "Purchasing and Suppliers",
@@ -1350,6 +1367,7 @@ def _owner_setup_steps(organization):
     purchase_url = reverse("purchase-create")
     starter_branch = _starter_branches(organization).first()
     starter_location = _starter_locations(organization).first()
+    aged_stock_policy = get_aged_stock_policy(organization)
     steps = [
         {
             "key": "branch",
@@ -1420,6 +1438,14 @@ def _owner_setup_steps(organization):
             "action_label": "Batch IMEI intake",
             "action_url": reverse("batch-serial-intake"),
         },
+        {
+            "key": "aged_stock_policy",
+            "title": "Set aged-stock rules",
+            "description": "Choose when stock becomes aging, slow, critical, or needs owner attention.",
+            "complete": bool(aged_stock_policy.get("reviewed")),
+            "action_label": "Review rules",
+            "action_url": reverse("aged-stock-policy"),
+        },
     ]
     for index, step in enumerate(steps, start=1):
         step["number"] = index
@@ -1442,6 +1468,8 @@ def dashboard(request):
             location__branch__in=branches,
             status=SerialStatus.AVAILABLE,
         )
+        aged_stock_policy = get_aged_stock_policy(organization)
+        aged_cutoff = aged_stock_cutoff(aged_stock_policy)
         sales = Sale.objects.filter(organization=organization, location__branch__in=branches)
         metrics = {
             "organizations": 1,
@@ -1467,7 +1495,8 @@ def dashboard(request):
                 status=TransferStatus.IN_TRANSIT,
             ).count(),
             "active_carts": sales.filter(status="draft").count(),
-            "aged_stock": available_stock.filter(created_at__lte=timezone.now() - timedelta(days=5)).count(),
+            "aged_stock": available_stock.filter(created_at__lte=aged_cutoff).count(),
+            "aged_stock_start_day": first_aged_stock_day(aged_stock_policy),
             "unpaid_commissions": CommissionAccrual.objects.filter(
                 organization=organization,
                 sale__location__branch__in=branches,
@@ -1986,11 +2015,121 @@ def module_overview(request, module):
     status = request.GET.get("status", "").strip()
     if status in {"active", "inactive"} and any(field.name == "is_active" for field in model._meta.fields):
         queryset = queryset.filter(is_active=status == "active")
+    filter_controls = []
+    clear_filters = bool(query or status)
     if module == "aged-stock":
-        queryset = queryset.filter(status=SerialStatus.AVAILABLE, created_at__lte=timezone.now() - timedelta(days=5))
+        policy = get_aged_stock_policy(request.organization)
+        branches = accessible_branches_for(request.user, request.organization)
+        branch_id = request.GET.get("branch", "").strip()
+        category_id = request.GET.get("category", "").strip()
+        agent_location_id = request.GET.get("agent_location", "").strip()
+        age_bucket = request.GET.get("age_bucket", "").strip()
+        queryset = queryset.filter(
+            status=SerialStatus.AVAILABLE,
+            created_at__lte=aged_stock_cutoff(policy),
+        ).select_related("product", "product__category", "location", "location__branch", "location__custodian_membership__user")
+        if branch_id:
+            queryset = queryset.filter(location__branch_id=branch_id)
+        if category_id:
+            queryset = queryset.filter(product__category_id=category_id)
+        if agent_location_id:
+            queryset = queryset.filter(location_id=agent_location_id)
+        if age_bucket:
+            selected_bucket = next((bucket for bucket in policy["buckets"] if bucket["code"] == age_bucket), None)
+            if selected_bucket:
+                max_days = selected_bucket["max_days"]
+                min_days = selected_bucket["min_days"]
+                today = timezone.localdate()
+                newest_date = today - timedelta(days=min_days)
+                queryset = queryset.filter(created_at__date__lte=newest_date)
+                if max_days is not None:
+                    oldest_date = today - timedelta(days=max_days)
+                    queryset = queryset.filter(created_at__date__gte=oldest_date)
+        clear_filters = bool(query or status or branch_id or category_id or agent_location_id or age_bucket)
+        filter_controls = [
+            {
+                "name": "branch",
+                "label": "Branch",
+                "value": branch_id,
+                "options": [(str(branch.id), branch.name) for branch in branches.order_by("name")],
+            },
+            {
+                "name": "category",
+                "label": "Category",
+                "value": category_id,
+                "options": [
+                    (str(category.id), category.name)
+                    for category in Category.objects.filter(organization=request.organization, is_active=True).order_by("name")
+                ],
+            },
+            {
+                "name": "agent_location",
+                "label": "Agent custody",
+                "value": agent_location_id,
+                "options": [
+                    (str(location.id), location.name)
+                    for location in Location.objects.filter(
+                        organization=request.organization,
+                        location_type=LocationType.AGENT,
+                        is_active=True,
+                        branch__in=branches,
+                    ).order_by("name")
+                ],
+            },
+            {
+                "name": "age_bucket",
+                "label": "Age status",
+                "value": age_bucket,
+                "options": bucket_choices(policy),
+            },
+        ]
+        headers = ["Serial / IMEI", "Product", "Branch", "Location", "Category", "Age", "Status", "Recommended next step"]
+        if request.GET.get("format") == "csv":
+            response = HttpResponse(content_type="text/csv")
+            response["Content-Disposition"] = f'attachment; filename="{module}.csv"'
+            writer = csv.writer(response)
+            writer.writerow(headers)
+            for item in queryset:
+                days = age_days_for(item)
+                bucket = bucket_for_age(days, policy)
+                writer.writerow(safe_csv_row([
+                    item.serial_number,
+                    item.product.name,
+                    item.location.branch.name if item.location_id else "",
+                    item.location.name if item.location_id else "",
+                    item.product.category.name if item.product.category_id else "",
+                    f"{days} days",
+                    bucket["label"],
+                    bucket["description"],
+                ]))
+            return response
+        if request.GET.get("format") == "pdf":
+            rows_for_pdf = []
+            for item in queryset[:80]:
+                days = age_days_for(item)
+                bucket = bucket_for_age(days, policy)
+                rows_for_pdf.append([
+                    item.serial_number,
+                    item.product.name,
+                    item.location.branch.name if item.location_id else "",
+                    item.location.name if item.location_id else "",
+                    f"{days} days",
+                    bucket["label"],
+                ])
+            response = HttpResponse(
+                build_simple_pdf(
+                    title=f"MobiPOS {title}",
+                    headers=["Serial / IMEI", "Product", "Branch", "Location", "Age", "Status"],
+                    rows=rows_for_pdf,
+                ),
+                content_type="application/pdf",
+            )
+            response["Content-Disposition"] = f'attachment; filename="{module}.pdf"'
+            return response
     if module == "agent-stock":
         queryset = queryset.filter(location__location_type=LocationType.AGENT)
-    headers = [field.replace("_", " ").title() for field in fields]
+    if module != "aged-stock":
+        headers = [field.replace("_", " ").title() for field in fields]
     if request.GET.get("format") == "csv":
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{module}.csv"'
@@ -2006,6 +2145,10 @@ def module_overview(request, module):
         )
         response["Content-Disposition"] = f'attachment; filename="{module}.pdf"'
         return response
+    active_params = request.GET.copy()
+    active_params.pop("format", None)
+    active_params.pop("page", None)
+    active_querystring = active_params.urlencode()
     page_obj = Paginator(queryset, 25).get_page(request.GET.get("page"))
     detail_url_name = MODULE_DETAIL_URLS.get(module)
     create_action = MODULE_CREATE_ACTIONS.get(module)
@@ -2014,10 +2157,44 @@ def module_overview(request, module):
             **create_action,
             "url": reverse(create_action["url_name"]),
         }
-    rows = [{
-        "values": [getattr(item, field) for field in fields],
-        "detail_url": reverse(detail_url_name, args=[item.pk]) if detail_url_name else "",
-    } for item in page_obj]
+    if module == "aged-stock":
+        policy = get_aged_stock_policy(request.organization)
+        page_unit_ids = [item.id for item in page_obj]
+        active_actions = {
+            action.stock_unit_id: action
+            for action in AgedStockAction.objects.filter(
+                organization=request.organization,
+                stock_unit_id__in=page_unit_ids,
+                status__in=active_aged_stock_action_statuses(),
+            ).select_related("approval")
+        }
+        rows = []
+        for item in page_obj:
+            days = age_days_for(item)
+            bucket = bucket_for_age(days, policy)
+            active_action = active_actions.get(item.id)
+            rows.append({
+                "values": [
+                    item.serial_number,
+                    item.product.name,
+                    item.location.branch.name if item.location_id else "",
+                    item.location.name if item.location_id else "",
+                    item.product.category.name if item.product.category_id else "",
+                    f"{days} days",
+                    bucket["label"],
+                    bucket["description"],
+                ],
+                "detail_url": f"{reverse('imei-history')}?q={quote(item.serial_number)}",
+                "action_url": "" if active_action else reverse("aged-stock-action-create", args=[item.id]),
+                "action_label": "Request action",
+                "action_status": active_action.get_status_display() if active_action else "",
+                "action_detail_url": reverse("approval-detail", args=[active_action.approval_id]) if active_action and active_action.approval_id else "",
+            })
+    else:
+        rows = [{
+            "values": [getattr(item, field) for field in fields],
+            "detail_url": reverse(detail_url_name, args=[item.pk]) if detail_url_name else "",
+        } for item in page_obj]
     return render(
         request,
         "module_overview.html",
@@ -2029,7 +2206,11 @@ def module_overview(request, module):
             "query": query,
             "status": status,
             "supports_status_filter": any(field.name == "is_active" for field in model._meta.fields),
+            "filter_controls": filter_controls,
+            "clear_filters": clear_filters,
+            "active_querystring": active_querystring,
             "has_detail_pages": bool(detail_url_name),
+            "has_row_actions": any(row.get("action_url") or row.get("action_status") for row in rows),
             "create_action": create_action,
         },
     )

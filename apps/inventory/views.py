@@ -11,7 +11,8 @@ from django.views.decorators.http import require_POST
 from apps.audit.services import record_audit_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 
-from .forms import BatchSerializedIntakeForm, StockAdjustmentForm, StockReversalForm
+from .aging import age_days_for, bucket_for_age, get_aged_stock_policy, request_aged_stock_action
+from .forms import AgedStockActionForm, BatchSerializedIntakeForm, StockAdjustmentForm, StockReversalForm
 from .models import StockAdjustment, StockMovement, StockUnit
 from .services import batch_receive_serialized_stock, complete_stock_adjustment, parse_serial_intake_rows, reverse_stock_movement
 
@@ -131,6 +132,54 @@ def batch_serial_intake(request):
         except (UnicodeDecodeError, ValidationError) as error:
             form.add_error(None, str(error))
     return render(request, "inventory/batch_serial_intake.html", {"form": form, "result": result})
+
+
+@login_required
+@organization_permission_required("inventory.view_stockunit")
+@transaction.atomic
+def aged_stock_action_create(request, stock_unit_id):
+    stock_unit = get_object_or_404(
+        StockUnit.objects.select_related("product", "product__category", "location", "location__branch"),
+        id=stock_unit_id,
+        organization=request.organization,
+        location__in=accessible_locations_for(request.user, request.organization),
+    )
+    policy = get_aged_stock_policy(request.organization)
+    age_days = age_days_for(stock_unit)
+    bucket = bucket_for_age(age_days, policy)
+    form = AgedStockActionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        try:
+            action = request_aged_stock_action(
+                stock_unit=stock_unit,
+                action_type=form.cleaned_data["action_type"],
+                reason=form.cleaned_data["reason"],
+                next_step=form.cleaned_data["next_step"],
+                requested_by=request.user,
+            )
+        except ValidationError as error:
+            form.add_error(None, error.message)
+        else:
+            record_audit_event(
+                action="aged_stock_action.requested",
+                actor=request.user,
+                organization=request.organization,
+                target=action,
+                metadata={
+                    "stock_unit": str(stock_unit.id),
+                    "serial_number": stock_unit.serial_number,
+                    "action_type": action.action_type,
+                },
+                request=request,
+            )
+            messages.success(request, "Aged-stock action sent for owner approval.")
+            return redirect("module-overview", module="aged-stock")
+    return render(request, "inventory/aged_stock_action_form.html", {
+        "form": form,
+        "stock_unit": stock_unit,
+        "age_days": age_days,
+        "bucket": bucket,
+    })
 
 
 @login_required

@@ -1,0 +1,16 @@
+{% extends "emails/base.html" %}
+
+{% block preheader %}Your MobiPOS approval request was {{ approval.get_status_display|lower }}.{% endblock %}
+
+{% block content %}
+  <h1>Approval {{ approval.get_status_display|lower }}</h1>
+  <p>Your request for <strong>{{ approval.display_type }}</strong> was <strong>{{ approval.get_status_display|lower }}</strong>.</p>
+  <div class="panel">
+    <p><strong>Business:</strong> {{ organization.name }}</p>
+    <p><strong>Reason:</strong> {{ approval.reason }}</p>
+    {% if approval.decision_notes %}<p><strong>Decision notes:</strong> {{ approval.decision_notes }}</p>{% endif %}
+  </div>
+  <p>
+    <a class="button" href="{{ approval_url }}">Open request</a>
+  </p>
+{% endblock %}

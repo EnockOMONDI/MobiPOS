@@ -4,13 +4,16 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
 from openpyxl import Workbook
 
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
-from apps.inventory.models import SerialStatus, StockAdjustment, StockBalance, StockMovement, StockMovementType, StockUnit
+from apps.inventory.aging import request_aged_stock_action, sync_aged_stock_action_from_approval
+from apps.inventory.models import AgedStockAction, AgedStockActionStatus, SerialStatus, StockAdjustment, StockBalance, StockMovement, StockMovementType, StockUnit
+from apps.operations.models import ApprovalStatus
 from apps.inventory.services import post_stock_movement, reverse_stock_movement
-from apps.organizations.models import Branch, Company, Location, Organization
+from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization
 
 
 @pytest.mark.django_db
@@ -80,6 +83,8 @@ def test_stock_unit_rejects_primary_secondary_imei_conflicts():
             organization=org, product=phone, serial_number="IMEI-3", secondary_serial="IMEI-1",
             location=location, status=SerialStatus.AVAILABLE,
         )
+
+
     with pytest.raises(ValidationError, match="must be different"):
         StockUnit.objects.create(
             organization=org, product=phone, serial_number="IMEI-4", secondary_serial="IMEI-4",
@@ -256,5 +261,85 @@ def test_domain_owned_stock_movement_cannot_be_reversed_generically():
 
     with pytest.raises(ValidationError, match="source workflow"):
         reverse_stock_movement(movement=movement, actor=user, reason="Wrong sale")
+
+
+@pytest.mark.django_db
+def test_aged_stock_action_creates_approval_and_syncs_decision():
+    org = Organization.objects.create(name="Aged Action Org", slug="aged-action-org", status="active")
+    manager = User.objects.create_user(username="aged-manager", email="manager@example.com")
+    owner = User.objects.create_user(username="aged-owner", email="owner@example.com")
+    Membership.objects.create(organization=org, user=manager, status=MembershipStatus.ACTIVE)
+    Membership.objects.create(organization=org, user=owner, status=MembershipStatus.ACTIVE, is_owner=True)
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Branch", code="BR")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="POS", location_type="pos")
+    category = Category.objects.create(organization=org, name="Phones", code="phones")
+    product = Product.objects.create(organization=org, category=category, name="Phone", sku="PHONE", is_serialized=True)
+    unit = StockUnit.objects.create(
+        organization=org,
+        product=product,
+        serial_number="AGED-ACTION-001",
+        location=location,
+        status=SerialStatus.AVAILABLE,
+    )
+
+    action = request_aged_stock_action(
+        stock_unit=unit,
+        action_type="transfer",
+        reason="Move this model to a faster branch.",
+        next_step="Transfer to CBD.",
+        requested_by=manager,
+    )
+
+    assert action.status == AgedStockActionStatus.REQUESTED
+    assert action.approval is not None
+    assert action.approval.request_type == "aged_stock_action"
+    assert action.approval.branch == branch
+
+    approval = action.approval
+    approval.status = ApprovalStatus.APPROVED
+    approval.decided_by = owner
+    approval.decided_at = timezone.now()
+    approval.save(update_fields=["status", "decided_by", "decided_at", "updated_at"])
+
+    synced = sync_aged_stock_action_from_approval(approval=approval)
+
+    assert synced.status == AgedStockActionStatus.APPROVED
+    assert synced.approved_by == owner
+
+
+@pytest.mark.django_db
+def test_aged_stock_action_reuses_active_request():
+    org = Organization.objects.create(name="Aged Existing Org", slug="aged-existing-org", status="active")
+    manager = User.objects.create_user(username="aged-existing-manager", email="manager@example.com")
+    Membership.objects.create(organization=org, user=manager, status=MembershipStatus.ACTIVE)
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Branch", code="BR")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="POS", location_type="pos")
+    category = Category.objects.create(organization=org, name="Phones", code="phones")
+    product = Product.objects.create(organization=org, category=category, name="Phone", sku="PHONE", is_serialized=True)
+    unit = StockUnit.objects.create(
+        organization=org,
+        product=product,
+        serial_number="AGED-EXISTING-001",
+        location=location,
+        status=SerialStatus.AVAILABLE,
+    )
+
+    first = request_aged_stock_action(
+        stock_unit=unit,
+        action_type="discount",
+        reason="Run a promotion.",
+        requested_by=manager,
+    )
+    second = request_aged_stock_action(
+        stock_unit=unit,
+        action_type="transfer",
+        reason="Transfer instead.",
+        requested_by=manager,
+    )
+
+    assert first == second
+    assert AgedStockAction.objects.filter(stock_unit=unit).count() == 1
 
 # Create your tests here.

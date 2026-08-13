@@ -157,4 +157,75 @@ class StockAdjustment(OrganizationOwnedModel):
             models.UniqueConstraint(fields=("organization", "number"), name="unique_stock_adjustment_number")
         ]
 
+
+class AgedStockActionType(models.TextChoices):
+    TRANSFER = "transfer", "Transfer to a faster branch"
+    DISCOUNT = "discount", "Run a discount or promotion"
+    SUPPLIER_RETURN = "supplier_return", "Return to supplier"
+    CAMPAIGN = "campaign", "Add to sales campaign"
+    WRITE_OFF = "write_off", "Write off or retire"
+    OTHER = "other", "Other action"
+
+
+class AgedStockActionStatus(models.TextChoices):
+    REQUESTED = "requested", "Requested"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+    COMPLETED = "completed", "Completed"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class AgedStockAction(OrganizationOwnedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    stock_unit = models.ForeignKey(StockUnit, on_delete=models.PROTECT, related_name="aged_stock_actions")
+    action_type = models.CharField(max_length=40, choices=AgedStockActionType.choices)
+    status = models.CharField(max_length=20, choices=AgedStockActionStatus.choices, default=AgedStockActionStatus.REQUESTED)
+    reason = models.TextField()
+    next_step = models.TextField(blank=True)
+    approval = models.ForeignKey(
+        "operations.ApprovalRequest",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="aged_stock_actions",
+    )
+    proposed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="proposed_aged_stock_actions",
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="approved_aged_stock_actions",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="completed_aged_stock_actions",
+    )
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def clean(self):
+        super().clean()
+        if self.stock_unit_id and self.stock_unit.organization_id != self.organization_id:
+            raise ValidationError("Aged-stock action and stock unit must belong to the same organization.")
+        if self.approval_id and self.approval.organization_id != self.organization_id:
+            raise ValidationError("Aged-stock action and approval must belong to the same organization.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.get_action_type_display()} for {self.stock_unit}"
+
 # Create your models here.

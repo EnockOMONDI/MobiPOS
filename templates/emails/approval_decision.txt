@@ -1,0 +1,10 @@
+Approval {{ approval.get_status_display|lower }}
+
+Your request for {{ approval.display_type }} was {{ approval.get_status_display|lower }}.
+
+Business: {{ organization.name }}
+Reason: {{ approval.reason }}
+{% if approval.decision_notes %}Decision notes: {{ approval.decision_notes }}
+{% endif %}
+Open request:
+{{ approval_url }}
