@@ -207,6 +207,60 @@ def test_sandbox_etims_event_updates_fiscal_document_status():
 
 
 @pytest.mark.django_db
+@override_settings(INTEGRATION_MODE="disabled")
+def test_failed_etims_event_updates_fiscal_document_and_preserves_error():
+    _user, org, company, _branch, location, sale = _retail_fixture("fiscal-failed")
+    FiscalDevice.objects.create(
+        organization=org,
+        company=company,
+        location=location,
+        status=FiscalDeviceStatus.SANDBOX_TESTING,
+        taxpayer_pin="P051234568B",
+        branch_office_id="00",
+    )
+    document = create_sale_fiscal_document(sale=sale)
+    event = IntegrationEvent.objects.get(idempotency_key=f"etims-sale-{sale.id}")
+
+    process_integration_event(str(event.id))
+    document.refresh_from_db()
+    event.refresh_from_db()
+
+    assert event.status == IntegrationStatus.FAILED
+    assert document.status == FiscalDocumentStatus.FAILED
+    assert document.last_error == event.error_message
+    assert document.failed_at is not None
+
+
+@pytest.mark.django_db
+@override_settings(INTEGRATION_MODE="disabled")
+def test_dead_etims_event_marks_document_dead_after_retry_limit():
+    _user, org, company, _branch, location, sale = _retail_fixture("fiscal-dead")
+    FiscalDevice.objects.create(
+        organization=org,
+        company=company,
+        location=location,
+        status=FiscalDeviceStatus.SANDBOX_TESTING,
+        taxpayer_pin="P051234568B",
+        branch_office_id="00",
+    )
+    document = create_sale_fiscal_document(sale=sale)
+    event = IntegrationEvent.objects.get(idempotency_key=f"etims-sale-{sale.id}")
+    event.attempts = 7
+    event.status = IntegrationStatus.FAILED
+    event.next_retry_at = timezone.now()
+    event.save(update_fields=["attempts", "status", "next_retry_at", "updated_at"])
+
+    process_integration_event(str(event.id))
+    document.refresh_from_db()
+    event.refresh_from_db()
+
+    assert event.status == IntegrationStatus.DEAD
+    assert document.status == FiscalDocumentStatus.DEAD
+    assert document.last_error == event.error_message
+    assert document.failed_at is not None
+
+
+@pytest.mark.django_db
 def test_return_creates_etims_credit_note_document():
     user, org, company, _branch, location, sale = _retail_fixture("fiscal-return")
     FiscalDevice.objects.create(

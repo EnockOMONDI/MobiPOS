@@ -17,7 +17,7 @@ from apps.payments.models import Payment, PaymentStatus
 from apps.contacts.models import Contact
 from apps.operations.models import Receivable
 from apps.operations.models import ApprovalRequest
-from apps.pos.models import CashMovement, OfflineInvoiceQueue, POSSession
+from apps.pos.models import CashMovement, OfflineInvoiceQueue, OfflineInvoiceQueueStatus, POSSession
 
 
 def grant_sale_permission(membership):
@@ -93,8 +93,10 @@ def test_pos_cart_includes_camera_scanner_and_offline_queue_ui(client):
 
     assert response.status_code == 200
     assert b"Camera scan" in response.content
-    assert b"Save offline invoice" in response.content
+    assert b"Recovery drafts" in response.content
+    assert b"Add an item before saving a recovery draft" in response.content
     assert b"pos_scanner_queue.js" in response.content
+    assert b"data-camera-error" in response.content
     assert b'name="csrf-token"' in response.content
 
 
@@ -194,6 +196,85 @@ def test_offline_invoice_sync_rejects_oversized_batches_without_truncating(clien
     assert response.status_code == 413
     assert response.json()["accepted"] == []
     assert OfflineInvoiceQueue.objects.filter(organization=org).count() == 0
+
+
+@pytest.mark.django_db
+def test_offline_invoice_sync_rejects_oversized_draft_without_truncating_lines(client):
+    user = User.objects.create_user(username="offlinelines", email="offlinelines@example.com")
+    org = Organization.objects.create(name="Offline Lines Retail", slug="offline-lines-retail", status="active")
+    company = Company.objects.create(organization=org, name="Offline Lines Ltd", code="OFFL")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="OFFLMAIN")
+    Location.objects.create(organization=org, branch=branch, name="POS", code="OFFLPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+
+    response = client.post(
+        reverse("pos-offline-sync"),
+        data=json.dumps({
+            "invoices": [{
+                "client_reference": "too-many-lines",
+                "lines": [{"product": f"Product {index}", "quantity": "1"} for index in range(101)],
+            }],
+        }),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert response.json()["accepted"] == []
+    assert "more than 100 items" in response.json()["rejected"][0]["reason"]
+    assert not OfflineInvoiceQueue.objects.filter(organization=org).exists()
+
+
+@pytest.mark.django_db
+def test_recovery_upload_is_idempotent_and_never_resets_review_status(client):
+    user = User.objects.create_user(username="recovery-idempotent", email="recovery-idempotent@example.com")
+    org = Organization.objects.create(name="Recovery Retail", slug="recovery-idempotent", status="active")
+    company = Company.objects.create(organization=org, name="Recovery Ltd", code="REC")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="RECMAIN")
+    Location.objects.create(organization=org, branch=branch, name="POS", code="RECPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+    body = {"invoices": [{"client_reference": "stable-001", "schema_version": 1, "device_id": "device-a", "lines": [{"product": "Cable", "quantity": "1", "total": "500"}]}]}
+
+    first = client.post(reverse("pos-offline-sync"), data=json.dumps(body), content_type="application/json")
+    recovery = OfflineInvoiceQueue.objects.get(organization=org, client_reference="stable-001")
+    recovery.status = OfflineInvoiceQueueStatus.COMPLETED
+    recovery.review_notes = "Reviewed already."
+    recovery.save(update_fields=("status", "review_notes", "updated_at"))
+    second = client.post(reverse("pos-offline-sync"), data=json.dumps(body), content_type="application/json")
+
+    recovery.refresh_from_db()
+    assert first.status_code == second.status_code == 200
+    assert OfflineInvoiceQueue.objects.filter(organization=org, client_reference="stable-001").count() == 1
+    assert recovery.status == OfflineInvoiceQueueStatus.COMPLETED
+    assert recovery.review_notes == "Reviewed already."
+
+
+@pytest.mark.django_db
+def test_recovery_reference_with_changed_contents_is_rejected(client):
+    user = User.objects.create_user(username="recovery-conflict", email="recovery-conflict@example.com")
+    org = Organization.objects.create(name="Conflict Retail", slug="recovery-conflict", status="active")
+    company = Company.objects.create(organization=org, name="Conflict Ltd", code="CONF")
+    branch = Branch.objects.create(organization=org, company=company, name="Main", code="CONFMAIN")
+    Location.objects.create(organization=org, branch=branch, name="POS", code="CONFPOS", location_type="pos")
+    membership = Membership.objects.create(organization=org, user=user, status=MembershipStatus.ACTIVE)
+    membership.branches.add(branch)
+    grant_sale_permission(membership)
+    client.force_login(user)
+    original = {"invoices": [{"client_reference": "conflict-001", "lines": [{"product": "Cable", "quantity": "1"}]}]}
+    changed = {"invoices": [{"client_reference": "conflict-001", "lines": [{"product": "Cable", "quantity": "2"}]}]}
+
+    client.post(reverse("pos-offline-sync"), data=json.dumps(original), content_type="application/json")
+    response = client.post(reverse("pos-offline-sync"), data=json.dumps(changed), content_type="application/json")
+
+    assert response.status_code == 200
+    assert response.json()["accepted"] == []
+    assert "different contents" in response.json()["rejected"][0]["reason"]
+    assert OfflineInvoiceQueue.objects.get(organization=org).payload["lines"][0]["quantity"] == "1"
 
 
 @pytest.mark.django_db
@@ -398,15 +479,27 @@ def test_multi_line_cart_completes_one_sale(client):
     client.post(reverse("pos-cart-add"), {"product": first.id, "quantity": "2"})
     client.post(reverse("pos-cart-add"), {"product": second.id, "quantity": "1"})
     cart = Sale.objects.get(organization=org, status="draft")
+    upload = client.post(reverse("pos-offline-sync"), data=json.dumps({"invoices": [{
+        "client_reference": "linked-cart-recovery",
+        "cart_id": str(cart.id),
+        "schema_version": 1,
+        "device_id": "register-01",
+        "lines": [{"product": "Cable", "quantity": "2", "total": "1000"}],
+    }]}), content_type="application/json")
     response = client.post(reverse("pos-cart-complete", args=[cart.id]), {
         "payment_method": "cash", "amount_received": "2000",
     })
 
     cart.refresh_from_db()
+    recovery = OfflineInvoiceQueue.objects.get(client_reference="linked-cart-recovery")
+    assert upload.status_code == 200
     assert response.status_code == 302
     assert cart.status == "paid"
     assert cart.lines.count() == 2
     assert cart.total == 2000
+    assert recovery.status == OfflineInvoiceQueueStatus.COMPLETED
+    assert recovery.sale_number == cart.number
+    assert recovery.reviewed_by == user
 
 
 @pytest.mark.django_db
@@ -615,14 +708,17 @@ def test_cart_accepts_true_split_payment_with_references(client):
 
     cart.refresh_from_db()
     assert response.status_code == 302
-    assert cart.status == "part_paid"
-    assert cart.paid_total == 500
+    assert cart.status == "paid"
+    assert cart.paid_total == 2000
     assert set(Payment.objects.filter(sale=cart).values_list("method", "amount")) == {
         ("cash", 500), ("mpesa", 1000), ("card", 500),
     }
     assert Payment.objects.get(sale=cart, method="cash").status == PaymentStatus.CONFIRMED
-    assert Payment.objects.get(sale=cart, method="mpesa").status == PaymentStatus.PENDING
-    assert Payment.objects.get(sale=cart, method="card").status == PaymentStatus.PENDING
+    for payment in Payment.objects.filter(sale=cart):
+        assert payment.status == PaymentStatus.CONFIRMED
+        assert payment.verification_source == "manual"
+        assert payment.verified_by == user
+        assert payment.verified_at is not None
 
 
 @pytest.mark.django_db

@@ -1,27 +1,175 @@
 {% extends "base.html" %}
 {% block title %}{{ ticket.number }} | MobiPOS{% endblock %}
 {% block content %}
-<h1 class="text-3xl font-bold">{{ ticket.number }}</h1>
-<p>{{ ticket.customer }} · {{ ticket.get_status_display }} · {{ ticket.get_warranty_type_display }}</p>
-<div class="mt-6 grid gap-6 xl:grid-cols-2">
-  <section class="rounded-xl border bg-white p-6">
-    <p><strong>Issue:</strong> {{ ticket.issue }}</p>
-    <form method="post" action="{% url 'repair-update' ticket.id %}" class="mt-5 space-y-4">
-      {% csrf_token %}{{ form.as_p }}
-      <button class="rounded-lg bg-red-700 px-4 py-2 text-white">Update ticket</button>
-    </form>
+<div class="mx-auto max-w-7xl space-y-6">
+  <header class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div>
+      <p class="text-sm font-bold uppercase tracking-[0.16em] text-red-700">Repair workspace</p>
+      <h1 class="mt-1 text-3xl font-black tracking-tight text-slate-950">{{ ticket.number }}</h1>
+      <p class="mt-2 text-slate-600">{{ ticket.customer }}{% if ticket.stock_unit %} · {{ ticket.stock_unit.product }} · {{ ticket.stock_unit.serial_number }}{% endif %}</p>
+    </div>
+    <span class="w-fit rounded-full bg-slate-950 px-4 py-2 text-sm font-bold text-white">{{ ticket.get_status_display }}</span>
+  </header>
+
+  <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Customer charge</p>
+      <p class="mt-2 text-2xl font-black text-slate-950">KES {{ ticket.amount_due|floatformat:2 }}</p>
+      <p class="mt-1 text-sm text-slate-500">{% if ticket.warranty %}Covered: {{ ticket.get_warranty_type_display }}{% else %}Based on current quote{% endif %}</p>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Paid</p>
+      <p class="mt-2 text-2xl font-black text-emerald-700">KES {{ ticket.amount_paid|floatformat:2 }}</p>
+      <p class="mt-1 text-sm text-slate-500">Confirmed payment records</p>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Outstanding</p>
+      <p class="mt-2 text-2xl font-black {% if ticket.outstanding_amount %}text-amber-700{% else %}text-emerald-700{% endif %}">KES {{ ticket.outstanding_amount|floatformat:2 }}</p>
+      <p class="mt-1 text-sm text-slate-500">Must be cleared before collection</p>
+    </div>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Branch</p>
+      <p class="mt-2 text-lg font-black text-slate-950">{{ ticket.branch }}</p>
+      <p class="mt-1 text-sm text-slate-500">Technician: {{ ticket.technician|default:"Unassigned" }}</p>
+    </div>
   </section>
-  <section class="rounded-xl border bg-white p-6">
-    <h2 class="text-xl font-semibold">Parts usage</h2>
-    {% for part in ticket.parts_used.all %}
-      <p class="mt-3 border-b pb-3">{{ part.product }} · {{ part.quantity }} · {{ part.location }}</p>
-    {% empty %}
-      <p class="mt-3 text-slate-500">No parts issued.</p>
-    {% endfor %}
-    <form method="post" action="{% url 'repair-use-part' ticket.id %}" class="mt-5 space-y-4">
-      {% csrf_token %}{{ part_form.as_p }}
-      <button class="rounded-lg bg-slate-900 px-4 py-2 text-white">Issue part</button>
-    </form>
-  </section>
+
+  <div class="grid gap-6 xl:grid-cols-[1.2fr_.8fr]">
+    <div class="space-y-6">
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 class="text-xl font-black text-slate-950">Customer issue and diagnosis</h2>
+        <div class="mt-4 rounded-xl bg-slate-50 p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Reported issue</p>
+          <p class="mt-2 text-slate-800">{{ ticket.issue }}</p>
+        </div>
+        {% if ticket.diagnosis %}
+          <div class="prose prose-slate mt-4 max-w-none">{{ ticket.diagnosis|safe }}</div>
+        {% else %}
+          <p class="mt-4 text-sm text-slate-500">No diagnosis has been recorded yet.</p>
+        {% endif %}
+      </section>
+
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-black text-slate-950">Parts used</h2>
+            <p class="mt-1 text-sm text-slate-500">Every issue and reversal remains visible for stock accountability.</p>
+          </div>
+        </div>
+        <div class="mt-5 space-y-3">
+          {% for part in ticket.parts_used.all %}
+            <article class="rounded-xl border {% if part.reversed_at %}border-slate-200 bg-slate-50{% else %}border-slate-200{% endif %} p-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p class="font-bold text-slate-900">{{ part.product }} · {{ part.quantity }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ part.location }}{% if part.stock_unit %} · {{ part.stock_unit.serial_number }}{% endif %}</p>
+                  {% if part.reversed_at %}<p class="mt-2 text-sm font-semibold text-amber-700">Reversed: {{ part.reversal_reason }}</p>{% endif %}
+                </div>
+                {% if can_reverse and not part.reversed_at and part.movement_id and ticket.status != "closed" %}
+                  <details class="text-sm">
+                    <summary class="cursor-pointer font-bold text-red-700">Reverse issue</summary>
+                    <form method="post" action="{% url 'repair-reverse-part' ticket.id part.id %}" class="mt-3 space-y-2">
+                      {% csrf_token %}
+                      <label class="block font-semibold text-slate-700" for="part-reversal-{{ part.id }}">Reason</label>
+                      <textarea id="part-reversal-{{ part.id }}" name="reason" required minlength="5" rows="3" class="w-full rounded-lg border border-slate-300 p-2"></textarea>
+                      <button class="rounded-lg border border-red-700 px-3 py-2 font-bold text-red-700">Restore stock</button>
+                    </form>
+                  </details>
+                {% endif %}
+              </div>
+            </article>
+          {% empty %}
+            <p class="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No parts have been issued.</p>
+          {% endfor %}
+        </div>
+        {% if ticket.status == "in_repair" %}
+          <details class="mt-5 rounded-xl border border-slate-200 p-4">
+            <summary class="cursor-pointer font-bold text-slate-900">Issue a repair part</summary>
+            <form method="post" action="{% url 'repair-use-part' ticket.id %}" class="mt-4 grid gap-4 sm:grid-cols-2">
+              {% csrf_token %}{{ part_form.as_p }}
+              <button class="w-fit rounded-lg bg-slate-950 px-4 py-2 font-bold text-white">Issue part</button>
+            </form>
+          </details>
+        {% endif %}
+      </section>
+
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 class="text-xl font-black text-slate-950">Payment history</h2>
+        <div class="mt-5 space-y-3">
+          {% for payment in ticket.payments.all %}
+            <article class="rounded-xl border border-slate-200 p-4">
+              <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p class="font-bold text-slate-900">{{ payment.number }} · KES {{ payment.amount|floatformat:2 }}</p>
+                  <p class="mt-1 text-sm text-slate-500">{{ payment.get_method_display }}{% if payment.reference %} · {{ payment.reference }}{% endif %} · {{ payment.received_at|date:"d M Y H:i" }}</p>
+                  {% if payment.reversed_at %}<p class="mt-2 text-sm font-semibold text-amber-700">Reversed: {{ payment.reversal_reason }}</p>{% endif %}
+                </div>
+                {% if can_reverse and not payment.reversed_at and ticket.status != "closed" %}
+                  <details class="text-sm">
+                    <summary class="cursor-pointer font-bold text-red-700">Reverse payment</summary>
+                    <form method="post" action="{% url 'repair-reverse-payment' ticket.id payment.id %}" class="mt-3 space-y-2">
+                      {% csrf_token %}
+                      <label class="block font-semibold text-slate-700" for="payment-reversal-{{ payment.id }}">Reason</label>
+                      <textarea id="payment-reversal-{{ payment.id }}" name="reason" required minlength="5" rows="3" class="w-full rounded-lg border border-slate-300 p-2"></textarea>
+                      <button class="rounded-lg border border-red-700 px-3 py-2 font-bold text-red-700">Reverse payment</button>
+                    </form>
+                  </details>
+                {% endif %}
+              </div>
+            </article>
+          {% empty %}
+            <p class="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-500">No customer payments recorded.</p>
+          {% endfor %}
+        </div>
+        {% if ticket.outstanding_amount and ticket.status != "closed" %}
+          <details class="mt-5 rounded-xl border border-slate-200 p-4">
+            <summary class="cursor-pointer font-bold text-slate-900">Record customer payment</summary>
+            <form method="post" action="{% url 'repair-add-payment' ticket.id %}" class="mt-4 grid gap-4 sm:grid-cols-2">
+              {% csrf_token %}{{ payment_form.as_p }}
+              <button class="w-fit rounded-lg bg-emerald-700 px-4 py-2 font-bold text-white">Record payment</button>
+            </form>
+          </details>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="space-y-6">
+      {% if allowed_statuses %}
+        <section class="rounded-2xl border border-slate-900 bg-slate-950 p-6 text-white shadow-sm">
+          <p class="text-xs font-bold uppercase tracking-wider text-red-300">Next action</p>
+          <h2 class="mt-2 text-xl font-black">Move the repair forward</h2>
+          <p class="mt-2 text-sm text-slate-300">Only valid next stages are available. The action is recorded in the repair history.</p>
+          <form method="post" action="{% url 'repair-update' ticket.id %}" class="mt-5 space-y-4 repair-dark-form">
+            {% csrf_token %}{{ form.as_p }}
+            <button class="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Confirm next stage</button>
+          </form>
+        </section>
+      {% else %}
+        <section class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
+          <h2 class="text-xl font-black text-emerald-950">Repair collected</h2>
+          <p class="mt-2 text-sm text-emerald-800">This ticket is closed. Its lifecycle, parts, and payments remain available as permanent evidence.</p>
+        </section>
+      {% endif %}
+
+      <section class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 class="text-xl font-black text-slate-950">Lifecycle history</h2>
+        <ol class="mt-5 space-y-4 border-l-2 border-slate-200 pl-5">
+          <li class="relative">
+            <span class="absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full bg-slate-900"></span>
+            <p class="font-bold text-slate-900">Repair received</p>
+            <p class="text-sm text-slate-500">{{ ticket.created_at|date:"d M Y H:i" }}</p>
+          </li>
+          {% for transition in ticket.transitions.all %}
+            <li class="relative">
+              <span class="absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full bg-red-600"></span>
+              <p class="font-bold text-slate-900">{{ transition.get_from_status_display }} → {{ transition.get_to_status_display }}</p>
+              <p class="text-sm text-slate-500">{{ transition.transitioned_by }} · {{ transition.transitioned_at|date:"d M Y H:i" }}</p>
+              {% if transition.notes %}<p class="mt-1 text-sm text-slate-700">{{ transition.notes }}</p>{% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      </section>
+    </div>
+  </div>
 </div>
 {% endblock %}

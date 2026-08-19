@@ -24,6 +24,7 @@ venv/
 secrets/
 credentials/
 db_backups/
+private_backups/
 *.dump
 MDFILES/
 pilot/

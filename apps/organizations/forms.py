@@ -6,6 +6,8 @@ from django.contrib.auth.models import Permission
 from django.db.models import Q
 from django.utils.text import slugify
 
+from config.uploads import validate_uploaded_content
+
 from .models import AgentDocument, AgentDocumentType, AgentProfile, AgentProfileStatus, AgentProfileType, Branch, Company, LocationType, Membership, Organization, Plan, Role
 
 TENANT_ROLE_PERMISSION_CODES = (
@@ -18,6 +20,7 @@ TENANT_ROLE_PERMISSION_CODES = (
     "contacts.change_contact",
     "contacts.view_contact",
     "expenses.add_expense",
+    "expenses.change_expense",
     "expenses.view_expense",
     "organizations.add_agentprofile",
     "inventory.add_stockadjustment",
@@ -121,12 +124,6 @@ class TenantUserForm(forms.Form):
     last_name = forms.CharField(max_length=150)
     email = forms.EmailField()
     phone_number = forms.CharField(max_length=32, required=False)
-    password = forms.CharField(
-        widget=forms.PasswordInput,
-        min_length=10,
-        help_text="Set a temporary password and share it with the user securely. They can change it after login.",
-    )
-    password_confirm = forms.CharField(widget=forms.PasswordInput, min_length=10, label="Confirm password")
     branches = forms.ModelMultipleChoiceField(queryset=Branch.objects.none(), widget=forms.CheckboxSelectMultiple)
     roles = forms.ModelMultipleChoiceField(queryset=Role.objects.none(), required=False, widget=forms.CheckboxSelectMultiple)
     enable_stock_custody = forms.BooleanField(
@@ -182,8 +179,6 @@ class TenantUserForm(forms.Form):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("password") and cleaned.get("password") != cleaned.get("password_confirm"):
-            self.add_error("password_confirm", "Passwords do not match.")
         if cleaned.get("enable_stock_custody"):
             custody_branch = cleaned.get("custody_branch")
             branches = cleaned.get("branches")
@@ -358,15 +353,15 @@ class AgentDocumentUploadForm(forms.Form):
 
     def clean_file(self):
         upload = self.cleaned_data["file"]
-        name = upload.name.lower()
-        if not any(name.endswith(extension) for extension in self.allowed_extensions):
-            raise forms.ValidationError("Upload a PDF, JPG, JPEG, or PNG file.")
         content_type = getattr(upload, "content_type", "")
         if content_type and content_type not in self.allowed_content_types:
             raise forms.ValidationError("Unsupported document type.")
-        if upload.size > self.max_size:
-            raise forms.ValidationError("Document must be 10 MB or smaller.")
-        return upload
+        return validate_uploaded_content(
+            upload,
+            allowed_extensions=self.allowed_extensions,
+            max_size=self.max_size,
+            label="Document",
+        )
 
 
 class AgentProfileDecisionForm(forms.Form):

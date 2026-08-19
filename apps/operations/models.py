@@ -1,5 +1,6 @@
 import uuid
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from apps.contacts.models import Contact
@@ -55,8 +56,77 @@ class Payable(OrganizationOwnedModel):
     purchase_order = models.OneToOneField(PurchaseOrder, on_delete=models.PROTECT, related_name="payable")
     original_amount = models.DecimalField(max_digits=14, decimal_places=2)
     outstanding_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    credit_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     due_on = models.DateField()
     is_settled = models.BooleanField(default=False)
+
+
+class PayablePaymentMethod(models.TextChoices):
+    CASH = "cash", "Cash"
+    MPESA = "mpesa", "M-Pesa"
+    CARD = "card", "Card"
+    BANK = "bank", "Bank transfer"
+
+
+class PayablePayment(OrganizationOwnedModel):
+    """Append-only evidence of money paid to a supplier."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    number = models.CharField(max_length=40)
+    payable = models.ForeignKey(Payable, on_delete=models.PROTECT, related_name="payments")
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    method = models.CharField(max_length=20, choices=PayablePaymentMethod.choices)
+    reference = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+    paid_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="supplier_payments",
+    )
+    paid_at = models.DateTimeField()
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="reversed_supplier_payments",
+    )
+    reversal_reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ("-paid_at",)
+        indexes = [
+            models.Index(fields=("organization", "payable", "paid_at"), name="payable_payment_history_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(amount__gt=0), name="payable_payment_amount_positive"),
+            models.UniqueConstraint(
+                fields=("organization", "request_id"),
+                name="unique_payable_payment_request_per_org",
+            ),
+            models.UniqueConstraint(
+                fields=("organization", "number"),
+                name="unique_payable_payment_number_per_org",
+            ),
+            models.UniqueConstraint(
+                fields=("organization", "reference"),
+                condition=~models.Q(reference=""),
+                name="unique_payable_payment_reference_per_org",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            raise ValidationError("Supplier payment records are immutable. Reverse the payment instead.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Supplier payment records cannot be deleted. Reverse the payment instead.")
+
+    def __str__(self):
+        return f"{self.number} - {self.payable.supplier}"
 
 
 class ApprovalStatus(models.TextChoices):
@@ -107,6 +177,16 @@ class ApprovalRequest(OrganizationOwnedModel):
 
     class Meta:
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=("organization", "status", "created_at"),
+                name="appr_org_st_created",
+            ),
+            models.Index(
+                fields=("organization", "request_type", "status", "created_at"),
+                name="appr_org_type_st_ct",
+            ),
+        ]
 
     @property
     def display_type(self):

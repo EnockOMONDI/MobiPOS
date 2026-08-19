@@ -2,13 +2,15 @@ import csv
 from datetime import timedelta
 from urllib.parse import quote, urlencode
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, DecimalField, F, IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponse
 from django.core.exceptions import PermissionDenied
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.dateparse import parse_date
 from django.utils import timezone
@@ -33,6 +35,8 @@ from apps.repairs.models import RepairTicket
 from apps.sales.models import Sale, SaleReturn, SaleStatus
 from apps.transfers.models import StockTransfer, TransferDiscrepancy, TransferStatus
 from .exporting import build_simple_pdf, safe_csv_row
+from .models import ReportExport
+from .pagination import paginate_section
 
 
 BRANCH_LOOKUPS = {
@@ -647,10 +651,65 @@ HELP_TOPICS = [
         "steps": [
             "At checkout, choose M-Pesa as the payment method.",
             "Enter the amount and provider reference if live confirmation is not connected yet.",
-            "MobiPOS stores the reference against the payment.",
+            "The cashier confirms the reference was entered from the customer's payment message.",
+            "MobiPOS records who verified it and when.",
             "Reports use the payment record for reconciliation.",
         ],
-        "why": "It reduces confusion when matching POS sales to M-Pesa statements.",
+        "why": "It reduces confusion when matching POS sales to M-Pesa statements. Until live M-Pesa is enabled, this is a manual business record rather than provider confirmation.",
+    },
+    {
+        "section": "People and Access",
+        "title": "Email Sign-In and Staff Setup",
+        "summary": "Owners and staff use their email address to sign in. New staff securely choose their own password.",
+        "example": "The owner creates a cashier account for cashier@shop.co.ke, and MobiPOS emails a private setup link instead of sharing a password.",
+        "steps": [
+            "The owner opens Add User, enters the staff member's email, and assigns branches and roles.",
+            "MobiPOS creates the account without a usable password and sends a single-use setup link.",
+            "The staff member opens the link within three days and creates a private password.",
+            "The link becomes unusable after successful setup or expiry.",
+            "The staff member signs in with their email address and new password.",
+        ],
+        "why": "Passwords are not exposed to owners or shared through chat, and every account remains connected to a real email identity.",
+    },
+    {
+        "section": "Reports and Controls",
+        "title": "Notifications and Approval Inbox",
+        "summary": "Notifications explain what happened; the approval inbox contains decisions that need an authorized person.",
+        "example": "A manager requests an aged-stock discount. The owner sees a numbered approval badge and can review the reason before deciding.",
+        "steps": [
+            "A staff action creates a notification or approval request when business rules require it.",
+            "The bell shows unread updates, while the inbox shows pending decisions.",
+            "Open the relevant item to review the business context, requester and affected record.",
+            "Approve or reject only if your role is authorized; MobiPOS records the decision in the audit trail.",
+        ],
+        "why": "It separates information from decisions and gives owners a clear, accountable work queue.",
+    },
+    {
+        "section": "Sales and Payments",
+        "title": "Manual Payment Verification",
+        "summary": "Cash, M-Pesa, card and bank payments can be recorded by staff before live payment providers are connected.",
+        "example": "A customer pays KES 2,000 using KES 500 cash, KES 1,000 M-Pesa and KES 500 card.",
+        "steps": [
+            "Enter each amount in the matching payment field at checkout.",
+            "Enter the M-Pesa, card or bank reference for every electronic allocation.",
+            "MobiPOS confirms the sale total only when the allocations are valid.",
+            "The payment record stores the cashier, verification time, method and reference for reconciliation.",
+        ],
+        "why": "The business can operate now with a transparent manual process while preserving a separate path for future provider callbacks and reconciliation.",
+    },
+    {
+        "section": "Reports and Controls",
+        "title": "Database Backup and Restore",
+        "summary": "Encrypted backups protect business records if the main database becomes unavailable or data must be recovered.",
+        "example": "MobiPOS creates a daily encrypted backup at noon and keeps it outside the production database for the agreed retention period.",
+        "steps": [
+            "An administrator configures separate private backup storage and an encryption key.",
+            "The background scheduler creates the backup, verifies its checksum and records the result.",
+            "Old artifacts are deleted automatically according to the retention policy.",
+            "A restore drill uses an isolated database and requires the exact target project confirmation.",
+            "Only an authorized incident owner may approve a production recovery.",
+        ],
+        "why": "A backup is only useful when it is separately stored, encrypted, monitored and proven through a controlled restoration test.",
     },
     {
         "section": "Setup and Integrations",
@@ -1005,7 +1064,7 @@ def _business_flow_sections(counts):
             "nodes": [
                 _node("POS Cart", "Add products, reserve IMEIs, complete sales and print receipts.", _flow_metric(counts["sales"], "sale"), "pos-cart"),
                 _node("Payments", "Record cash, M-Pesa, card, bank, credit and split-payment workflows.", _flow_metric(counts["payments"], "payment"), "module-overview", args=["payments"], status="Workflow level"),
-                _node("Credit Follow-Up", "Track receivables, outstanding balances, limits and installment schedules.", _flow_metric(counts["receivables"], "receivable"), "operational-report"),
+                _node("Credit Follow-Up", "Track receivables, outstanding balances, limits and installment schedules.", _flow_metric(counts["receivables"], "receivable"), "receivables-workspace"),
                 _node("Returns And Refunds", "Request returns, approve outcomes and record refunds without deleting history.", _flow_metric(counts["returns"], "return"), "module-overview", args=["returns"]),
             ],
         },
@@ -1712,6 +1771,20 @@ MODULES = {
     "roles": ("Roles", Role, ("name", "code", "description", "is_active")),
     "aged-stock": ("Aged stock", StockUnit, ("serial_number", "product", "location", "status", "created_at")),
 }
+
+# The date exposed to staff should match the business event represented by each
+# register. Falling back to created_at is appropriate for setup/master records.
+MODULE_DATE_FIELDS = {
+    "purchases": "ordered_on",
+    "sales": "completed_at",
+    "payments": "received_at",
+    "expenses": "incurred_on",
+    "commission-payouts": "period_end",
+    "receivables": "due_on",
+    "payables": "due_on",
+    "subscriptions": "due_on",
+    "sessions": "opened_at",
+}
 SENSITIVE_MODULES = {
     "approvals", "branches", "commission-payouts", "integrations", "fiscal-devices", "fiscal-documents", "locations",
     "roles", "subscriptions", "users", "agents",
@@ -1752,6 +1825,7 @@ MODULE_DETAIL_URLS = {
     "repairs": "repair-detail",
     "sessions": "session-detail",
     "agents": "agent-profile-detail",
+    "expenses": "expense-detail",
 }
 
 MODULE_CREATE_ACTIONS = {
@@ -1766,6 +1840,37 @@ MODULE_CREATE_ACTIONS = {
     "repairs": {"label": "New repair", "url_name": "repair-create"},
     "commission-payouts": {"label": "New payout", "url_name": "commission-payout-create"},
 }
+
+
+def _queue_report_export_if_needed(request, *, module, queryset):
+    requested_format = request.GET.get("format", "")
+    if requested_format not in {"csv", "pdf"} or getattr(request, "_background_export", False):
+        return None
+
+    row_count = queryset.count()
+    if request.GET.get("delivery") != "background" and row_count < settings.REPORT_ASYNC_EXPORT_THRESHOLD:
+        return None
+
+    export_filters = {}
+    for key, values in request.GET.lists():
+        if key in {"format", "delivery", "page"}:
+            continue
+        # ReportExport stores JSON, so preserve repeated controls in a form
+        # that reconstructs as the same request when the worker runs.
+        export_filters[key] = values[0] if len(values) == 1 else ",".join(values)
+    export = ReportExport.objects.create(
+        organization=request.organization,
+        requested_by=request.user,
+        module=module,
+        export_format=requested_format,
+        filters=export_filters,
+        row_count=row_count,
+        expires_at=timezone.now() + timedelta(days=settings.REPORT_EXPORT_RETENTION_DAYS),
+    )
+    from .tasks import generate_report_export
+
+    transaction.on_commit(lambda: generate_report_export.delay(str(export.id)))
+    return redirect("report-export-detail", export_id=export.id)
 
 
 def _product_register(request, title):
@@ -1888,6 +1993,14 @@ def _product_register(request, title):
                 margin_percent = (margin_amount / product.selling_price * 100) if product.selling_price else 0
                 row.extend([product.cost_price, margin_amount, f"{margin_percent:.2f}"])
             yield row
+
+    queued_export = _queue_report_export_if_needed(
+        request,
+        module="products",
+        queryset=queryset,
+    )
+    if queued_export is not None:
+        return queued_export
 
     if request.GET.get("format") == "csv":
         response = HttpResponse(content_type="text/csv")
@@ -2015,8 +2128,29 @@ def module_overview(request, module):
     status = request.GET.get("status", "").strip()
     if status in {"active", "inactive"} and any(field.name == "is_active" for field in model._meta.fields):
         queryset = queryset.filter(is_active=status == "active")
+    date_from_raw = request.GET.get("date_from", "").strip()
+    date_to_raw = request.GET.get("date_to", "").strip()
+    date_from = parse_date(date_from_raw) if date_from_raw else None
+    date_to = parse_date(date_to_raw) if date_to_raw else None
+    date_filter_error = ""
+    if date_from_raw and date_from is None:
+        date_filter_error = "Enter a valid start date."
+    elif date_to_raw and date_to is None:
+        date_filter_error = "Enter a valid end date."
+    elif date_from and date_to and date_from > date_to:
+        date_filter_error = "The start date must be on or before the end date."
+
+    date_field_name = MODULE_DATE_FIELDS.get(module, "created_at")
+    date_field = model._meta.get_field(date_field_name)
+    if not date_filter_error:
+        date_lookup = date_field_name if date_field.get_internal_type() == "DateField" else f"{date_field_name}__date"
+        if date_from:
+            queryset = queryset.filter(**{f"{date_lookup}__gte": date_from})
+        if date_to:
+            queryset = queryset.filter(**{f"{date_lookup}__lte": date_to})
+
     filter_controls = []
-    clear_filters = bool(query or status)
+    clear_filters = bool(query or status or date_from_raw or date_to_raw)
     if module == "aged-stock":
         policy = get_aged_stock_policy(request.organization)
         branches = accessible_branches_for(request.user, request.organization)
@@ -2045,7 +2179,10 @@ def module_overview(request, module):
                 if max_days is not None:
                     oldest_date = today - timedelta(days=max_days)
                     queryset = queryset.filter(created_at__date__gte=oldest_date)
-        clear_filters = bool(query or status or branch_id or category_id or agent_location_id or age_bucket)
+        clear_filters = bool(
+            query or status or date_from_raw or date_to_raw
+            or branch_id or category_id or agent_location_id or age_bucket
+        )
         filter_controls = [
             {
                 "name": "branch",
@@ -2084,6 +2221,13 @@ def module_overview(request, module):
             },
         ]
         headers = ["Serial / IMEI", "Product", "Branch", "Location", "Category", "Age", "Status", "Recommended next step"]
+        queued_export = _queue_report_export_if_needed(
+            request,
+            module=module,
+            queryset=queryset,
+        )
+        if queued_export is not None:
+            return queued_export
         if request.GET.get("format") == "csv":
             response = HttpResponse(content_type="text/csv")
             response["Content-Disposition"] = f'attachment; filename="{module}.csv"'
@@ -2105,7 +2249,7 @@ def module_overview(request, module):
             return response
         if request.GET.get("format") == "pdf":
             rows_for_pdf = []
-            for item in queryset[:80]:
+            for item in queryset:
                 days = age_days_for(item)
                 bucket = bucket_for_age(days, policy)
                 rows_for_pdf.append([
@@ -2130,6 +2274,13 @@ def module_overview(request, module):
         queryset = queryset.filter(location__location_type=LocationType.AGENT)
     if module != "aged-stock":
         headers = [field.replace("_", " ").title() for field in fields]
+    queued_export = _queue_report_export_if_needed(
+        request,
+        module=module,
+        queryset=queryset,
+    )
+    if queued_export is not None:
+        return queued_export
     if request.GET.get("format") == "csv":
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="{module}.csv"'
@@ -2138,7 +2289,7 @@ def module_overview(request, module):
         writer.writerows(safe_csv_row(getattr(item, field) for field in fields) for item in queryset)
         return response
     if request.GET.get("format") == "pdf":
-        rows_for_pdf = ([getattr(item, field) for field in fields] for item in queryset[:80])
+        rows_for_pdf = ([getattr(item, field) for field in fields] for item in queryset)
         response = HttpResponse(
             build_simple_pdf(title=f"MobiPOS {title}", headers=headers, rows=list(rows_for_pdf)),
             content_type="application/pdf",
@@ -2205,6 +2356,9 @@ def module_overview(request, module):
             "page_obj": page_obj,
             "query": query,
             "status": status,
+            "date_from": date_from_raw,
+            "date_to": date_to_raw,
+            "date_filter_error": date_filter_error,
             "supports_status_filter": any(field.name == "is_active" for field in model._meta.fields),
             "filter_controls": filter_controls,
             "clear_filters": clear_filters,
@@ -2277,23 +2431,34 @@ def imei_history(request):
     movements = StockMovement.objects.none()
     sales = Sale.objects.none()
     purchases = PurchaseOrder.objects.none()
+    movement_page = sales_page = purchase_page = None
+    movement_pagination = sales_pagination = purchase_pagination = {}
     if query and request.organization:
         unit = units.first()
         if unit:
             movements = StockMovement.objects.filter(
                 organization=request.organization,
                 stock_unit=unit,
-            ).select_related("product", "location", "actor")[:50]
+            ).select_related("product", "location", "actor").order_by("-created_at", "-id")
             sales = Sale.objects.filter(
                 organization=request.organization,
                 lines__stock_unit=unit,
                 location__branch__in=branches,
-            ).select_related("customer", "agent").distinct()
+            ).select_related("customer", "agent").distinct().order_by("-created_at", "-id")
             purchases = PurchaseOrder.objects.filter(
                 organization=request.organization,
                 lines__product=unit.product,
                 destination__branch__in=branches,
-            ).select_related("supplier", "destination").distinct()[:10]
+            ).select_related("supplier", "destination").distinct().order_by("-created_at", "-id")
+            movement_page, movement_pagination = paginate_section(
+                request, movements, parameter="movement_page", per_page=20,
+            )
+            sales_page, sales_pagination = paginate_section(
+                request, sales, parameter="sales_page", per_page=10,
+            )
+            purchase_page, purchase_pagination = paginate_section(
+                request, purchases, parameter="purchase_page", per_page=10,
+            )
     page_obj = Paginator(units, 25).get_page(request.GET.get("page"))
     scoped_units = StockUnit.objects.filter(
         organization=request.organization,
@@ -2309,9 +2474,15 @@ def imei_history(request):
         "units": page_obj.object_list,
         "page_obj": page_obj,
         "unit": unit,
-        "movements": movements,
-        "sales": sales,
-        "purchases": purchases,
+        "movements": movement_page.object_list if movement_page else movements,
+        "sales": sales_page.object_list if sales_page else sales,
+        "purchases": purchase_page.object_list if purchase_page else purchases,
+        "movement_page": movement_page,
+        "movement_pagination": movement_pagination,
+        "sales_page": sales_page,
+        "sales_pagination": sales_pagination,
+        "purchase_page": purchase_page,
+        "purchase_pagination": purchase_pagination,
         "metrics": {
             "total": scoped_units.count(),
             "available": scoped_units.filter(status=SerialStatus.AVAILABLE).count(),

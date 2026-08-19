@@ -28,6 +28,12 @@ class StockTransfer(OrganizationOwnedModel):
     notes = models.TextField(blank=True)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=("organization", "status", "created_at"),
+                name="tr_org_st_created",
+            ),
+        ]
         constraints = [models.UniqueConstraint(fields=("organization", "number"), name="unique_transfer_number_per_org")]
 
     def __str__(self):
@@ -41,6 +47,27 @@ class StockTransferLine(OrganizationOwnedModel):
     stock_unit = models.ForeignKey(StockUnit, on_delete=models.PROTECT, null=True, blank=True)
     quantity = models.DecimalField(max_digits=14, decimal_places=3)
     received_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+
+
+class TransferTransition(OrganizationOwnedModel):
+    """Durable proof that a transfer state change was applied once."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    transfer = models.ForeignKey(StockTransfer, on_delete=models.PROTECT, related_name="transitions")
+    transition = models.CharField(max_length=80)
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="transfer_transitions",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("transfer", "transition"),
+                name="unique_transition_per_transfer",
+            )
+        ]
 
 
 class DiscrepancyStatus(models.TextChoices):

@@ -47,6 +47,7 @@ def refresh_sale_commissions(*, sale):
 
 @transaction.atomic
 def populate_commission_payout(*, payout):
+    payout = payout.__class__.objects.select_for_update().get(pk=payout.pk)
     if payout.lines.exists():
         raise ValidationError("This payout has already been populated.")
     accruals = CommissionAccrual.objects.select_for_update().filter(
@@ -71,6 +72,7 @@ def populate_commission_payout(*, payout):
 
 @transaction.atomic
 def approve_commission_payout(*, payout, actor):
+    payout = payout.__class__.objects.select_for_update().get(pk=payout.pk)
     if payout.status != CommissionPayoutStatus.REQUESTED or not payout.lines.exists():
         raise ValidationError("Only populated requested payouts can be approved.")
     payout.status = CommissionPayoutStatus.APPROVED
@@ -81,12 +83,23 @@ def approve_commission_payout(*, payout, actor):
 
 @transaction.atomic
 def pay_commission_payout(*, payout, actor, payment_reference):
+    payout = payout.__class__.objects.select_for_update().get(pk=payout.pk)
     if payout.status != CommissionPayoutStatus.APPROVED:
         raise ValidationError("Only approved commission payouts can be paid.")
     paid_at = timezone.now()
-    for line in payout.lines.select_related("accrual"):
-        line.accrual.paid_at = paid_at
-        line.accrual.save(update_fields=["paid_at", "updated_at"])
+    lines = list(payout.lines.select_for_update().order_by("id"))
+    accruals = {
+        accrual.id: accrual
+        for accrual in CommissionAccrual.objects.select_for_update()
+        .filter(id__in=[line.accrual_id for line in lines])
+        .order_by("id")
+    }
+    for line in lines:
+        accrual = accruals[line.accrual_id]
+        if accrual.paid_at:
+            raise ValidationError("A commission in this payout has already been paid.")
+        accrual.paid_at = paid_at
+        accrual.save(update_fields=["paid_at", "updated_at"])
     payout.status = CommissionPayoutStatus.PAID
     payout.paid_at = paid_at
     payout.payment_reference = payment_reference

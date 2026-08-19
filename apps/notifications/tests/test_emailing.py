@@ -89,8 +89,6 @@ def test_staff_creation_sends_account_ready_email(client, django_capture_on_comm
                 "first_name": "Email",
                 "last_name": "Cashier",
                 "email": "email.cashier@example.com",
-                "password": "StrongPass123!",
-                "password_confirm": "StrongPass123!",
                 "branches": [branch.id],
                 "roles": [role.id],
             },
@@ -101,8 +99,10 @@ def test_staff_creation_sends_account_ready_email(client, django_capture_on_comm
     message = mail.outbox[0]
     assert message.to == ["email.cashier@example.com"]
     assert "account for Nairobi Mobile Hub is ready" in message.subject
-    assert "temporary password is not included" in message.body
-    assert "Sign in" in message.alternatives[0][0]
+    assert "Sign-in email" in message.body
+    assert "secure, single-use link" in message.body
+    assert "/accounts/setup/" in message.body
+    assert "Set up my account" in message.alternatives[0][0]
 
 
 @pytest.mark.django_db
@@ -127,8 +127,6 @@ def test_staff_creation_succeeds_when_account_email_times_out(client, monkeypatc
                 "first_name": "Timeout",
                 "last_name": "Cashier",
                 "email": "timeout.cashier@example.com",
-                "password": "StrongPass123!",
-                "password_confirm": "StrongPass123!",
                 "branches": [branch.id],
                 "roles": [role.id],
             },

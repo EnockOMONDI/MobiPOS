@@ -44,6 +44,24 @@ def user_can_decide_approval(*, user, approval):
     return allowed
 
 
+def approvals_user_can_decide(*, user, organization):
+    queryset = ApprovalRequest.objects.filter(organization=organization)
+    membership = Membership.objects.filter(
+        organization=organization,
+        user=user,
+        status="active",
+    ).prefetch_related("roles").first()
+    if user.is_superuser or user.is_platform_admin or (membership and membership.is_owner):
+        return queryset
+    if not membership:
+        return queryset.none()
+    role_ids = membership.roles.values_list("id", flat=True)
+    return queryset.filter(policy__approver_roles__id__in=role_ids).exclude(
+        policy__require_separate_approver=True,
+        requested_by=user,
+    ).distinct()
+
+
 def _policy_snapshot(policy):
     if not policy:
         return {}
@@ -70,12 +88,128 @@ def approval_business_summary(approval):
     title = labels.get(approval.request_type, approval.display_type)
     requested_by = approval.requested_by.get_full_name() or approval.requested_by.get_username()
     branch = f" for {approval.branch.name}" if approval.branch_id else ""
+    age_days = max((timezone.now() - approval.created_at).days, 0)
+    if approval.status != ApprovalStatus.PENDING:
+        urgency = "Decision recorded"
+    elif age_days == 0:
+        urgency = "New today"
+    elif age_days == 1:
+        urgency = "Waiting 1 day"
+    else:
+        urgency = f"Waiting {age_days} days"
     return {
         "title": title,
         "requester": requested_by,
         "branch": approval.branch.name if approval.branch_id else "",
         "message": f"{requested_by} requested {title.lower()}{branch}.",
         "reason": approval.reason,
+        "age_days": age_days,
+        "urgency": urgency,
+    }
+
+
+def approval_target_context(approval):
+    """Return business-facing immutable proposal and current execution outcome."""
+    if approval.request_type == "aged_stock_action":
+        from apps.inventory.models import AgedStockAction
+
+        action = AgedStockAction.objects.select_related(
+            "stock_unit__product", "stock_unit__location"
+        ).filter(
+            approval=approval,
+            organization=approval.organization,
+        ).first()
+        if action:
+            return {
+                "kind": "aged_stock_action",
+                "object": action,
+                "title": action.get_action_type_display(),
+                "record": f"{action.stock_unit.product.name} · {action.stock_unit.serial_number}",
+                "proposal": action.proposal or {},
+                "outcome": action.execution_result or {},
+            }
+    if approval.request_type == "access_request":
+        return {
+            "kind": "access_request",
+            "title": "Requested permission",
+            "record": approval.requested_permission_code,
+            "proposal": {},
+            "outcome": {},
+        }
+    if approval.request_type == "expense":
+        from apps.expenses.models import Expense
+
+        expense = Expense.objects.select_related("branch", "requested_by", "approved_by").filter(
+            organization=approval.organization,
+            id=approval.target_id,
+        ).first()
+        if expense:
+            payment = getattr(expense, "payment", None)
+            return {
+                "kind": "expense",
+                "object": expense,
+                "title": expense.category,
+                "record": f"{expense.number} · KES {expense.amount}",
+                "proposal": {
+                    "category": expense.category,
+                    "description": expense.description,
+                    "incurred_on": expense.incurred_on.isoformat(),
+                    "branch_name": expense.branch.name,
+                },
+                "outcome": {
+                    "status": expense.get_status_display(),
+                    "payment_method": payment.get_method_display() if payment else "",
+                    "payment_reference": payment.reference if payment else "",
+                },
+            }
+    if approval.request_type in {"credit_sale", "discount"}:
+        from apps.sales.models import Sale
+
+        sale = Sale.objects.select_related("customer", "location__branch", "created_by").filter(
+            organization=approval.organization,
+            id=approval.target_id,
+        ).first()
+        if sale:
+            return {
+                "kind": "sale",
+                "object": sale,
+                "title": "Credit sale" if approval.request_type == "credit_sale" else "Sale discount",
+                "record": f"{sale.number} · KES {sale.total}",
+                "proposal": {
+                    "customer": sale.customer.name if sale.customer_id else "Walk-in customer",
+                    "branch_name": sale.location.branch.name,
+                    "amount": str(approval.amount),
+                },
+                "outcome": {"status": sale.get_status_display()},
+            }
+    if approval.request_type == "session_variance":
+        from apps.pos.models import POSSession
+
+        session = POSSession.objects.select_related("cashier", "location__branch").filter(
+            organization=approval.organization,
+            id=approval.target_id,
+        ).first()
+        if session:
+            cashier = session.cashier.get_full_name() or session.cashier.get_username()
+            return {
+                "kind": "session_variance",
+                "object": session,
+                "title": "Cashier variance",
+                "record": f"{session.number} · KES {session.variance}",
+                "proposal": {
+                    "cashier": cashier,
+                    "branch_name": session.location.branch.name,
+                    "expected_cash": str(session.expected_cash),
+                    "actual_cash": str(session.actual_cash),
+                },
+                "outcome": {"status": session.get_status_display()},
+            }
+    return {
+        "kind": "generic",
+        "title": approval.display_type,
+        "record": f"{approval.target_type} · {approval.target_id}",
+        "proposal": {},
+        "outcome": {},
     }
 
 
@@ -117,6 +251,8 @@ def notify_approval_requested(approval):
         Notification.objects.create(
             organization=approval.organization,
             recipient=membership.user,
+            kind=Notification.Kind.APPROVAL_REQUEST,
+            approval=approval,
             title=summary["title"],
             message=f"{summary['message']} Reason: {summary['reason']}",
             link=link,
@@ -135,12 +271,65 @@ def notify_approval_decided(approval):
     Notification.objects.create(
         organization=approval.organization,
         recipient=approval.requested_by,
+        kind=Notification.Kind.APPROVAL_DECISION,
+        approval=approval,
         title=title,
         message=f"Your {approval.display_type.lower()} request was {status}.",
         link=link,
     )
     recipients = [approval.requested_by.email] if approval.requested_by.email else []
     transaction.on_commit(lambda: send_approval_decision_email(approval=approval, recipients=recipients))
+
+
+@transaction.atomic
+def decide_approval(*, approval_id, organization, actor, decision, decision_notes=""):
+    from apps.notifications.models import Notification
+
+    if decision not in {ApprovalStatus.APPROVED, ApprovalStatus.REJECTED}:
+        raise ValidationError("Choose approve or reject.")
+    approval = ApprovalRequest.objects.select_for_update().select_related("policy").filter(
+        id=approval_id,
+        organization=organization,
+    ).first()
+    if not approval:
+        raise ValidationError("This approval request is no longer available.")
+    if approval.status != ApprovalStatus.PENDING:
+        raise ValidationError(
+            f"This request was already {approval.get_status_display().lower()} by another approver."
+        )
+    if not user_can_decide_approval(user=actor, approval=approval):
+        raise ValidationError("You are not eligible to decide this approval request.")
+    notes = (decision_notes or "").strip()
+    if decision == ApprovalStatus.REJECTED and not notes:
+        raise ValidationError("Explain why the request is being rejected so the requester can correct it.")
+
+    approval.status = decision
+    approval.decided_by = actor
+    approval.decided_at = timezone.now()
+    approval.decision_notes = notes
+    approval.save(update_fields=["status", "decided_by", "decided_at", "decision_notes", "updated_at"])
+
+    affected_target = None
+    if decision == ApprovalStatus.APPROVED:
+        affected_target = grant_requested_access(approval=approval)
+    if approval.request_type == "aged_stock_action":
+        from apps.inventory.aging import sync_aged_stock_action_from_approval
+
+        affected_target = sync_aged_stock_action_from_approval(approval=approval)
+    elif approval.request_type == "expense":
+        from apps.expenses.services import sync_expense_from_approval
+
+        affected_target = sync_expense_from_approval(approval=approval)
+
+    notify_approval_decided(approval)
+    Notification.objects.filter(
+        organization=organization,
+        approval=approval,
+        kind=Notification.Kind.APPROVAL_REQUEST,
+        recipient=actor,
+        read_at__isnull=True,
+    ).update(read_at=timezone.now())
+    return approval, affected_target
 
 
 @transaction.atomic

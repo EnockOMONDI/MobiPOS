@@ -11,8 +11,10 @@
   <form method="post" class="card max-w-2xl space-y-5 p-6">
     {% csrf_token %}
     {% if form.non_field_errors %}<div class="rounded-xl bg-red-50 p-4 text-sm font-semibold text-red-700">{{ form.non_field_errors }}</div>{% endif %}
-    <p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Cash over-tender is recorded as change due. M-Pesa, card, and bank allocations cannot exceed the sale total.</p>
-    {{ form.as_p }}
+    <p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">Split the total across one or more payment methods. Cash over-tender is recorded as change due. Until live providers are enabled, M-Pesa, card, and bank references are recorded as cashier-verified entries.</p>
+    {% for field in form.visible_fields %}
+      {% include "components/form_field.html" with field=field %}
+    {% endfor %}
     <button type="submit" class="btn-danger">Complete sale</button>
   </form>
 {% endblock %}

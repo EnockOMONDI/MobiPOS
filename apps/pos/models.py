@@ -59,10 +59,11 @@ class CashMovement(OrganizationOwnedModel):
 
 
 class OfflineInvoiceQueueStatus(models.TextChoices):
-    QUEUED = "queued", "Queued"
-    PROCESSING = "processing", "Processing"
-    COMPLETED = "completed", "Completed"
-    FAILED = "failed", "Failed"
+    QUEUED = "queued", "Review required"
+    PROCESSING = "processing", "Under review"
+    COMPLETED = "completed", "Reconciled"
+    FAILED = "failed", "Conflict"
+    DISCARDED = "discarded", "Discarded"
 
 
 class OfflineInvoiceQueue(OrganizationOwnedModel):
@@ -71,6 +72,16 @@ class OfflineInvoiceQueue(OrganizationOwnedModel):
     session = models.ForeignKey(POSSession, on_delete=models.PROTECT, related_name="offline_invoices")
     location = models.ForeignKey(Location, on_delete=models.PROTECT, related_name="offline_invoices")
     cashier = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="offline_invoices")
+    draft_sale = models.ForeignKey(
+        "sales.Sale",
+        on_delete=models.PROTECT,
+        related_name="recovery_drafts",
+        null=True,
+        blank=True,
+    )
+    schema_version = models.PositiveSmallIntegerField(default=1)
+    device_id = models.CharField(max_length=120, blank=True)
+    payload_digest = models.CharField(max_length=64, blank=True)
     payload = models.JSONField(default=dict)
     status = models.CharField(
         max_length=20,
@@ -80,9 +91,21 @@ class OfflineInvoiceQueue(OrganizationOwnedModel):
     error_message = models.TextField(blank=True)
     sale_number = models.CharField(max_length=40, blank=True)
     synced_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="reviewed_offline_invoices",
+        null=True,
+        blank=True,
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_notes = models.TextField(blank=True)
 
     class Meta:
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=("organization", "status", "location", "created_at"), name="pos_recovery_review_idx"),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=("organization", "client_reference"),

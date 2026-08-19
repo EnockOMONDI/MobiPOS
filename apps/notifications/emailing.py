@@ -32,7 +32,7 @@ def build_absolute_app_url(path: str) -> str:
     return f"{settings.APP_BASE_URL}{path}"
 
 
-def send_branded_email(*, subject: str, template_name: str, context: dict, recipient_list: list[str]) -> EmailResult:
+def send_branded_email(*, subject: str, template_name: str, context: dict, recipient_list: list[str], organization=None) -> EmailResult:
     recipients = tuple(email for email in recipient_list if email)
     if not recipients:
         return EmailResult(recipients=(), sent_count=0)
@@ -49,6 +49,8 @@ def send_branded_email(*, subject: str, template_name: str, context: dict, recip
         to=list(recipients),
     )
     message.attach_alternative(html_body, "text/html")
+    if organization:
+        message.extra_headers = {"X-MobiPOS-Organization-ID": str(organization.id)}
     try:
         sent_count = message.send(fail_silently=False)
     except (OSError, TimeoutError, smtplib.SMTPException):
@@ -70,10 +72,11 @@ def send_owner_welcome_email(*, user, organization: Organization) -> EmailResult
             "help_url": build_absolute_app_url(reverse("help-center")),
         },
         recipient_list=[user.email],
+        organization=organization,
     )
 
 
-def send_staff_account_created_email(*, user, organization: Organization, created_by) -> EmailResult:
+def send_staff_account_created_email(*, user, organization: Organization, created_by, setup_url, expires_at) -> EmailResult:
     return send_branded_email(
         subject=f"Your MobiPOS account for {organization.name} is ready",
         template_name="emails/staff_account_created.html",
@@ -81,10 +84,11 @@ def send_staff_account_created_email(*, user, organization: Organization, create
             "user": user,
             "organization": organization,
             "created_by": created_by,
-            "login_url": build_absolute_app_url(reverse("login")),
-            "password_reset_url": build_absolute_app_url(reverse("password-reset")),
+            "setup_url": setup_url,
+            "expires_at": expires_at,
         },
         recipient_list=[user.email],
+        organization=organization,
     )
 
 
@@ -129,30 +133,41 @@ def send_daily_owner_activity_summary(*, organization: Organization, start=None,
             "activity_url": build_absolute_app_url(reverse("activity-report")),
         },
         recipient_list=recipients,
+        organization=organization,
     )
 
 
 def send_approval_request_email(*, approval, recipients: list[str]) -> EmailResult:
+    from apps.operations.services import approval_target_context
+
+    target = approval_target_context(approval)
     return send_branded_email(
-        subject=f"MobiPOS approval needed: {approval.display_type}",
+        subject=f"MobiPOS approval needed: {target['title']}",
         template_name="emails/approval_request.html",
         context={
             "approval": approval,
             "organization": approval.organization,
+            "target": target,
             "approval_url": build_absolute_app_url(reverse("approval-detail", args=[approval.id])),
         },
         recipient_list=recipients,
+        organization=approval.organization,
     )
 
 
 def send_approval_decision_email(*, approval, recipients: list[str]) -> EmailResult:
+    from apps.operations.services import approval_target_context
+
+    target = approval_target_context(approval)
     return send_branded_email(
-        subject=f"MobiPOS approval {approval.get_status_display().lower()}: {approval.display_type}",
+        subject=f"MobiPOS approval {approval.get_status_display().lower()}: {target['title']}",
         template_name="emails/approval_decision.html",
         context={
             "approval": approval,
             "organization": approval.organization,
+            "target": target,
             "approval_url": build_absolute_app_url(reverse("approval-detail", args=[approval.id])),
         },
         recipient_list=recipients,
+        organization=approval.organization,
     )

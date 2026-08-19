@@ -4,9 +4,11 @@
 
 {% block content %}
   <h1>Approval {{ approval.get_status_display|lower }}</h1>
-  <p>Your request for <strong>{{ approval.display_type }}</strong> was <strong>{{ approval.get_status_display|lower }}</strong>.</p>
+  <p>Your request for <strong>{{ target.title }}</strong> was <strong>{{ approval.get_status_display|lower }}</strong>.</p>
   <div class="panel">
     <p><strong>Business:</strong> {{ organization.name }}</p>
+    <p><strong>Affected record:</strong> {{ target.record }}</p>
+    {% if approval.amount %}<p><strong>Financial impact:</strong> KES {{ approval.amount }}</p>{% endif %}
     <p><strong>Reason:</strong> {{ approval.reason }}</p>
     {% if approval.decision_notes %}<p><strong>Decision notes:</strong> {{ approval.decision_notes }}</p>{% endif %}
   </div>

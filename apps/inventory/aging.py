@@ -2,6 +2,9 @@ from copy import deepcopy
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
+from datetime import date
+from decimal import Decimal
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -160,7 +163,7 @@ def active_aged_stock_action_statuses():
 
 
 @transaction.atomic
-def request_aged_stock_action(*, stock_unit, action_type, reason, next_step="", requested_by):
+def request_aged_stock_action(*, stock_unit, action_type, reason, next_step="", proposal=None, requested_by):
     from apps.operations.services import request_approval
 
     from .models import AgedStockAction, AgedStockActionStatus, SerialStatus
@@ -180,6 +183,7 @@ def request_aged_stock_action(*, stock_unit, action_type, reason, next_step="", 
         action_type=action_type,
         reason=reason,
         next_step=next_step,
+        proposal=proposal or {},
         proposed_by=requested_by,
     )
     approval = request_approval(
@@ -213,4 +217,172 @@ def sync_aged_stock_action_from_approval(*, approval):
         action.approved_by = approval.decided_by
         action.approved_at = approval.decided_at
     action.save(update_fields=["status", "approved_by", "approved_at", "updated_at"])
+    return action
+
+
+def _source_purchase_line(stock_unit):
+    from apps.purchasing.models import PurchaseReceipt
+
+    receipt_ids = stock_unit.movements.filter(
+        movement_type="purchase_receipt",
+        reference_type="purchase_receipt",
+    ).order_by("created_at").values_list("reference_id", flat=True)
+    for receipt_id in receipt_ids:
+        try:
+            return PurchaseReceipt.objects.select_related("line__order").get(
+                id=receipt_id,
+                organization=stock_unit.organization,
+            ).line
+        except (PurchaseReceipt.DoesNotExist, ValueError):
+            continue
+    return None
+
+
+@transaction.atomic
+def execute_aged_stock_action(*, action, actor):
+    from django.utils import timezone
+
+    from apps.inventory.services import post_stock_movement
+    from apps.purchasing.models import SupplierReturn
+    from apps.purchasing.services import complete_supplier_return
+    from apps.transfers.models import StockTransfer, StockTransferLine
+    from apps.transfers.services import approve_transfer
+
+    from .models import (
+        AgedStockAction,
+        AgedStockActionStatus,
+        AgedStockActionType,
+        SerialStatus,
+        StockMovementType,
+        StockUnit,
+        StockUnitOffer,
+        StockUnitOfferType,
+    )
+
+    action = AgedStockAction.objects.select_for_update().select_related(
+        "stock_unit__product", "stock_unit__location", "approval"
+    ).get(pk=action.pk)
+    unit = StockUnit.objects.select_for_update().select_related("product", "location").get(
+        pk=action.stock_unit_id
+    )
+    if action.status == AgedStockActionStatus.COMPLETED:
+        return action
+    if action.execution_result:
+        return action
+    if action.status != AgedStockActionStatus.APPROVED:
+        raise ValidationError("This action must be approved before it can be executed.")
+    if unit.status != SerialStatus.AVAILABLE or not unit.location_id:
+        raise ValidationError("This device is no longer available at its original location. Review the request again.")
+
+    proposal = action.proposal or {}
+    result = {}
+    if action.action_type == AgedStockActionType.TRANSFER:
+        destination_id = proposal.get("destination_id")
+        from apps.organizations.models import Location
+
+        destination = Location.objects.select_for_update().filter(
+            id=destination_id,
+            organization=action.organization,
+            is_active=True,
+        ).first()
+        if not destination or destination.id == unit.location_id:
+            raise ValidationError("The approved transfer destination is no longer valid.")
+        transfer = StockTransfer.objects.create(
+            organization=action.organization,
+            number=f"AGE-{timezone.now():%Y%m%d%H%M%S%f}",
+            source=unit.location,
+            destination=destination,
+            requested_by=action.proposed_by,
+            notes=f"Approved aged-stock action {action.id}: {action.reason}",
+        )
+        StockTransferLine.objects.create(
+            organization=action.organization,
+            transfer=transfer,
+            product=unit.product,
+            stock_unit=unit,
+            quantity=Decimal("1"),
+        )
+        approve_transfer(transfer=transfer, actor=actor)
+        result = {
+            "outcome": "Approved transfer created; dispatch and receipt remain required.",
+            "transfer_id": str(transfer.id),
+            "transfer_number": transfer.number,
+        }
+    elif action.action_type in {AgedStockActionType.DISCOUNT, AgedStockActionType.CAMPAIGN}:
+        valid_until = date.fromisoformat(proposal["valid_until"])
+        offer = StockUnitOffer.objects.create(
+            organization=action.organization,
+            stock_unit=unit,
+            aged_stock_action=action,
+            offer_type=(
+                StockUnitOfferType.DISCOUNT
+                if action.action_type == AgedStockActionType.DISCOUNT
+                else StockUnitOfferType.CAMPAIGN
+            ),
+            name=proposal.get("campaign_name") or f"Aged stock discount: {unit.product.name}",
+            promotional_price=(
+                Decimal(proposal["promotional_price"])
+                if proposal.get("promotional_price")
+                else None
+            ),
+            starts_on=timezone.localdate(),
+            ends_on=valid_until,
+        )
+        result = {
+            "outcome": f"{offer.get_offer_type_display()} activated for this device.",
+            "offer_id": str(offer.id),
+            "offer_name": offer.name,
+        }
+        action.status = AgedStockActionStatus.COMPLETED
+    elif action.action_type == AgedStockActionType.SUPPLIER_RETURN:
+        line = _source_purchase_line(unit)
+        if not line:
+            raise ValidationError("The original supplier receipt could not be found for this device.")
+        supplier_return = SupplierReturn.objects.create(
+            organization=action.organization,
+            number=f"ASR-{timezone.now():%Y%m%d%H%M%S%f}",
+            line=line,
+            stock_unit=unit,
+            quantity=Decimal("1"),
+            reason=action.reason,
+            requested_by=action.proposed_by,
+        )
+        complete_supplier_return(supplier_return=supplier_return, actor=actor)
+        result = {
+            "outcome": "Supplier return completed and stock/payable records updated.",
+            "supplier_return_id": str(supplier_return.id),
+            "supplier_return_number": supplier_return.number,
+        }
+        action.status = AgedStockActionStatus.COMPLETED
+    elif action.action_type == AgedStockActionType.WRITE_OFF:
+        movement = post_stock_movement(
+            organization=action.organization,
+            product=unit.product,
+            location=unit.location,
+            quantity=Decimal("-1"),
+            movement_type=StockMovementType.ADJUSTMENT,
+            actor=actor,
+            stock_unit=unit,
+            unit_cost=unit.unit_cost,
+            reference_type="aged_stock_action",
+            reference_id=action.id,
+            reason=action.reason,
+        )
+        unit.status = SerialStatus.WRITTEN_OFF
+        unit.location = None
+        unit.save(update_fields=["status", "location", "updated_at"])
+        result = {
+            "outcome": "Device written off and removed from available stock.",
+            "movement_id": str(movement.id),
+        }
+        action.status = AgedStockActionStatus.COMPLETED
+    else:
+        raise ValidationError("This action type requires a manual operational workflow and cannot be auto-executed.")
+
+    action.execution_result = result
+    action.completed_by = actor if action.status == AgedStockActionStatus.COMPLETED else None
+    action.completed_at = timezone.now() if action.status == AgedStockActionStatus.COMPLETED else None
+    action.save(update_fields=[
+        "status", "execution_result", "completed_by", "completed_at", "updated_at"
+    ])
     return action

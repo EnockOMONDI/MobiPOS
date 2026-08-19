@@ -97,12 +97,12 @@
       <form method="post" class="login-form" novalidate>
         {% csrf_token %}
         <div class="login-field">
-          <label for="{{ form.username.id_for_label }}">Username</label>
+          <label for="{{ form.username.id_for_label }}">Email address</label>
           {{ form.username }}
           {% if form.username.errors %}
             <p class="login-help text-red-700">{{ form.username.errors|striptags }}</p>
           {% else %}
-            <p class="login-help">Use the username assigned to your MobiPOS account.</p>
+            <p class="login-help">Use the email address linked to your MobiPOS account.</p>
           {% endif %}
         </div>
         <div class="login-field">

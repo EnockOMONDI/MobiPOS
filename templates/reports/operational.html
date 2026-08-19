@@ -14,5 +14,6 @@
 <div class="mt-6 rounded-xl border bg-white p-5">
   <h2 class="font-semibold">Stock balances</h2>
   {% for balance in stock_balances %}<p class="border-t py-2">{{ balance.product }} · {{ balance.location }} · {{ balance.quantity }}</p>{% endfor %}
+  {% include "reports/_section_pagination.html" with page=stock_balances pagination=stock_pagination label="Stock balances" only %}
 </div>
 {% endblock %}

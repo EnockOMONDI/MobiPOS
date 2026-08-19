@@ -29,6 +29,16 @@ class IntegrationEvent(OrganizationOwnedModel):
 
     class Meta:
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=("status", "next_retry_at", "provider"),
+                name="int_status_retry_prov",
+            ),
+            models.Index(
+                fields=("organization", "status", "created_at"),
+                name="int_org_st_created",
+            ),
+        ]
 
 
 class FiscalProvider(models.TextChoices):

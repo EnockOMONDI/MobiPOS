@@ -4,10 +4,13 @@
 
 {% block content %}
   <h1>Approval needed</h1>
-  <p>{{ approval.requested_by.get_full_name|default:approval.requested_by.username }} requested approval for <strong>{{ approval.display_type }}</strong>.</p>
+  <p>{{ approval.requested_by.get_full_name|default:approval.requested_by.email }} requested approval for <strong>{{ target.title }}</strong>.</p>
   <div class="panel">
     <p><strong>Business:</strong> {{ organization.name }}</p>
+    <p><strong>Affected record:</strong> {{ target.record }}</p>
     {% if approval.branch %}<p><strong>Branch:</strong> {{ approval.branch.name }}</p>{% endif %}
+    {% if approval.amount %}<p><strong>Financial impact:</strong> KES {{ approval.amount }}</p>{% endif %}
+    {% if approval.policy %}<p><strong>Approval rule:</strong> {{ approval.policy.name }}</p>{% endif %}
     <p><strong>Reason:</strong> {{ approval.reason }}</p>
   </div>
   <p>

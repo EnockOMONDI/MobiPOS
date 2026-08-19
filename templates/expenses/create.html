@@ -1,1 +1,32 @@
-{% extends "base.html" %}{% block title %}New expense | MobiPOS{% endblock %}{% block content %}<h1 class="text-3xl font-bold">New expense</h1><form method="post" class="mt-6 max-w-xl space-y-4 rounded-xl border bg-white p-6">{% csrf_token %}{{ form.as_p }}<button class="rounded-lg bg-red-700 px-4 py-2 text-white">Submit expense</button></form>{% endblock %}
+{% extends "base.html" %}
+
+{% block title %}New expense | MobiPOS{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <p class="text-sm font-bold text-red-700">Customers &amp; Finance</p>
+    <h1 class="mt-1 text-3xl font-bold text-slate-950">Submit an expense</h1>
+    <p class="mt-2 max-w-3xl text-slate-600">Record the business cost and send it to an eligible owner or approver. Payment can only be recorded after approval.</p>
+  </div>
+
+  <form method="post" class="card max-w-4xl p-6 md:p-8">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{{ form.non_field_errors }}</div>
+    {% endif %}
+    <div class="grid gap-5 md:grid-cols-2">
+      {% for field in form %}
+        <label class="block {% if field.name == 'description' %}md:col-span-2{% endif %}">
+          <span class="text-sm font-bold text-slate-700">{{ field.label }}{% if field.field.required %} <span class="text-red-700">*</span>{% endif %}</span>
+          {{ field }}
+          {% if field.help_text %}<span class="mt-1 block text-xs text-slate-500">{{ field.help_text }}</span>{% endif %}
+          {% for error in field.errors %}<span class="mt-1 block text-sm font-semibold text-red-700">{{ error }}</span>{% endfor %}
+        </label>
+      {% endfor %}
+    </div>
+    <div class="mt-7 flex flex-wrap gap-3">
+      <button class="btn-primary">Submit for approval</button>
+      <a class="btn-secondary" href="{% url 'module-overview' 'expenses' %}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

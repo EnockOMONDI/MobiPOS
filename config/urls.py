@@ -21,24 +21,39 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path, reverse_lazy
 
 from apps.reports.views import activity_report, business_flow, dashboard, demo_access, help_center, product_features
-from apps.reports.views import global_search, imei_history, module_overview
+from apps.reports.views import (
+    global_search,
+    imei_history,
+    module_overview,
+)
+from apps.reports.workspaces import expenses_workspace, operational_register, payables_workspace, payments_workspace, purchasing_workspace, sales_workspace
+from apps.reports.export_views import report_export_detail, report_export_download, report_export_list, report_export_retry
 from apps.organizations.views import aged_stock_policy_update, agent_document_download, agent_document_upload, agent_dsa_create, agent_profile_decide, agent_profile_detail, branch_create, branch_update, invitation_accept, invitation_resend, invitation_revoke, location_create, location_update, membership_access_list, membership_access_update, register_organization, role_create, subscription_invoice_activate, tenant_user_create
-from apps.accounts.views import mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
-from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, review_session, session_detail
+from apps.accounts.forms import EmailAuthenticationForm
+from apps.accounts.views import account_setup, mfa_setup, mfa_verify, recovery_codes_regenerate, security_settings, session_revoke, sessions_revoke_others
+from apps.pos.views import cart_add, cart_complete, cart_detail, cart_remove, cash_movement_create, checkout, close_session, offline_invoice_sync, open_session, recovery_draft_detail, recovery_draft_discard, recovery_draft_list, review_session, session_detail
 from apps.purchasing.views import purchase_approve, purchase_create, purchase_detail, purchase_discrepancy_resolve, purchase_extract_document, purchase_receive, supplier_return_complete, supplier_return_create, supplier_return_detail
 from apps.transfers.views import agent_allocation_create, agent_recall_create, transfer_approve, transfer_create, transfer_detail, transfer_discrepancy_resolve, transfer_dispatch, transfer_list, transfer_receive
 from apps.sales.views import return_approve_complete, sale_add_payment, sale_detail, sale_request_return
-from apps.expenses.views import expense_approve, expense_create
-from apps.repairs.views import repair_create, repair_detail, repair_update, repair_use_part
+from apps.expenses.views import expense_approve, expense_create, expense_detail, expense_pay, expense_resubmit
+from apps.repairs.views import (
+    repair_add_payment,
+    repair_create,
+    repair_detail,
+    repair_reverse_part,
+    repair_reverse_payment,
+    repair_update,
+    repair_use_part,
+)
 from apps.notifications.views import notification_list, notification_read
 from apps.integrations.views import etims_settings
 from apps.reports.operational import operational_report
 from apps.reports.advanced import exception_report
 from apps.reports.retail import retail_analytics_report
 from apps.reports.agent_network import agent_network_report
-from apps.inventory.views import aged_stock_action_create, batch_serial_intake, device_search, stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
+from apps.inventory.views import aged_stock_action_create, aged_stock_action_execute, batch_serial_intake, device_search, stock_adjustment_complete, stock_adjustment_create, stock_adjustment_detail, stock_movement_reverse
 from apps.commissions.views import commission_payout_approve, commission_payout_create, commission_payout_detail, commission_payout_pay
-from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox, approval_policy_create, approval_policy_list, receivable_installment_schedule
+from apps.operations.views import access_request_create, approval_decide, approval_detail, approval_inbox, approval_policy_create, approval_policy_list, payable_detail, payable_payment_create, payable_payment_reverse, receivable_installment_schedule, receivables_workspace
 from apps.catalog.views import brand_create, category_create, product_create, product_detail, product_toggle_active, product_update
 from apps.contacts.views import contact_create, contact_detail, contact_statement, contact_toggle_active, contact_update
 from config.views import health_live, health_ready
@@ -50,6 +65,16 @@ urlpatterns = [
     path("business-flow/", business_flow, name="business-flow"),
     path("demo/", demo_access, name="demo-access"),
     path("overview/<slug:module>/", module_overview, name="module-overview"),
+    path("sales/", sales_workspace, name="sales-workspace"),
+    path("payments/", payments_workspace, name="payments-workspace"),
+    path("purchases/", purchasing_workspace, name="purchasing-workspace"),
+    path("expenses/", expenses_workspace, name="expenses-workspace"),
+    path("payables/", payables_workspace, name="payables-workspace"),
+    path("workspaces/<slug:register>/", operational_register, name="operational-register"),
+    path("reports/exports/", report_export_list, name="report-export-list"),
+    path("reports/exports/<uuid:export_id>/", report_export_detail, name="report-export-detail"),
+    path("reports/exports/<uuid:export_id>/download/", report_export_download, name="report-export-download"),
+    path("reports/exports/<uuid:export_id>/retry/", report_export_retry, name="report-export-retry"),
     path("search/", global_search, name="global-search"),
     path("register/", register_organization, name="register-organization"),
     path("subscriptions/invoices/<uuid:invoice_id>/activate/", subscription_invoice_activate, name="subscription-invoice-activate"),
@@ -77,6 +102,9 @@ urlpatterns = [
     path("pos/cart/lines/<uuid:line_id>/remove/", cart_remove, name="pos-cart-remove"),
     path("pos/cart/<uuid:sale_id>/complete/", cart_complete, name="pos-cart-complete"),
     path("pos/offline-queue/sync/", offline_invoice_sync, name="pos-offline-sync"),
+    path("pos/recovery-drafts/", recovery_draft_list, name="pos-recovery-list"),
+    path("pos/recovery-drafts/<uuid:draft_id>/", recovery_draft_detail, name="pos-recovery-detail"),
+    path("pos/recovery-drafts/<uuid:draft_id>/discard/", recovery_draft_discard, name="pos-recovery-discard"),
     path("pos/sessions/<uuid:session_id>/", session_detail, name="session-detail"),
     path("pos/sessions/<uuid:session_id>/close/", close_session, name="session-close"),
     path("pos/sessions/<uuid:session_id>/cash-movements/", cash_movement_create, name="cash-movement-create"),
@@ -86,11 +114,17 @@ urlpatterns = [
     path("sales/<uuid:sale_id>/return/", sale_request_return, name="sale-request-return"),
     path("returns/<uuid:return_id>/complete/", return_approve_complete, name="return-complete"),
     path("expenses/new/", expense_create, name="expense-create"),
+    path("expenses/<uuid:expense_id>/", expense_detail, name="expense-detail"),
+    path("expenses/<uuid:expense_id>/resubmit/", expense_resubmit, name="expense-resubmit"),
+    path("expenses/<uuid:expense_id>/pay/", expense_pay, name="expense-pay"),
     path("expenses/<uuid:expense_id>/approve/", expense_approve, name="expense-approve"),
     path("repairs/new/", repair_create, name="repair-create"),
     path("repairs/<uuid:ticket_id>/", repair_detail, name="repair-detail"),
     path("repairs/<uuid:ticket_id>/update/", repair_update, name="repair-update"),
     path("repairs/<uuid:ticket_id>/parts/", repair_use_part, name="repair-use-part"),
+    path("repairs/<uuid:ticket_id>/parts/<uuid:usage_id>/reverse/", repair_reverse_part, name="repair-reverse-part"),
+    path("repairs/<uuid:ticket_id>/payments/", repair_add_payment, name="repair-add-payment"),
+    path("repairs/<uuid:ticket_id>/payments/<uuid:payment_id>/reverse/", repair_reverse_payment, name="repair-reverse-payment"),
     path("notifications/", notification_list, name="notification-list"),
     path("notifications/<uuid:notification_id>/read/", notification_read, name="notification-read"),
     path("reports/imei-history/", imei_history, name="imei-history"),
@@ -101,6 +135,7 @@ urlpatterns = [
     path("reports/activity/", activity_report, name="activity-report"),
     path("inventory/adjustments/new/", stock_adjustment_create, name="stock-adjustment-create"),
     path("inventory/aged-stock/<uuid:stock_unit_id>/actions/new/", aged_stock_action_create, name="aged-stock-action-create"),
+    path("inventory/aged-stock/actions/<uuid:action_id>/execute/", aged_stock_action_execute, name="aged-stock-action-execute"),
     path("inventory/devices/search/", device_search, name="device-search"),
     path("inventory/adjustments/<uuid:adjustment_id>/", stock_adjustment_detail, name="stock-adjustment-detail"),
     path("inventory/adjustments/<uuid:adjustment_id>/complete/", stock_adjustment_complete, name="stock-adjustment-complete"),
@@ -117,6 +152,10 @@ urlpatterns = [
     path("access-requests/new/", access_request_create, name="access-request-create"),
     path("integrations/etims/", etims_settings, name="etims-settings"),
     path("receivables/<uuid:receivable_id>/installments/", receivable_installment_schedule, name="receivable-installment-schedule"),
+    path("receivables/", receivables_workspace, name="receivables-workspace"),
+    path("payables/<uuid:payable_id>/", payable_detail, name="payable-detail"),
+    path("payables/<uuid:payable_id>/payments/", payable_payment_create, name="payable-payment-create"),
+    path("payable-payments/<uuid:payment_id>/reverse/", payable_payment_reverse, name="payable-payment-reverse"),
     path("catalog/categories/new/", category_create, name="category-create"),
     path("catalog/brands/new/", brand_create, name="brand-create"),
     path("catalog/products/new/", product_create, name="product-create"),
@@ -147,7 +186,8 @@ urlpatterns = [
     path("transfers/<uuid:transfer_id>/receive/", transfer_receive, name="transfer-receive"),
     path("transfers/discrepancies/<uuid:discrepancy_id>/resolve/", transfer_discrepancy_resolve, name="transfer-discrepancy-resolve"),
     path("inventory/batch-serial-intake/", batch_serial_intake, name="batch-serial-intake"),
-    path("accounts/login/", auth_views.LoginView.as_view(), name="login"),
+    path("accounts/login/", auth_views.LoginView.as_view(authentication_form=EmailAuthenticationForm), name="login"),
+    path("accounts/setup/<str:token>/", account_setup, name="account-setup"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("accounts/password/change/", auth_views.PasswordChangeView.as_view(success_url="/accounts/security/"), name="password-change"),
     path(

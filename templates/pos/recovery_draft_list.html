@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Recovery drafts | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div>
+    <p class="text-sm font-semibold text-red-700">Sales control</p>
+    <h1 class="mt-1 text-3xl font-bold tracking-tight">Recovery drafts</h1>
+    <p class="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Review product-only evidence saved during a connection problem. These records do not create sales, payments, receipts, or stock movements.</p>
+  </div>
+  <a class="btn-primary" href="{% url 'pos-cart' %}">Return to POS</a>
+</div>
+
+<form class="card mt-6 flex flex-wrap items-end gap-3 p-5" method="get">
+  <label class="text-sm font-bold text-slate-700">Status
+    <select class="mt-2 block rounded-2xl border border-slate-300 bg-white px-4 py-3" name="status">
+      <option value="">All statuses</option>
+      {% for value, label in statuses %}<option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn-secondary" type="submit">Apply filter</button>
+</form>
+
+<div class="mt-6 space-y-4">
+  {% for recovery in page %}
+    <a href="{% url 'pos-recovery-detail' recovery.id %}" class="card block p-5 transition hover:border-red-200 hover:shadow-md">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div class="flex flex-wrap items-center gap-2"><strong>{{ recovery.client_reference }}</strong><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{{ recovery.get_status_display }}</span></div>
+          <p class="mt-2 text-sm text-slate-600">{{ recovery.location }} · {{ recovery.cashier.get_full_name|default:recovery.cashier.email }} · {{ recovery.created_at|date:"d M Y H:i" }}</p>
+        </div>
+        <div class="text-right text-sm"><strong>{{ recovery.payload.lines|length }} item summar{{ recovery.payload.lines|length|pluralize:"y,ies" }}</strong>{% if recovery.sale_number %}<span class="mt-1 block text-emerald-700">Sale {{ recovery.sale_number }}</span>{% endif %}</div>
+      </div>
+    </a>
+  {% empty %}
+    <div class="card p-8 text-center"><h2 class="text-lg font-bold">No recovery drafts found</h2><p class="mt-2 text-sm text-slate-500">Drafts uploaded from the POS will appear here for controlled review.</p></div>
+  {% endfor %}
+</div>
+{% if page.paginator.num_pages > 1 %}
+<nav class="mt-6 flex items-center justify-between text-sm" aria-label="Recovery draft pages">
+  {% if page.has_previous %}<a class="btn-secondary" href="?status={{ selected_status }}&page={{ page.previous_page_number }}">Previous</a>{% else %}<span></span>{% endif %}
+  <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if page.has_next %}<a class="btn-secondary" href="?status={{ selected_status }}&page={{ page.next_page_number }}">Next</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

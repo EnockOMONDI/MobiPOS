@@ -7,7 +7,7 @@
     <p class="text-sm font-semibold text-red-700">Start with MobiPOS</p>
     <h1 class="mt-1 text-3xl font-bold">Create your business account</h1>
     <p class="mt-2 text-slate-600">
-      Enter the business and owner details. MobiPOS will create the internal business URL and login username automatically.
+      Enter the business and owner details. Your email address will be your secure MobiPOS sign-in.
     </p>
 
     <form method="post" class="mt-6 space-y-6">
@@ -27,7 +27,7 @@
 
       <section class="rounded-2xl border border-slate-200 p-5">
         <h2 class="text-lg font-bold">Owner account</h2>
-        <p class="mt-1 text-sm text-slate-500">Use your email to sign in. A username is created internally only for system compatibility.</p>
+        <p class="mt-1 text-sm text-slate-500">Use an email address you can access. You will use it to sign in and recover your password.</p>
         <div class="mt-4 grid gap-4 md:grid-cols-2">
           {% include "components/form_field.html" with field=form.first_name %}
           {% include "components/form_field.html" with field=form.last_name %}

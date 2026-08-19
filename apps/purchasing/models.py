@@ -49,6 +49,12 @@ class PurchaseOrder(OrganizationOwnedModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=("organization", "status", "ordered_on"),
+                name="po_org_st_date",
+            ),
+        ]
         constraints = [models.UniqueConstraint(fields=("organization", "number"), name="unique_purchase_number_per_org")]
 
     def __str__(self):
@@ -62,6 +68,29 @@ class PurchaseOrderLine(OrganizationOwnedModel):
     quantity = models.DecimalField(max_digits=14, decimal_places=3)
     received_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
     unit_cost = models.DecimalField(max_digits=14, decimal_places=2)
+
+
+class PurchaseReceipt(OrganizationOwnedModel):
+    """Durable idempotency record for one receiving command."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    request_id = models.UUIDField()
+    line = models.ForeignKey(PurchaseOrderLine, on_delete=models.PROTECT, related_name="receipts")
+    quantity = models.DecimalField(max_digits=14, decimal_places=3)
+    damaged_quantity = models.DecimalField(max_digits=14, decimal_places=3, default=0)
+    received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="purchase_receipts",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("organization", "request_id"),
+                name="unique_purchase_receipt_request_per_org",
+            )
+        ]
 
 
 class SupplierReturnStatus(models.TextChoices):
@@ -85,6 +114,10 @@ class SupplierReturn(OrganizationOwnedModel):
         constraints = [
             models.UniqueConstraint(fields=("organization", "number"), name="unique_supplier_return_number")
         ]
+
+    @property
+    def credit_amount(self):
+        return self.quantity * self.line.unit_cost
 
 
 class PurchaseDiscrepancyStatus(models.TextChoices):

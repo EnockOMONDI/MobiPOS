@@ -1,13 +1,17 @@
 import csv
+from decimal import Decimal
 from io import BytesIO
+from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Sum
+from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 from openpyxl import Workbook
 
@@ -31,21 +35,103 @@ def _safe_next_url(request):
     return ""
 
 
-def _contact_statement_context(contact):
-    sales = list(contact.sales.order_by("-created_at")[:100])
-    payments = list(contact.payments.order_by("-received_at")[:100])
-    receivables = list(contact.receivables.order_by("due_on"))
-    payables = list(contact.payables.order_by("due_on"))
+def _contact_statement_context(contact, *, date_from=None, date_to=None, paginate=False, request=None):
+    from apps.operations.models import PayablePayment
+    from apps.purchasing.models import SupplierReturn, SupplierReturnStatus
+
+    sales = contact.sales.order_by("-created_at")
+    payments = contact.payments.order_by("-received_at")
+    receivables = contact.receivables.order_by("due_on")
+    payables = contact.payables.order_by("due_on")
+    supplier_payments = PayablePayment.objects.filter(
+        organization=contact.organization,
+        payable__supplier=contact,
+    ).select_related("payable__purchase_order", "paid_by", "reversed_by").order_by("-paid_at")
+    supplier_returns = SupplierReturn.objects.filter(
+        organization=contact.organization,
+        line__order__supplier=contact,
+        status=SupplierReturnStatus.COMPLETED,
+    ).select_related("line__order", "line__product").order_by("-updated_at")
+    if date_from:
+        sales = sales.filter(created_at__date__gte=date_from)
+        payments = payments.filter(received_at__date__gte=date_from)
+        receivables = receivables.filter(due_on__gte=date_from)
+        payables = payables.filter(due_on__gte=date_from)
+        supplier_payments = supplier_payments.filter(paid_at__date__gte=date_from)
+        supplier_returns = supplier_returns.filter(updated_at__date__gte=date_from)
+    if date_to:
+        sales = sales.filter(created_at__date__lte=date_to)
+        payments = payments.filter(received_at__date__lte=date_to)
+        receivables = receivables.filter(due_on__lte=date_to)
+        payables = payables.filter(due_on__lte=date_to)
+        supplier_payments = supplier_payments.filter(paid_at__date__lte=date_to)
+        supplier_returns = supplier_returns.filter(updated_at__date__lte=date_to)
+    sales_total = sales.aggregate(total=Sum("total"))["total"] or 0
+    payments_total = payments.aggregate(total=Sum("amount"))["total"] or 0
+    receivable_total = receivables.aggregate(total=Sum("outstanding_amount"))["total"] or 0
+    payable_total = payables.aggregate(total=Sum("outstanding_amount"))["total"] or 0
+    supplier_payments_total = supplier_payments.filter(reversed_at__isnull=True).aggregate(total=Sum("amount"))["total"] or 0
+    supplier_returns_total = sum(
+        (item.credit_amount for item in supplier_returns),
+        Decimal("0"),
+    )
+    pagination_queries = {}
+    if paginate:
+        sales = Paginator(sales, 25).get_page(request.GET.get("sales_page"))
+        payments = Paginator(payments, 25).get_page(request.GET.get("payments_page"))
+        receivables = Paginator(receivables, 25).get_page(request.GET.get("receivables_page"))
+        payables = Paginator(payables, 25).get_page(request.GET.get("payables_page"))
+        supplier_payments = Paginator(supplier_payments, 25).get_page(request.GET.get("supplier_payments_page"))
+        supplier_returns = Paginator(supplier_returns, 25).get_page(request.GET.get("supplier_returns_page"))
+        page_parameters = {
+            "sales_page": sales.number,
+            "payments_page": payments.number,
+            "receivables_page": receivables.number,
+            "payables_page": payables.number,
+            "supplier_payments_page": supplier_payments.number,
+            "supplier_returns_page": supplier_returns.number,
+        }
+        if date_from:
+            page_parameters["date_from"] = date_from.isoformat()
+        if date_to:
+            page_parameters["date_to"] = date_to.isoformat()
+        for section in ("sales", "payments", "receivables", "payables", "supplier_payments", "supplier_returns"):
+            parameter_name = f"{section}_page"
+            section_page = locals()[section]
+            pagination_queries[section] = {
+                "previous": urlencode({
+                    **page_parameters,
+                    parameter_name: section_page.previous_page_number(),
+                }) if section_page.has_previous() else "",
+                "next": urlencode({
+                    **page_parameters,
+                    parameter_name: section_page.next_page_number(),
+                }) if section_page.has_next() else "",
+            }
+    period_query = urlencode({
+        key: value for key, value in {
+            "date_from": date_from.isoformat() if date_from else "",
+            "date_to": date_to.isoformat() if date_to else "",
+        }.items() if value
+    })
     return {
         "contact": contact,
         "sales": sales,
         "payments": payments,
         "receivables": receivables,
         "payables": payables,
-        "sales_total": contact.sales.aggregate(total=Sum("total"))["total"] or 0,
-        "payments_total": contact.payments.aggregate(total=Sum("amount"))["total"] or 0,
-        "receivable_total": contact.receivables.aggregate(total=Sum("outstanding_amount"))["total"] or 0,
-        "payable_total": contact.payables.aggregate(total=Sum("outstanding_amount"))["total"] or 0,
+        "supplier_payments": supplier_payments,
+        "supplier_returns": supplier_returns,
+        "sales_total": sales_total,
+        "payments_total": payments_total,
+        "receivable_total": receivable_total,
+        "payable_total": payable_total,
+        "supplier_payments_total": supplier_payments_total,
+        "supplier_returns_total": supplier_returns_total,
+        "date_from": date_from.isoformat() if date_from else "",
+        "date_to": date_to.isoformat() if date_to else "",
+        "period_query": period_query,
+        "pagination_queries": pagination_queries,
     }
 
 
@@ -60,6 +146,8 @@ def _contact_statement_export_rows(context):
         ["Summary", "", "Payments", "", "", context["payments_total"]],
         ["Summary", "", "Receivable balance", "", context["receivable_total"], ""],
         ["Summary", "", "Payable balance", "", "", context["payable_total"]],
+        ["Summary", "", "Supplier payments", "", context["supplier_payments_total"], ""],
+        ["Summary", "", "Supplier returns", "", context["supplier_returns_total"], ""],
     ]
     for sale in context["sales"]:
         rows.append([
@@ -96,6 +184,24 @@ def _contact_statement_export_rows(context):
             "Settled" if payable.is_settled else "Outstanding",
             "",
             payable.outstanding_amount,
+        ])
+    for payment in context["supplier_payments"]:
+        rows.append([
+            "Supplier payment" if not payment.reversed_at else "Reversed supplier payment",
+            payment.paid_at.strftime("%Y-%m-%d %H:%M"),
+            payment.reference or payment.number,
+            f"{payment.get_method_display()} · {'Reversed' if payment.reversed_at else 'Active'}",
+            payment.amount,
+            "",
+        ])
+    for supplier_return in context["supplier_returns"]:
+        rows.append([
+            "Supplier return",
+            supplier_return.updated_at.strftime("%Y-%m-%d %H:%M"),
+            supplier_return.number,
+            supplier_return.line.product.name,
+            supplier_return.credit_amount,
+            "",
         ])
     return rows
 
@@ -223,8 +329,16 @@ def contact_detail(request, contact_id):
 @organization_permission_required("contacts.view_contact")
 def contact_statement(request, contact_id):
     contact = get_object_or_404(Contact, id=contact_id, organization=request.organization)
-    context = _contact_statement_context(contact)
+    date_from = parse_date(request.GET.get("date_from", ""))
+    date_to = parse_date(request.GET.get("date_to", ""))
     requested_format = request.GET.get("format")
+    context = _contact_statement_context(
+        contact,
+        date_from=date_from,
+        date_to=date_to,
+        paginate=not requested_format,
+        request=request,
+    )
     if requested_format == "csv":
         return _contact_statement_csv_response(context)
     if requested_format == "xlsx":

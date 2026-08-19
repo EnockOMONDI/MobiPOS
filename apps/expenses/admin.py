@@ -1,7 +1,8 @@
 from django.contrib import admin
 from apps.organizations.admin import OrganizationOwnedAdmin
-from .models import Expense
+from .models import Expense, ExpensePayment
 
 admin.site.register(Expense, OrganizationOwnedAdmin)
+admin.site.register(ExpensePayment, OrganizationOwnedAdmin)
 
 # Register your models here.

@@ -11,7 +11,7 @@ from django.views.decorators.http import require_POST
 from apps.audit.services import record_audit_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 
-from .aging import age_days_for, bucket_for_age, get_aged_stock_policy, request_aged_stock_action
+from .aging import age_days_for, bucket_for_age, execute_aged_stock_action, get_aged_stock_policy, request_aged_stock_action
 from .forms import AgedStockActionForm, BatchSerializedIntakeForm, StockAdjustmentForm, StockReversalForm
 from .models import StockAdjustment, StockMovement, StockUnit
 from .services import batch_receive_serialized_stock, complete_stock_adjustment, parse_serial_intake_rows, reverse_stock_movement
@@ -23,6 +23,10 @@ def device_search(request):
     query = request.GET.get("q", "").strip()
     source_id = request.GET.get("source", "").strip()
     status = request.GET.get("status", "available").strip()
+    try:
+        limit = min(max(int(request.GET.get("limit", "50")), 1), 100)
+    except ValueError:
+        limit = 50
     locations = accessible_locations_for(request.user, request.organization)
     units = StockUnit.objects.filter(
         organization=request.organization,
@@ -45,8 +49,10 @@ def device_search(request):
             | Q(location__custodian_membership__user__first_name__icontains=query)
             | Q(location__custodian_membership__user__last_name__icontains=query)
         ).distinct()
+    ordered_units = units.order_by("product__name", "serial_number")
+    total_matches = ordered_units.count()
     payload = []
-    for unit in units.order_by("product__name", "serial_number")[:50]:
+    for unit in ordered_units[:limit]:
         custodian = ""
         membership = getattr(unit.location, "custodian_membership", None) if unit.location_id else None
         if membership:
@@ -63,7 +69,7 @@ def device_search(request):
             "custodian": custodian,
             "age_days": (timezone.now().date() - unit.created_at.date()).days,
         })
-    return JsonResponse({"results": payload})
+    return JsonResponse({"results": payload, "count": total_matches, "limit": limit, "has_more": total_matches > limit})
 
 
 @login_required
@@ -147,7 +153,12 @@ def aged_stock_action_create(request, stock_unit_id):
     policy = get_aged_stock_policy(request.organization)
     age_days = age_days_for(stock_unit)
     bucket = bucket_for_age(age_days, policy)
-    form = AgedStockActionForm(request.POST or None)
+    form = AgedStockActionForm(
+        request.POST or None,
+        organization=request.organization,
+        user=request.user,
+        stock_unit=stock_unit,
+    )
     if request.method == "POST" and form.is_valid():
         try:
             action = request_aged_stock_action(
@@ -155,6 +166,29 @@ def aged_stock_action_create(request, stock_unit_id):
                 action_type=form.cleaned_data["action_type"],
                 reason=form.cleaned_data["reason"],
                 next_step=form.cleaned_data["next_step"],
+                proposal={
+                    "destination_id": (
+                        str(form.cleaned_data["destination"].id)
+                        if form.cleaned_data.get("destination")
+                        else ""
+                    ),
+                    "destination_name": (
+                        form.cleaned_data["destination"].name
+                        if form.cleaned_data.get("destination")
+                        else ""
+                    ),
+                    "promotional_price": (
+                        str(form.cleaned_data["promotional_price"])
+                        if form.cleaned_data.get("promotional_price") is not None
+                        else ""
+                    ),
+                    "campaign_name": form.cleaned_data.get("campaign_name", ""),
+                    "valid_until": (
+                        form.cleaned_data["valid_until"].isoformat()
+                        if form.cleaned_data.get("valid_until")
+                        else ""
+                    ),
+                },
                 requested_by=request.user,
             )
         except ValidationError as error:
@@ -180,6 +214,34 @@ def aged_stock_action_create(request, stock_unit_id):
         "age_days": age_days,
         "bucket": bucket,
     })
+
+
+@login_required
+@organization_permission_required("inventory.change_agedstockaction")
+@require_POST
+def aged_stock_action_execute(request, action_id):
+    from .models import AgedStockAction
+
+    action = get_object_or_404(
+        AgedStockAction,
+        id=action_id,
+        organization=request.organization,
+    )
+    try:
+        action = execute_aged_stock_action(action=action, actor=request.user)
+    except (KeyError, ValueError, ValidationError) as error:
+        messages.error(request, getattr(error, "message", str(error)))
+    else:
+        record_audit_event(
+            action="aged_stock_action.executed",
+            actor=request.user,
+            organization=request.organization,
+            target=action,
+            metadata=action.execution_result,
+            request=request,
+        )
+        messages.success(request, action.execution_result.get("outcome", "Aged-stock action executed."))
+    return redirect("approval-detail", approval_id=action.approval_id)
 
 
 @login_required

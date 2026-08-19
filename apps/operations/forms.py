@@ -5,7 +5,7 @@ from django.utils.dateparse import parse_date
 
 from apps.organizations.models import Branch, Role
 
-from .models import ApprovalPolicy
+from .models import ApprovalPolicy, PayablePaymentMethod
 
 
 class InstallmentScheduleForm(forms.Form):
@@ -36,6 +36,35 @@ class InstallmentScheduleForm(forms.Form):
         if self.receivable and sum((amount for _, amount in entries), Decimal("0")) != self.receivable.outstanding_amount:
             raise forms.ValidationError("Installment amounts must equal the current outstanding balance.")
         return entries
+
+
+class PayablePaymentForm(forms.Form):
+    request_id = forms.UUIDField(widget=forms.HiddenInput)
+    amount = forms.DecimalField(min_value=Decimal("0.01"), decimal_places=2)
+    method = forms.ChoiceField(choices=PayablePaymentMethod.choices)
+    reference = forms.CharField(
+        max_length=120,
+        required=False,
+        help_text="Required for M-Pesa, card and bank payments. Use the provider or bank reference.",
+    )
+    notes = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        method = cleaned_data.get("method")
+        reference = (cleaned_data.get("reference") or "").strip()
+        if method and method != PayablePaymentMethod.CASH and not reference:
+            self.add_error("reference", "Enter the payment reference for this payment method.")
+        cleaned_data["reference"] = reference
+        return cleaned_data
+
+
+class PayablePaymentReversalForm(forms.Form):
+    reason = forms.CharField(
+        min_length=5,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text="Explain why this payment record must be reversed.",
+    )
 
 
 class ApprovalPolicyForm(forms.ModelForm):

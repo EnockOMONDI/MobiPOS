@@ -120,7 +120,10 @@
   <section class="card p-6">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-lg font-bold">Available IMEIs</h2>
-      <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{{ available_units_count }} available</span>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">{{ available_units_count }} available</span>
+        {% if available_units_count > 10 %}<a class="text-xs font-bold text-red-700 hover:underline" href="{% url 'imei-history' %}?q={{ product.sku|urlencode }}&status=available">View all</a>{% endif %}
+      </div>
     </div>
     <div class="mt-4 max-h-96 overflow-auto rounded-3xl border border-slate-100">
       <table class="min-w-full text-left text-sm">
@@ -139,7 +142,10 @@
   <section class="card p-6">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-lg font-bold">Sold IMEIs</h2>
-      <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ sold_units_count }} sold</span>
+      <div class="flex items-center gap-2">
+        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">{{ sold_units_count }} sold</span>
+        {% if sold_units_count > 10 %}<a class="text-xs font-bold text-red-700 hover:underline" href="{% url 'imei-history' %}?q={{ product.sku|urlencode }}&status=sold">View all</a>{% endif %}
+      </div>
     </div>
     <div class="mt-4 max-h-96 overflow-auto rounded-3xl border border-slate-100">
       <table class="min-w-full text-left text-sm">

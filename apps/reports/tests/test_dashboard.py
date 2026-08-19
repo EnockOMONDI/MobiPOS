@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.commissions.models import CommissionAccrual, CommissionRule
-from apps.inventory.models import SerialStatus, StockMovementType, StockUnit
+from apps.inventory.models import SerialStatus, StockMovement, StockMovementType, StockUnit
 from apps.inventory.services import post_stock_movement
 from apps.organizations.models import AgentProfile, AgentProfileStatus, AgentProfileType, Branch, Company, Location, LocationType, Membership, MembershipStatus, Organization
 from apps.catalog.models import Category, Product
@@ -602,6 +602,48 @@ def test_imei_history_finds_serial_and_links_to_sale(client):
     assert response.status_code == 200
     assert b"350584199018200" in response.content
     assert b"Movement timeline" in response.content
+
+
+@pytest.mark.django_db
+def test_imei_history_paginates_the_complete_movement_timeline(client):
+    user = User.objects.create_user(username="imei-pages-owner", email="imei-pages@example.com")
+    organization = Organization.objects.create(name="IMEI Pages", slug="imei-pages", status="active")
+    company = Company.objects.create(organization=organization, name="IMEI Pages Ltd", code="IPG")
+    branch = Branch.objects.create(organization=organization, company=company, name="Main", code="IPGMAIN")
+    location = Location.objects.create(organization=organization, branch=branch, name="POS", code="IPGPOS", location_type="pos")
+    Membership.objects.create(user=user, organization=organization, status=MembershipStatus.ACTIVE, is_owner=True).branches.add(branch)
+    category = Category.objects.create(organization=organization, name="Phones", code="imei-pages-phones")
+    product = Product.objects.create(organization=organization, category=category, name="A15", sku="A15-PAGES", is_serialized=True)
+    unit = StockUnit.objects.create(
+        organization=organization,
+        product=product,
+        location=location,
+        serial_number="350584199019999",
+        status=SerialStatus.AVAILABLE,
+    )
+    StockMovement.objects.bulk_create([
+        StockMovement(
+            organization=organization,
+            movement_type=StockMovementType.ADJUSTMENT,
+            product=product,
+            stock_unit=unit,
+            location=location,
+            quantity=1,
+            reason=f"Timeline event {index}",
+            actor=user,
+        )
+        for index in range(21)
+    ])
+    client.force_login(user)
+
+    response = client.get(reverse("imei-history"), {"q": unit.serial_number, "movement_page": 2})
+
+    assert response.status_code == 200
+    assert response.context["movement_page"].number == 2
+    assert response.context["movement_page"].paginator.count == 21
+    assert len(response.context["movements"]) == 1
+    assert b"1-1 of 21" not in response.content
+    assert b"21 of 21" in response.content
 
 
 @pytest.mark.django_db

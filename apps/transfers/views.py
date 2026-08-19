@@ -1,13 +1,19 @@
+from datetime import datetime, time, timedelta
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils.dateparse import parse_date
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.notifications.services import notify_business_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required, user_has_organization_permission
 from .forms import AgentAllocationForm, AgentRecallForm, TransferForm
 from .models import StockTransfer, StockTransferLine, TransferDiscrepancy
@@ -32,8 +38,32 @@ def transfer_list(request):
     )
     status = request.GET.get("status", "").strip()
     query = request.GET.get("q", "").strip()
+    date_from_raw = request.GET.get("date_from", "").strip()
+    date_to_raw = request.GET.get("date_to", "").strip()
+    date_from = parse_date(date_from_raw) if date_from_raw else None
+    date_to = parse_date(date_to_raw) if date_to_raw else None
+    date_filter_error = ""
+    if date_from_raw and date_from is None:
+        date_filter_error = "Enter a valid start date."
+    elif date_to_raw and date_to is None:
+        date_filter_error = "Enter a valid end date."
+    elif date_from and date_to and date_from > date_to:
+        date_filter_error = "The start date must be on or before the end date."
     if status:
         transfers = transfers.filter(status=status)
+    if not date_filter_error:
+        if date_from:
+            local_start = timezone.make_aware(
+                datetime.combine(date_from, time.min),
+                timezone.get_current_timezone(),
+            )
+            transfers = transfers.filter(created_at__gte=local_start)
+        if date_to:
+            local_end = timezone.make_aware(
+                datetime.combine(date_to + timedelta(days=1), time.min),
+                timezone.get_current_timezone(),
+            )
+            transfers = transfers.filter(created_at__lt=local_end)
     if query:
         transfers = transfers.filter(
             Q(number__icontains=query)
@@ -58,10 +88,19 @@ def transfer_list(request):
         can_approve
         or user_has_organization_permission(request.user, request.organization, "transfers.change_stocktransfer")
     )
+    active_params = request.GET.copy()
+    active_params.pop("page", None)
+    active_querystring = active_params.urlencode()
+    page_obj = Paginator(transfers, 20).get_page(request.GET.get("page"))
     return render(request, "transfers/list.html", {
-        "transfers": transfers[:50],
+        "transfers": page_obj,
+        "page_obj": page_obj,
+        "active_querystring": active_querystring,
         "status": status,
         "query": query,
+        "date_from": date_from_raw,
+        "date_to": date_to_raw,
+        "date_filter_error": date_filter_error,
         "status_counts": status_counts,
         "total_transfers": base_scope.count(),
         "can_approve": can_approve,
@@ -90,6 +129,13 @@ def transfer_create(request):
             for line in form.cleaned_data["lines"]
         ])
         record_audit_event(action="transfer.requested", actor=request.user, organization=request.organization, target=transfer, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Transfer awaiting approval",
+            message=f"{transfer.number} will move stock from {transfer.source.name} to {transfer.destination.name} after approval.",
+            link=reverse("transfer-detail", args=[transfer.id]),
+            include_owners=True,
+        )
         return redirect("transfer-detail", transfer_id=transfer.id)
     return render(request, "transfers/create.html", {"form": form})
 
@@ -244,6 +290,13 @@ def _transition(request, transfer_id, action, service, success, location_field):
     try:
         service(transfer=transfer, actor=request.user)
         record_audit_event(action=action, actor=request.user, organization=request.organization, target=transfer, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title=success.rstrip("."),
+            message=f"{transfer.number}: {transfer.source.name} to {transfer.destination.name}. Status is now {transfer.get_status_display()}.",
+            link=reverse("transfer-detail", args=[transfer.id]),
+            users=(transfer.requested_by,),
+        )
         messages.success(request, success)
     except ValidationError as error:
         messages.error(request, error.message)
@@ -282,6 +335,14 @@ def transfer_receive(request, transfer_id):
             discrepancy_reason=request.POST.get("discrepancy_reason", ""),
         )
         record_audit_event(action="transfer.received", actor=request.user, organization=request.organization, target=transfer, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Transfer discrepancy needs review" if transfer.status == "discrepancy" else "Transfer received",
+            message=f"{transfer.number} was received at {transfer.destination.name}. Status is {transfer.get_status_display()}.",
+            link=reverse("transfer-detail", args=[transfer.id]),
+            users=(transfer.requested_by,),
+            include_owners=transfer.status == "discrepancy",
+        )
         messages.success(request, "Transfer receipt recorded.")
     except (ValidationError, ValueError) as error:
         messages.error(request, str(error))
@@ -294,8 +355,22 @@ def transfer_receive(request, transfer_id):
 def transfer_discrepancy_resolve(request, discrepancy_id):
     discrepancy = get_object_or_404(TransferDiscrepancy, id=discrepancy_id, organization=request.organization)
     try:
-        resolve_transfer_discrepancy(discrepancy=discrepancy, actor=request.user, resolution=request.POST.get("resolution", ""))
+        discrepancy = resolve_transfer_discrepancy(
+            discrepancy=discrepancy,
+            actor=request.user,
+            resolution=request.POST.get("resolution", ""),
+        )
         record_audit_event(action="transfer.discrepancy_resolved", actor=request.user, organization=request.organization, target=discrepancy, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Transfer discrepancy resolved",
+            message=(
+                f"The discrepancy on {discrepancy.transfer.number} was resolved as "
+                f"{'received at destination' if discrepancy.resolution == 'receive' else 'written off'}."
+            ),
+            link=reverse("transfer-detail", args=[discrepancy.transfer_id]),
+            users=(discrepancy.transfer.requested_by,),
+        )
         messages.success(request, "Transfer discrepancy resolved.")
     except ValidationError as error:
         messages.error(request, error.message)

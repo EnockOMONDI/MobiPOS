@@ -14,47 +14,98 @@
   </div>
 
   <div class="mb-6 grid gap-4 md:grid-cols-3">
-    <div class="card p-5">
+    <a href="?status=pending" class="card p-5 transition hover:border-amber-300 {% if active_status == 'pending' %}ring-2 ring-amber-300{% endif %}">
       <p class="text-xs font-bold uppercase tracking-widest text-slate-500">Pending</p>
       <p class="mt-2 text-3xl font-bold">{{ pending_count }}</p>
-    </div>
-    <div class="card p-5">
+    </a>
+    <a href="?status=approved" class="card p-5 transition hover:border-emerald-300 {% if active_status == 'approved' %}ring-2 ring-emerald-300{% endif %}">
       <p class="text-xs font-bold uppercase tracking-widest text-slate-500">Approved</p>
       <p class="mt-2 text-3xl font-bold">{{ approved_count }}</p>
-    </div>
-    <div class="card p-5">
+    </a>
+    <a href="?status=rejected" class="card p-5 transition hover:border-red-300 {% if active_status == 'rejected' %}ring-2 ring-red-300{% endif %}">
       <p class="text-xs font-bold uppercase tracking-widest text-slate-500">Rejected</p>
       <p class="mt-2 text-3xl font-bold">{{ rejected_count }}</p>
-    </div>
+    </a>
   </div>
 
+  <form method="get" class="card mb-6 grid gap-3 p-5 md:grid-cols-4">
+    <label class="md:col-span-2">Search
+      <input class="field mt-1" type="search" name="q" value="{{ search }}" placeholder="Requester, reason or record">
+    </label>
+    <label>Request type
+      <select class="field mt-1" name="type">
+        <option value="">All request types</option>
+        {% for value in request_types %}<option value="{{ value }}" {% if request_type == value %}selected{% endif %}>{{ value|cut:"_"|title }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Branch
+      <select class="field mt-1" name="branch">
+        <option value="">All branches</option>
+        {% for branch in branches %}<option value="{{ branch.id }}" {% if branch_id == branch.id|stringformat:"s" %}selected{% endif %}>{{ branch.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="status" value="{{ active_status }}">
+    <button class="btn-primary md:col-span-4 justify-self-start">Apply filters</button>
+  </form>
+
   <div class="space-y-4">
-    {% for approval in approvals %}
+    {% for card in approval_cards %}
+      {% with approval=card.approval target=card.target summary=card.summary %}
       <article class="card p-5">
         <div class="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div class="flex flex-wrap items-center gap-2">
-              <h2 class="text-xl font-bold">{{ approval.display_type }}</h2>
+              <h2 class="text-xl font-bold">{{ target.title|default:approval.display_type }}</h2>
               {% if approval.status == "pending" %}
                 <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold text-amber-800">Needs review</span>
+                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">{{ summary.urgency }}</span>
               {% elif approval.status == "approved" %}
                 <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">Approved</span>
               {% else %}
                 <span class="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800">Rejected</span>
               {% endif %}
             </div>
-            <p class="mt-2 text-slate-600">{{ approval.reason }}</p>
+            <p class="mt-2 font-semibold text-slate-800">{{ target.record }}</p>
+            <p class="mt-1 text-slate-600">{{ summary.message }} {% if approval.reason %}{{ approval.reason }}{% endif %}</p>
             <div class="mt-4 flex flex-wrap gap-3 text-sm text-slate-500">
               <span>Requested by <strong class="text-slate-700">{{ approval.requested_by.get_full_name|default:approval.requested_by.username }}</strong></span>
               {% if approval.branch %}<span>Branch: <strong class="text-slate-700">{{ approval.branch.name }}</strong></span>{% endif %}
-              {% if approval.amount %}<span>Amount: <strong class="text-slate-700">{{ approval.amount }}</strong></span>{% endif %}
+              {% if approval.amount %}<span>Impact: <strong class="text-slate-700">KES {{ approval.amount }}</strong></span>{% endif %}
+              {% if approval.policy %}<span>Rule: <strong class="text-slate-700">{{ approval.policy.name }}</strong></span>{% endif %}
+              <span>Submitted {{ approval.created_at|date:"d M Y H:i" }}</span>
             </div>
           </div>
-          <a href="{% url 'approval-detail' approval.id %}" class="btn-primary">Review request</a>
+          <div class="flex flex-wrap gap-2">
+            <a href="{% url 'approval-detail' approval.id %}" class="btn-secondary">Review details</a>
+            {% if approval.status == "pending" %}
+              <form method="post" action="{% url 'approval-decide' approval.id %}" onsubmit="return confirm('Approve this request after reviewing the affected record and business impact shown here?');">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="approved">
+                <button class="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-emerald-800">Approve</button>
+              </form>
+              <form method="post" action="{% url 'approval-decide' approval.id %}" class="w-full md:w-auto" onsubmit="return confirm('Reject this request? The explanation will be sent to the requester.');">
+                {% csrf_token %}
+                <input type="hidden" name="decision" value="rejected">
+                <input class="field mb-2 w-full text-sm" name="decision_notes" required placeholder="Reason for rejection">
+                <button class="rounded-xl border border-red-300 px-4 py-2.5 text-sm font-bold text-red-700 hover:bg-red-50">Reject</button>
+              </form>
+            {% endif %}
+          </div>
         </div>
       </article>
+      {% endwith %}
     {% empty %}
-      <div class="card p-8 text-center text-slate-500">No approval requests need your review.</div>
+      <div class="card p-8 text-center text-slate-500">No {{ active_status|default:"matching" }} approval requests.</div>
     {% endfor %}
   </div>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-6 flex items-center justify-between gap-4" aria-label="Approval pages">
+      <p class="text-sm text-slate-500">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</p>
+      <div class="flex gap-2">
+        {% if page_obj.has_previous %}<a class="btn-secondary" href="?status={{ active_status }}&q={{ search|urlencode }}&type={{ request_type|urlencode }}&branch={{ branch_id }}&page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+        {% if page_obj.has_next %}<a class="btn-secondary" href="?status={{ active_status }}&q={{ search|urlencode }}&type={{ request_type|urlencode }}&branch={{ branch_id }}&page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+      </div>
+    </nav>
+  {% endif %}
 {% endblock %}

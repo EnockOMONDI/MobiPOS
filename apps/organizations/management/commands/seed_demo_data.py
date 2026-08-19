@@ -1440,7 +1440,7 @@ class Command(BaseCommand):
                 },
             )
             if index in (4, 6):
-                RepairPartUsage.objects.update_or_create(
+                RepairPartUsage.objects.get_or_create(
                     organization=organization,
                     ticket=ticket,
                     product=products["glass"] if index == 4 else products["cable"],

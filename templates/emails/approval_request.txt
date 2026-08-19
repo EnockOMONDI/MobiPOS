@@ -1,9 +1,12 @@
 Approval needed
 
-{{ approval.requested_by.get_full_name|default:approval.requested_by.username }} requested approval for {{ approval.display_type }}.
+{{ approval.requested_by.get_full_name|default:approval.requested_by.email }} requested approval for {{ target.title }}.
 
 Business: {{ organization.name }}
+Affected record: {{ target.record }}
 {% if approval.branch %}Branch: {{ approval.branch.name }}
+{% endif %}{% if approval.amount %}Financial impact: KES {{ approval.amount }}
+{% endif %}{% if approval.policy %}Approval rule: {{ approval.policy.name }}
 {% endif %}Reason: {{ approval.reason }}
 
 Review request:

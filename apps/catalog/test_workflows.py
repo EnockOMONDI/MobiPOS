@@ -311,6 +311,30 @@ def test_product_detail_hides_costs_and_limits_locations_for_product_only_users(
 
 
 @pytest.mark.django_db
+def test_product_detail_links_to_complete_imei_register_when_preview_is_limited(client):
+    owner, _viewer, product, branch_a, _branch_b = _create_product_visibility_fixture()
+    location = Location.objects.get(organization=product.organization, branch=branch_a, code="NBO-WH")
+    StockUnit.objects.bulk_create([
+        StockUnit(
+            organization=product.organization,
+            product=product,
+            location=location,
+            serial_number=f"NBO-IMEI-{index:03d}",
+            status=SerialStatus.AVAILABLE,
+        )
+        for index in range(2, 11)
+    ])
+    client.force_login(owner)
+
+    response = client.get(reverse("product-detail", args=[product.id]))
+
+    assert response.status_code == 200
+    assert response.context["available_units_count"] == 11
+    assert len(response.context["available_units"]) == 10
+    assert f'{reverse("imei-history")}?q=TRACE-001&status=available'.encode() in response.content
+
+
+@pytest.mark.django_db
 def test_seeded_product_images_render_on_register_and_detail(client):
     call_command("seed_demo_data")
     owner = User.objects.get(username="brian")

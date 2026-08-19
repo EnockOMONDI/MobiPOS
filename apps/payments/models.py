@@ -24,6 +24,12 @@ class PaymentStatus(models.TextChoices):
     REFUNDED = "refunded", "Refunded"
 
 
+class PaymentVerificationSource(models.TextChoices):
+    MANUAL = "manual", "Cashier entry"
+    PROVIDER = "provider", "Provider callback"
+    RECONCILIATION = "reconciliation", "Reconciliation"
+
+
 class Payment(OrganizationOwnedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     number = models.CharField(max_length=40)
@@ -33,10 +39,29 @@ class Payment(OrganizationOwnedModel):
     status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     provider_reference = models.CharField(max_length=120, blank=True)
+    verification_source = models.CharField(
+        max_length=20,
+        choices=PaymentVerificationSource.choices,
+        blank=True,
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="verified_payments",
+    )
     received_at = models.DateTimeField(auto_now_add=True)
     received_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=("organization", "sale", "status", "received_at"),
+                name="pay_org_sale_st_recv",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(fields=("organization", "number"), name="unique_payment_number_per_org"),
             models.UniqueConstraint(

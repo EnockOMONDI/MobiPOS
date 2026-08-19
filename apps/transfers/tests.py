@@ -2,12 +2,13 @@ import pytest
 from django.contrib.auth.models import Permission
 from django.core.management import call_command
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.catalog.models import Product
-from apps.inventory.models import SerialStatus, StockBalance, StockUnit
+from apps.inventory.models import SerialStatus, StockBalance, StockMovement, StockUnit
 from apps.organizations.models import Branch, Company, Location, LocationType, Membership, MembershipStatus, Organization, Role
-from apps.transfers.models import StockTransfer, TransferDiscrepancy, TransferStatus
+from apps.transfers.models import StockTransfer, TransferDiscrepancy, TransferStatus, TransferTransition
 
 
 @pytest.mark.django_db
@@ -86,6 +87,64 @@ def test_transfer_list_is_scoped_to_accessible_organization_locations(client):
 
 
 @pytest.mark.django_db
+def test_transfer_list_paginates_without_hiding_older_records(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    source, destination = list(Location.objects.filter(organization=organization).order_by("code")[:2])
+    older = StockTransfer.objects.create(
+        organization=organization,
+        number="PAGINATED-TRANSFER-OLDER",
+        source=source,
+        destination=destination,
+        requested_by=user,
+    )
+    for index in range(21):
+        StockTransfer.objects.create(
+            organization=organization,
+            number=f"PAGINATED-TRANSFER-{index:02d}",
+            source=source,
+            destination=destination,
+            requested_by=user,
+        )
+    client.force_login(user)
+
+    first_page = client.get(reverse("transfer-list"))
+    second_page = client.get(reverse("transfer-list"), {"page": 2})
+
+    assert first_page.status_code == 200
+    assert second_page.status_code == 200
+    assert older.number.encode() not in first_page.content
+    assert older.number.encode() in second_page.content
+    assert b"matching transfers" in first_page.content
+
+
+@pytest.mark.django_db
+def test_transfer_list_filters_by_business_date_and_rejects_reversed_range(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    transfer = StockTransfer.objects.filter(organization=organization).latest("created_at")
+    transfer_date = timezone.localtime(transfer.created_at).date().isoformat()
+    client.force_login(user)
+
+    matching = client.get(
+        reverse("transfer-list"),
+        {"date_from": transfer_date, "date_to": transfer_date},
+    )
+    reversed_range = client.get(
+        reverse("transfer-list"),
+        {"date_from": "2099-08-31", "date_to": "2099-08-01"},
+    )
+
+    assert matching.status_code == 200
+    assert transfer.number.encode() in matching.content
+    assert matching.context["date_from"] == transfer_date
+    assert reversed_range.status_code == 200
+    assert b"The start date must be on or before the end date." in reversed_range.content
+
+
+@pytest.mark.django_db
 def test_transfer_staff_workflow_moves_quantity_stock(client):
     call_command("seed_demo_data")
     user = User.objects.get(username="brian")
@@ -108,6 +167,36 @@ def test_transfer_staff_workflow_moves_quantity_stock(client):
     transfer.refresh_from_db()
     assert transfer.status == "received"
     assert StockBalance.objects.get(organization=organization, product=product, location=destination).quantity == 3
+
+
+@pytest.mark.django_db
+def test_transfer_transition_replays_do_not_duplicate_stock_movements(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    source = Location.objects.filter(organization=organization, location_type="pos").order_by("code").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+    client.post(reverse("transfer-create"), {
+        "source": source.id,
+        "destination": destination.id,
+        "product": product.id,
+        "quantity": "2",
+    })
+    transfer = StockTransfer.objects.filter(organization=organization).latest("created_at")
+
+    for route_name in ("transfer-approve", "transfer-dispatch", "transfer-receive"):
+        assert client.post(reverse(route_name, args=[transfer.id])).status_code == 302
+        assert client.post(reverse(route_name, args=[transfer.id])).status_code == 302
+
+    transfer.refresh_from_db()
+    assert transfer.status == TransferStatus.RECEIVED
+    assert TransferTransition.objects.filter(transfer=transfer).count() == 3
+    assert StockMovement.objects.filter(reference_type="stock_transfer", reference_id=str(transfer.id)).count() == 2
+    assert StockBalance.objects.get(
+        organization=organization, product=product, location=destination
+    ).quantity == 2
 
 
 @pytest.mark.django_db
@@ -336,6 +425,22 @@ def test_device_search_returns_authorized_available_devices(client):
     assert response.status_code == 200
     payload = response.json()
     assert any(item["id"] == str(unit.id) for item in payload["results"])
+
+
+@pytest.mark.django_db
+def test_device_search_reports_result_limit_and_more_metadata(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    client.force_login(user)
+
+    response = client.get(reverse("device-search"), {"q": "", "limit": 1})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["limit"] == 1
+    assert payload["count"] >= len(payload["results"])
+    assert payload["has_more"] is (payload["count"] > 1)
 
 
 @pytest.mark.django_db

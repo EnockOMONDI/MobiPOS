@@ -1,0 +1,7 @@
+MobiPOS - {{ organization.name }}
+
+{{ title }}
+
+{{ message }}
+
+Review in MobiPOS: {{ action_url }}

@@ -17,14 +17,12 @@
     <div class="md:col-span-2">
       <p class="text-xs font-bold uppercase tracking-wider text-red-700">Profile</p>
       <h2 class="mt-1 text-lg font-bold">User identity</h2>
-      <p class="mt-1 text-sm text-slate-500">The user is created immediately. Use their email and temporary password for first login.</p>
+      <p class="mt-1 text-sm text-slate-500">The user is created immediately. MobiPOS emails a secure setup link that expires after three days.</p>
     </div>
     {% include "components/form_field.html" with field=form.first_name %}
     {% include "components/form_field.html" with field=form.last_name %}
     {% include "components/form_field.html" with field=form.email %}
     {% include "components/form_field.html" with field=form.phone_number %}
-    {% include "components/form_field.html" with field=form.password %}
-    {% include "components/form_field.html" with field=form.password_confirm %}
   </section>
 
   <section class="card grid gap-5 p-6 md:grid-cols-2">

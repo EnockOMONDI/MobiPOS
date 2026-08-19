@@ -2,11 +2,12 @@ import pytest
 from django.core.exceptions import ValidationError
 
 from apps.accounts.models import User
+from apps.audit.models import AuditEvent
 from apps.catalog.models import Category, Product
 from apps.contacts.models import Contact
 from apps.organizations.models import Branch, Company, Location, Organization
 from apps.operations.models import Receivable
-from apps.payments.models import Payment, PaymentStatus, Refund
+from apps.payments.models import Payment, PaymentStatus, PaymentVerificationSource, Refund
 from apps.payments.services import confirm_payment, confirm_refund, record_sale_payments
 from apps.pos.models import POSSession
 from apps.sales.models import Sale, SaleStatus
@@ -70,7 +71,7 @@ def test_confirm_payment_reconciles_receivable_balance():
 
 
 @pytest.mark.django_db
-def test_non_cash_sale_payment_stays_pending_until_provider_confirmation():
+def test_non_cash_sale_payment_is_manually_verified_for_pilot_workflow():
     user = User.objects.create_user(username="mpesa-cashier", email="mpesa@example.com")
     org = Organization.objects.create(name="Org", slug="mpesa-payment-org", status="active")
     company = Company.objects.create(organization=org, name="Company", code="CO")
@@ -90,15 +91,35 @@ def test_non_cash_sale_payment_stays_pending_until_provider_confirmation():
     )
 
     sale.refresh_from_db()
-    assert payments[0].status == PaymentStatus.PENDING
-    assert sale.paid_total == 0
-    with pytest.raises(ValidationError):
-        confirm_payment(payment=payments[0])
-
-    confirm_payment(payment=payments[0], provider_confirmed=True)
-    sale.refresh_from_db()
     assert Payment.objects.get(pk=payments[0].pk).status == PaymentStatus.CONFIRMED
+    assert Payment.objects.get(pk=payments[0].pk).verification_source == PaymentVerificationSource.MANUAL
+    event = AuditEvent.objects.get(action="payment.manually_verified", target_id=str(payments[0].pk))
+    assert event.actor == user
+    assert event.metadata["reference"] == "MPESA123"
+    sale.refresh_from_db()
     assert sale.paid_total == 1000
+
+
+@pytest.mark.django_db
+def test_electronic_payment_requires_reference_for_manual_verification():
+    user = User.objects.create_user(username="manual-cashier", email="manual@example.com")
+    org = Organization.objects.create(name="Org", slug="manual-payment-org", status="active")
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Branch", code="BR")
+    location = Location.objects.create(organization=org, branch=branch, name="POS", code="POS", location_type="pos")
+    customer = Contact.objects.create(organization=org, contact_type="customer", name="Customer")
+    session = POSSession.objects.create(organization=org, number="S1", location=location, cashier=user)
+    sale = Sale.objects.create(
+        organization=org, number="SALE1", session=session, location=location,
+        customer=customer, total=1000, created_by=user,
+    )
+    payment = Payment.objects.create(
+        organization=org, number="PAY1", customer=customer, sale=sale,
+        method="mpesa", amount=1000, received_by=user,
+    )
+
+    with pytest.raises(ValidationError):
+        confirm_payment(payment=payment, confirmed_by=user)
 
 
 @pytest.mark.django_db

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} | MobiPOS{% endblock %}
+
+{% block content %}
+  <div class="mb-6">
+    <p class="text-sm font-bold uppercase tracking-wider text-red-700">{{ eyebrow }}</p>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="mt-1 text-3xl font-bold text-slate-950">{{ title }}</h1>
+        <p class="mt-2 max-w-3xl text-slate-600">{{ description }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {% if create_url %}<a class="btn-primary" href="{{ create_url }}">{{ create_label }}</a>{% endif %}
+      {% querystring format="csv" delivery="background" page=None as export_query %}
+      <a class="btn-secondary" href="{% if export_url %}{{ export_url }}{% else %}{% url 'module-overview' export_module %}{% endif %}{{ export_query }}">Export CSV</a>
+      {% querystring format="pdf" delivery="background" page=None as pdf_export_query %}
+      <a class="btn-secondary" href="{% if export_url %}{{ export_url }}{% else %}{% url 'module-overview' export_module %}{% endif %}{{ pdf_export_query }}">Export PDF</a>
+        <a class="btn-secondary" href="{% url 'report-export-list' %}">My exports</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    {% for label, value in metrics %}
+      <div class="card p-4"><p class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ label }}</p><p class="mt-2 text-2xl font-bold text-slate-950">{{ value }}</p></div>
+    {% endfor %}
+  </div>
+
+  <form method="get" class="card mb-5 flex flex-wrap items-end gap-3 p-4">
+    <label class="min-w-0 flex-1"><span class="text-xs font-bold uppercase tracking-wider text-slate-500">Search</span><input name="q" value="{{ query }}" placeholder="Search by number, customer, supplier or reference" class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"></label>
+    <label><span class="text-xs font-bold uppercase tracking-wider text-slate-500">Status</span><select name="status" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"><option value="">All statuses</option><option value="pending" {% if status == "pending" %}selected{% endif %}>Pending</option><option value="confirmed" {% if status == "confirmed" %}selected{% endif %}>Confirmed</option><option value="completed" {% if status == "completed" %}selected{% endif %}>Completed</option><option value="received" {% if status == "received" %}selected{% endif %}>Received</option><option value="part_paid" {% if status == "part_paid" %}selected{% endif %}>Partially paid</option></select></label>
+    <label><span class="text-xs font-bold uppercase tracking-wider text-slate-500">From</span><input name="date_from" type="date" value="{{ date_from }}" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"></label>
+    <label><span class="text-xs font-bold uppercase tracking-wider text-slate-500">To</span><input name="date_to" type="date" value="{{ date_to }}" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm"></label>
+    {% if column_options %}
+      <details class="w-full rounded-xl border border-slate-200 p-3">
+        <summary class="cursor-pointer text-sm font-semibold text-slate-700">Choose columns for this workspace and export</summary>
+        <div class="mt-3 flex flex-wrap gap-3">
+          {% for index, label in column_options %}
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" name="columns" value="{{ index }}" {% if index in selected_columns %}checked{% endif %}> {{ label }}</label>
+          {% endfor %}
+        </div>
+      </details>
+    {% endif %}
+    <button class="btn-primary">Apply filters</button>
+    {% if query or status or date_from or date_to or selected_columns %}<a class="btn-secondary" href="{{ request.path }}">Clear</a>{% endif %}
+    {% for error in errors %}<p class="w-full text-sm font-semibold text-red-700" role="alert">{{ error }}</p>{% endfor %}
+  </form>
+
+  <div class="card overflow-x-auto">
+    <table class="min-w-full text-left text-sm">
+      <thead class="border-b bg-slate-50"><tr>{% for column in columns %}<th class="whitespace-nowrap px-4 py-3 font-semibold">{{ column }}</th>{% endfor %}<th class="px-4 py-3 text-right font-semibold">Action</th></tr></thead>
+      <tbody class="divide-y">
+        {% for row in rows %}<tr class="transition hover:bg-slate-50">{% for cell in row.cells %}<td class="whitespace-nowrap px-4 py-3">{{ cell|default:"—" }}</td>{% endfor %}<td class="px-4 py-3 text-right">{% if row.detail_url %}<a class="font-semibold text-red-700" href="{{ row.detail_url }}">Review</a>{% else %}<span class="text-slate-400">Recorded</span>{% endif %}</td></tr>{% empty %}<tr><td colspan="20" class="px-4 py-10 text-center text-slate-500">No records match these filters.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}<nav class="mt-4 flex items-center justify-between gap-4 text-sm" aria-label="Pagination"><p class="text-slate-500">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }}</p><div class="flex items-center gap-2">{% if page_obj.has_previous %}{% querystring page=page_obj.previous_page_number as previous_page_query %}<a class="btn-secondary" href="?{{ previous_page_query }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}{% querystring page=page_obj.next_page_number as next_page_query %}<a class="btn-secondary" href="?{{ next_page_query }}">Next</a>{% endif %}</div></nav>{% endif %}
+{% endblock %}

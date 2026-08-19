@@ -69,3 +69,11 @@ def test_owner_approves_and_pays_commission_batch(client):
     payout.refresh_from_db()
     assert payout.status == "paid"
     assert payout.lines.filter(accrual__paid_at__isnull=False).count() == payout.lines.count()
+
+    second_payment = client.post(
+        reverse("commission-payout-pay", args=[payout.id]),
+        {"payment_reference": "BANK-2"},
+    )
+    payout.refresh_from_db()
+    assert second_payment.status_code == 302
+    assert payout.payment_reference == "BANK-1"

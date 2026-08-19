@@ -1,0 +1,7 @@
+{% if page.paginator.num_pages > 1 %}
+<nav class="mt-5 flex items-center justify-between border-t pt-4 text-sm" aria-label="Statement section pages">
+  {% if previous_query %}<a class="font-bold text-red-700 hover:text-red-800" href="?{{ previous_query }}">Previous</a>{% else %}<span></span>{% endif %}
+  <span class="text-slate-500">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+  {% if next_query %}<a class="font-bold text-red-700 hover:text-red-800" href="?{{ next_query }}">Next</a>{% else %}<span></span>{% endif %}
+</nav>
+{% endif %}

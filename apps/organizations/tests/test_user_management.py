@@ -30,7 +30,9 @@ def test_owner_can_create_branch_scoped_user(client):
     assert response.status_code == 302
     assert membership.status == MembershipStatus.ACTIVE
     assert membership.user.is_active
-    assert membership.user.check_password("StrongPass123!")
+    assert not membership.user.has_usable_password()
+    assert membership.user.requires_password_setup
+    assert membership.user.account_setup_tokens.filter(used_at__isnull=True).count() == 1
     assert list(membership.branches.all()) == [branch]
     assert list(membership.roles.all()) == [role]
 

@@ -2,14 +2,13 @@
 {% block email_title %}Your MobiPOS account is ready{% endblock %}
 {% block email_body %}
   <p style="margin:0 0 12px;color:#dc2626;font-size:13px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;">Staff account created</p>
-  <h1 style="margin:0;color:#0f172a;font-size:32px;line-height:38px;font-weight:900;">Hi {{ user.first_name|default:user.username }}, your account is ready.</h1>
+  <h1 style="margin:0;color:#0f172a;font-size:32px;line-height:38px;font-weight:900;">Hi {{ user.first_name|default:user.email }}, your account is ready.</h1>
   <p style="margin:18px 0 0;color:#475569;font-size:17px;line-height:28px;">You have been added to <strong style="color:#0f172a;">{{ organization.name }}</strong> on MobiPOS by {{ created_by.get_full_name|default:created_by.username }}.</p>
   <div style="margin:28px 0;padding:22px;border:1px solid #e2e8f0;border-radius:22px;background:#fff7ed;">
-    <p style="margin:0;color:#7c2d12;font-size:15px;line-height:24px;"><strong>Your username:</strong> {{ user.username }}</p>
-    <p style="margin:10px 0 0;color:#7c2d12;font-size:15px;line-height:24px;">For your security, your temporary password is not included in this email. Get it directly from your organization owner or manager.</p>
+    <p style="margin:0;color:#7c2d12;font-size:15px;line-height:24px;"><strong>Your sign-in email:</strong> {{ user.email }}</p>
+    <p style="margin:10px 0 0;color:#7c2d12;font-size:15px;line-height:24px;">Create your private password using the secure, single-use link below. It expires on {{ expires_at|date:"d M Y, H:i" }}.</p>
   </div>
   <p style="margin:28px 0 0;">
-    <a href="{{ login_url }}" style="display:inline-block;border-radius:999px;background:#0f172a;color:#ffffff;padding:15px 24px;text-decoration:none;font-weight:900;">Sign in</a>
-    <a href="{{ password_reset_url }}" style="display:inline-block;margin-left:10px;border-radius:999px;border:1px solid #cbd5e1;color:#0f172a;padding:14px 22px;text-decoration:none;font-weight:900;">Reset password</a>
+    <a href="{{ setup_url }}" style="display:inline-block;border-radius:999px;background:#0f172a;color:#ffffff;padding:15px 24px;text-decoration:none;font-weight:900;">Set up my account</a>
   </p>
 {% endblock %}

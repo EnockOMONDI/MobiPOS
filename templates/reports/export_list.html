@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Report exports | MobiPOS{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <p class="text-sm font-semibold text-red-700">Reports</p>
+  <h1 class="text-3xl font-bold text-slate-950">Report exports</h1>
+  <p class="mt-2 text-slate-600">Large reports are prepared in the background so daily work can continue.</p>
+</div>
+<div class="card overflow-hidden">
+  <div class="divide-y divide-slate-200">
+    {% for export in page_obj %}
+      <a href="{% url 'report-export-detail' export.id %}" class="flex flex-wrap items-center justify-between gap-4 p-5 hover:bg-slate-50">
+        <div>
+          <p class="font-bold text-slate-950">{{ export.module|title }} · {{ export.export_format|upper }}</p>
+          <p class="mt-1 text-sm text-slate-500">Requested by {{ export.requested_by.get_full_name|default:export.requested_by.email }} · {{ export.created_at|date:"d M Y H:i" }}</p>
+        </div>
+        <div class="text-right">
+          <span class="status-badge">{{ export.get_status_display }}</span>
+          <p class="mt-1 text-xs text-slate-500">{{ export.row_count }} records</p>
+        </div>
+      </a>
+    {% empty %}
+      <div class="p-10 text-center text-slate-500">No background exports have been requested yet.</div>
+    {% endfor %}
+  </div>
+</div>
+{% if page_obj.paginator.num_pages > 1 %}
+  <nav class="mt-4 flex items-center justify-between text-sm" aria-label="Export pagination">
+    <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+    <div class="flex gap-2">
+      {% if page_obj.has_previous %}<a class="btn-secondary" href="?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+      {% if page_obj.has_next %}<a class="btn-secondary" href="?page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    </div>
+  </nav>
+{% endif %}
+{% endblock %}

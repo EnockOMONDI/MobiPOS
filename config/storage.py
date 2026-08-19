@@ -4,6 +4,7 @@ import json
 import mimetypes
 import time
 import uuid
+from email.utils import formatdate
 from pathlib import PurePosixPath
 from urllib import error, parse, request
 
@@ -17,6 +18,8 @@ class UploadcareMediaStorage(Storage):
     """Django storage backend for server-side Uploadcare uploads."""
 
     upload_endpoint = "https://upload.uploadcare.com/base/"
+    rest_endpoint = "https://api.uploadcare.com"
+    rest_api_accept = "application/vnd.uploadcare-v0.7+json"
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -65,9 +68,45 @@ class UploadcareMediaStorage(Storage):
         return False
 
     def delete(self, name):
-        # Deletion requires REST API credentials and should usually be audited.
-        # Keep this as a no-op until delete policy is explicitly defined.
-        return None
+        if not name:
+            return None
+        if not self.secret_key:
+            raise ImproperlyConfigured("UPLOADCARE_SECRET_KEY is required to delete Uploadcare media.")
+
+        file_uuid, _filename = self._split_name(name)
+        try:
+            normalized_uuid = str(uuid.UUID(file_uuid))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError(f"Invalid Uploadcare file name: {name}") from exc
+
+        resource_path = f"/files/{normalized_uuid}/storage/"
+        date_header = formatdate(usegmt=True)
+        content_md5 = hashlib.md5(b"", usedforsecurity=False).hexdigest()
+        signature_payload = f"DELETE\n{content_md5}\n\n{date_header}\n{resource_path}"
+        signature = hmac.new(
+            self.secret_key.encode("utf-8"),
+            signature_payload.encode("utf-8"),
+            hashlib.sha1,
+        ).hexdigest()
+        req = request.Request(
+            f"{self.rest_endpoint}{resource_path}",
+            headers={
+                "Accept": self.rest_api_accept,
+                "Authorization": f"Uploadcare {self.public_key}:{signature}",
+                "Date": date_header,
+            },
+            method="DELETE",
+        )
+        try:
+            with request.urlopen(req, timeout=getattr(settings, "UPLOADCARE_UPLOAD_TIMEOUT", 30)):
+                return None
+        except error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            details = exc.read().decode("utf-8", errors="replace")
+            raise OSError(f"Uploadcare deletion failed with status {exc.code}: {details}") from exc
+        except error.URLError as exc:
+            raise OSError(f"Uploadcare deletion failed: {exc.reason}") from exc
 
     def url(self, name):
         file_uuid, filename = self._split_name(name)

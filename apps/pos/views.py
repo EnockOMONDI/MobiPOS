@@ -4,8 +4,10 @@ from decimal import Decimal
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -24,28 +26,10 @@ from apps.organizations.permissions import accessible_locations_for, organizatio
 from apps.sales.models import Sale, SaleChannel, SaleLine
 from apps.sales.services import calculate_sale_line_amounts, complete_sale, create_credit_receivable
 from .forms import CartCompleteForm, CartItemForm, CashMovementForm, CheckoutForm, CloseSessionForm, OpenSessionForm
-from .models import CashMovement, CashMovementType, OfflineInvoiceQueue, POSSession, SessionStatus
+from .models import CashMovement, CashMovementType, OfflineInvoiceQueue, OfflineInvoiceQueueStatus, POSSession, SessionStatus
+from .services import discard_recovery_draft, reconcile_recovery_drafts, upload_recovery_draft
 
 OFFLINE_SYNC_BATCH_LIMIT = 50
-
-
-def _safe_offline_invoice_payload(invoice):
-    lines = invoice.get("lines") if isinstance(invoice.get("lines"), list) else []
-    safe_lines = []
-    for line in lines[:100]:
-        if not isinstance(line, dict):
-            continue
-        safe_lines.append({
-            "product": str(line.get("product") or "")[:200],
-            "quantity": str(line.get("quantity") or "")[:40],
-            "total": str(line.get("total") or "")[:40],
-        })
-    return {
-        "client_reference": str(invoice.get("client_reference") or invoice.get("clientReference") or "").strip()[:120],
-        "created_at": str(invoice.get("created_at") or "")[:80],
-        "location": str(invoice.get("location") or "")[:120],
-        "lines": safe_lines,
-    }
 
 
 def _apply_cash_change(*, allocations, paid_amount, total):
@@ -310,21 +294,27 @@ def cart_detail(request):
         .select_related("category", "brand")
         .order_by("category__name", "name")
     )
-    product_tiles = []
-    for product in tile_products[:24]:
-        stock_total = StockBalance.objects.filter(
+    tile_products = list(tile_products[:24])
+    tile_product_ids = [product.id for product in tile_products]
+    balance_by_product = dict(
+        StockBalance.objects.filter(
             organization=request.organization,
-            product=product,
+            product_id__in=tile_product_ids,
             location=location,
-        ).aggregate(total=Sum("quantity"))["total"] or Decimal("0")
-        available_serials = 0
-        if product.is_serialized:
-            available_serials = StockUnit.objects.filter(
-                organization=request.organization,
-                product=product,
-                location=location,
-                status=SerialStatus.AVAILABLE,
-            ).count()
+        ).values_list("product_id").annotate(total=Sum("quantity"))
+    )
+    serials_by_product = dict(
+        StockUnit.objects.filter(
+            organization=request.organization,
+            product_id__in=tile_product_ids,
+            location=location,
+            status=SerialStatus.AVAILABLE,
+        ).values_list("product_id").annotate(total=Count("id"))
+    )
+    product_tiles = []
+    for product in tile_products:
+        stock_total = balance_by_product.get(product.id, Decimal("0"))
+        available_serials = serials_by_product.get(product.id, 0) if product.is_serialized else 0
         product_tiles.append({
             "product": product,
             "stock_total": stock_total,
@@ -335,7 +325,7 @@ def cart_detail(request):
         location=location,
         created_by=request.user,
     ).exclude(status="draft").select_related("customer").order_by("-created_at")[:10]
-    queued_offline_count = OfflineInvoiceQueue.objects.filter(
+    server_recovery_count = OfflineInvoiceQueue.objects.filter(
         organization=request.organization,
         location=location,
         cashier=request.user,
@@ -354,7 +344,7 @@ def cart_detail(request):
             products__is_active=True,
         ).distinct().order_by("name"),
         "recent_sales": recent_sales,
-        "queued_offline_count": queued_offline_count,
+        "server_recovery_count": server_recovery_count,
     })
 
 
@@ -368,11 +358,11 @@ def offline_invoice_sync(request):
         return JsonResponse({"ok": False, "error": "Your account has no assigned POS location."}, status=400)
     session = _open_session(request, location)
     if not session:
-        return JsonResponse({"ok": False, "error": "Open your register before syncing offline invoices."}, status=400)
+        return JsonResponse({"ok": False, "error": "Open your register before uploading recovery drafts."}, status=400)
     try:
         payload = json.loads(request.body.decode("utf-8"))
     except json.JSONDecodeError:
-        return JsonResponse({"ok": False, "error": "Offline invoice payload is not valid JSON."}, status=400)
+        return JsonResponse({"ok": False, "error": "Recovery draft data is not valid JSON."}, status=400)
     invoices = payload.get("invoices")
     if not isinstance(invoices, list):
         return JsonResponse({"ok": False, "error": "Expected an invoices list."}, status=400)
@@ -380,7 +370,7 @@ def offline_invoice_sync(request):
         return JsonResponse(
             {
                 "ok": False,
-                "error": f"Sync a maximum of {OFFLINE_SYNC_BATCH_LIMIT} offline drafts at a time.",
+                "error": f"Upload a maximum of {OFFLINE_SYNC_BATCH_LIMIT} recovery drafts at a time.",
                 "accepted": [],
                 "rejected": [{"reason": "batch_limit_exceeded"}],
             },
@@ -392,28 +382,69 @@ def offline_invoice_sync(request):
         if not isinstance(invoice, dict):
             rejected.append({"client_reference": "", "reason": "invalid_invoice"})
             continue
-        safe_invoice = _safe_offline_invoice_payload(invoice)
-        client_reference = safe_invoice["client_reference"]
-        if not client_reference:
-            rejected.append({"client_reference": "", "reason": "missing_client_reference"})
+        client_reference = str(invoice.get("client_reference") or invoice.get("clientReference") or "").strip()[:120]
+        try:
+            upload_recovery_draft(
+                organization=request.organization,
+                session=session,
+                location=location,
+                cashier=request.user,
+                invoice=invoice,
+                request=request,
+            )
+        except ValidationError as error:
+            rejected.append({"client_reference": client_reference, "reason": "; ".join(error.messages)})
             continue
-        queue, created = OfflineInvoiceQueue.objects.update_or_create(
-            organization=request.organization,
-            client_reference=client_reference,
-            defaults={
-                "session": session,
-                "location": location,
-                "cashier": request.user,
-                "payload": safe_invoice,
-                "status": "queued",
-                "error_message": "",
-                "synced_at": timezone.now(),
-            },
-        )
-        if created:
-            record_audit_event(action="pos.offline_invoice_queued", actor=request.user, organization=request.organization, target=queue, request=request)
         accepted.append(client_reference)
-    return JsonResponse({"ok": True, "queued": len(accepted), "accepted": accepted, "rejected": rejected})
+    return JsonResponse({"ok": True, "uploaded": len(accepted), "queued": len(accepted), "accepted": accepted, "rejected": rejected})
+
+
+def _recovery_drafts_for_request(request):
+    queryset = OfflineInvoiceQueue.objects.filter(
+        organization=request.organization,
+        location__in=accessible_locations_for(request.user, request.organization),
+    ).select_related("session", "location", "cashier", "draft_sale", "reviewed_by")
+    membership = request.membership
+    if not (request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner)):
+        queryset = queryset.filter(cashier=request.user)
+    return queryset
+
+
+@login_required
+@organization_permission_required("sales.add_sale")
+def recovery_draft_list(request):
+    queryset = _recovery_drafts_for_request(request)
+    status = (request.GET.get("status") or "").strip()
+    if status in OfflineInvoiceQueueStatus.values:
+        queryset = queryset.filter(status=status)
+    page = Paginator(queryset, 25).get_page(request.GET.get("page"))
+    return render(request, "pos/recovery_draft_list.html", {"page": page, "selected_status": status, "statuses": OfflineInvoiceQueueStatus.choices})
+
+
+@login_required
+@organization_permission_required("sales.add_sale")
+def recovery_draft_detail(request, draft_id):
+    recovery = get_object_or_404(_recovery_drafts_for_request(request), id=draft_id)
+    membership = request.membership
+    can_discard = recovery.cashier_id == request.user.id or request.user.is_superuser or request.user.is_platform_admin or bool(membership and membership.is_owner)
+    return render(request, "pos/recovery_draft_detail.html", {"recovery": recovery, "can_discard": can_discard})
+
+
+@login_required
+@organization_permission_required("sales.add_sale")
+@require_POST
+def recovery_draft_discard(request, draft_id):
+    recovery = get_object_or_404(_recovery_drafts_for_request(request), id=draft_id)
+    membership = request.membership
+    if not (recovery.cashier_id == request.user.id or request.user.is_superuser or request.user.is_platform_admin or (membership and membership.is_owner)):
+        raise PermissionDenied("You cannot discard another cashier's recovery draft.")
+    try:
+        discard_recovery_draft(recovery=recovery, actor=request.user, reason=request.POST.get("reason"), request=request)
+    except ValidationError as error:
+        messages.error(request, "; ".join(error.messages))
+        return redirect("pos-recovery-detail", draft_id=recovery.id)
+    messages.success(request, "Recovery draft discarded. The reason is retained in the audit trail.")
+    return redirect("pos-recovery-detail", draft_id=recovery.id)
 
 
 @login_required
@@ -580,6 +611,7 @@ def cart_complete(request, sale_id):
     if credit_balance > 0:
         create_credit_receivable(sale=sale, amount=credit_balance)
     create_sale_fiscal_document(sale=sale)
+    reconcile_recovery_drafts(sale=sale, actor=request.user, request=request)
     message = f"Sale {sale.number} completed."
     if change_due:
         message += f" Change due: KES {change_due}."
@@ -628,7 +660,12 @@ def cash_movement_create(request, session_id):
 @require_POST
 @transaction.atomic
 def close_session(request, session_id):
-    session = get_object_or_404(POSSession, id=session_id, organization=request.organization, cashier=request.user)
+    session = get_object_or_404(
+        POSSession.objects.select_for_update(),
+        id=session_id,
+        organization=request.organization,
+        cashier=request.user,
+    )
     form = CloseSessionForm(request.POST)
     if form.is_valid() and session.status == SessionStatus.OPEN:
         cash_sales = Payment.objects.filter(
@@ -665,11 +702,15 @@ def close_session(request, session_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def review_session(request, session_id):
     session = get_object_or_404(
-        POSSession, id=session_id, organization=request.organization, status=SessionStatus.CLOSED
+        POSSession.objects.select_for_update(),
+        id=session_id,
+        organization=request.organization,
+        status=SessionStatus.CLOSED,
     )
-    approval = ApprovalRequest.objects.filter(
+    approval = ApprovalRequest.objects.select_for_update().filter(
         organization=request.organization,
         request_type="session_variance",
         target_type="pos.POSSession",

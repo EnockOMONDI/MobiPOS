@@ -1,9 +1,14 @@
+import uuid
+from decimal import Decimal
+
 import pytest
 from django.contrib.auth.models import Permission
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
@@ -12,7 +17,8 @@ from apps.inventory.models import StockBalance
 from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization, Role
 from apps.purchasing.forms import PurchaseOrderForm
 from apps.purchasing.models import PurchaseDiscrepancy, PurchaseOrder, SupplierReturn
-from apps.operations.models import Payable
+from apps.operations.models import Payable, PayablePayment
+from apps.operations.payables import record_payable_payment, reverse_payable_payment
 
 
 @pytest.mark.django_db
@@ -39,6 +45,189 @@ def test_purchase_staff_workflow_receives_stock(client):
     assert order.status == "received"
     assert StockBalance.objects.get(organization=organization, product=product, location=destination).quantity == 5
     assert Payable.objects.get(purchase_order=order).outstanding_amount == 4000
+
+
+@pytest.mark.django_db
+def test_purchase_receipt_replay_does_not_double_post_stock(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").first()
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+    client.post(reverse("purchase-create"), {
+        "supplier": supplier.id,
+        "destination": destination.id,
+        "product": product.id,
+        "quantity": "5",
+        "unit_cost": "800",
+    })
+    order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+    client.post(reverse("purchase-approve", args=[order.id]))
+    line = order.lines.get()
+    request_id = uuid.uuid4()
+    payload = {"request_id": str(request_id), "quantity": "2", "serial_numbers": ""}
+
+    first = client.post(reverse("purchase-receive", args=[line.id]), payload)
+    second = client.post(reverse("purchase-receive", args=[line.id]), payload)
+
+    line.refresh_from_db()
+    assert first.status_code == 302
+    assert second.status_code == 302
+    assert line.received_quantity == 2
+    assert StockBalance.objects.get(
+        organization=organization, product=product, location=destination
+    ).quantity == 2
+
+
+@pytest.mark.django_db
+def test_later_purchase_receipt_preserves_recorded_payable_progress(client):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").first()
+    product = Product.objects.get(organization=organization, sku="CHG-20W")
+    client.force_login(user)
+    client.post(reverse("purchase-create"), {
+        "supplier": supplier.id,
+        "destination": destination.id,
+        "product": product.id,
+        "quantity": "5",
+        "unit_cost": "800",
+    })
+    order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+    client.post(reverse("purchase-approve", args=[order.id]))
+    line = order.lines.get()
+    client.post(reverse("purchase-receive", args=[line.id]), {
+        "request_id": str(uuid.uuid4()),
+        "quantity": "2",
+        "serial_numbers": "",
+    })
+    payable = Payable.objects.get(purchase_order=order)
+    record_payable_payment(
+        payable=payable,
+        actor=user,
+        request_id=uuid.uuid4(),
+        amount=600,
+        method="cash",
+    )
+
+    client.post(reverse("purchase-receive", args=[line.id]), {
+        "request_id": str(uuid.uuid4()),
+        "quantity": "3",
+        "serial_numbers": "",
+    })
+
+    payable.refresh_from_db()
+    assert payable.original_amount == 4000
+    assert payable.outstanding_amount == 3400
+
+
+@pytest.mark.django_db
+def test_supplier_payment_is_partial_idempotent_and_reversible(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    payable = Payable.objects.filter(organization=organization, outstanding_amount__gte=1000).first()
+    request_id = uuid.uuid4()
+
+    payment, created = record_payable_payment(
+        payable=payable,
+        actor=owner,
+        request_id=request_id,
+        amount=Decimal("500.00"),
+        method="mpesa",
+        reference="SUPPLIER-MPESA-001",
+    )
+    replay, replay_created = record_payable_payment(
+        payable=payable,
+        actor=owner,
+        request_id=request_id,
+        amount=Decimal("500.00"),
+        method="mpesa",
+        reference="SUPPLIER-MPESA-001",
+    )
+
+    payable.refresh_from_db()
+    assert created is True
+    assert replay_created is False
+    assert replay.id == payment.id
+    assert PayablePayment.objects.filter(request_id=request_id).count() == 1
+    assert payable.outstanding_amount == payable.original_amount - 500
+
+    reverse_payable_payment(payment=payment, actor=owner, reason="Duplicate bank settlement")
+    payable.refresh_from_db()
+    payment.refresh_from_db()
+    assert payment.reversed_at is not None
+    assert payable.outstanding_amount == payable.original_amount
+
+
+@pytest.mark.django_db
+def test_supplier_payment_rejects_overpayment_and_duplicate_reference():
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    payables = list(Payable.objects.filter(organization=organization, outstanding_amount__gt=0)[:2])
+    assert len(payables) == 2
+
+    with pytest.raises(ValidationError, match="exceeds the outstanding balance"):
+        record_payable_payment(
+            payable=payables[0], actor=owner, request_id=uuid.uuid4(),
+            amount=payables[0].outstanding_amount + 1, method="cash",
+        )
+
+    record_payable_payment(
+        payable=payables[0], actor=owner, request_id=uuid.uuid4(),
+        amount=1, method="bank", reference="BANK-REFERENCE-ONCE",
+    )
+    with pytest.raises(ValidationError, match="reference has already been used"):
+        record_payable_payment(
+            payable=payables[1], actor=owner, request_id=uuid.uuid4(),
+            amount=1, method="bank", reference="BANK-REFERENCE-ONCE",
+        )
+
+
+@pytest.mark.django_db
+def test_supplier_payment_record_is_immutable():
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    payable = Payable.objects.filter(organization__slug="nairobi-mobile-hub", outstanding_amount__gt=0).first()
+    payment, _ = record_payable_payment(
+        payable=payable, actor=owner, request_id=uuid.uuid4(), amount=1, method="cash",
+    )
+    payment.notes = "Changed"
+    with pytest.raises(ValidationError, match="immutable"):
+        payment.save()
+    with pytest.raises(ValidationError, match="cannot be deleted"):
+        payment.delete()
+
+
+@pytest.mark.django_db
+def test_payable_page_records_payment_and_is_tenant_scoped(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    payable = Payable.objects.filter(organization=organization, outstanding_amount__gt=100).first()
+    other_org = Organization.objects.exclude(id=organization.id).first()
+    other_payable = Payable.objects.filter(organization=other_org).first()
+    client.force_login(owner)
+
+    page = client.get(reverse("payable-detail", args=[payable.id]))
+    posted = client.post(reverse("payable-payment-create", args=[payable.id]), {
+        "request_id": str(uuid.uuid4()),
+        "amount": "100.00",
+        "method": "cash",
+        "reference": "",
+        "notes": "Part payment",
+    })
+
+    assert page.status_code == 200
+    assert posted.status_code == 302
+    assert PayablePayment.objects.filter(payable=payable, amount=100).exists()
+    if other_payable:
+        assert client.get(reverse("payable-detail", args=[other_payable.id])).status_code == 404
 
 
 @pytest.mark.django_db
@@ -262,7 +451,7 @@ def test_purchase_document_extraction_reads_csv_attachment(client, tmp_path):
 
 
 @pytest.mark.django_db
-def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_path):
+def test_purchase_create_rejects_spreadsheet_with_invalid_contents(client, tmp_path):
     call_command("seed_demo_data")
     user = User.objects.get(username="brian")
     organization = Organization.objects.get(slug="nairobi-mobile-hub")
@@ -277,7 +466,7 @@ def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
     with override_settings(MEDIA_ROOT=tmp_path):
-        client.post(reverse("purchase-create"), {
+        response = client.post(reverse("purchase-create"), {
             "supplier": supplier.id,
             "destination": destination.id,
             "supplier_reference": "BAD-XLSX-9001",
@@ -286,7 +475,40 @@ def test_purchase_document_extraction_handles_corrupted_spreadsheet(client, tmp_
             "quantity": "4",
             "unit_cost": "800",
         })
-        order = PurchaseOrder.objects.filter(organization=organization).latest("created_at")
+
+    assert response.status_code == 200
+    assert b"contents do not match the .xlsx file type" in response.content
+    assert not PurchaseOrder.objects.filter(
+        organization=organization,
+        supplier_reference="BAD-XLSX-9001",
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_purchase_document_extraction_handles_legacy_corrupted_spreadsheet(client, tmp_path):
+    call_command("seed_demo_data")
+    user = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    supplier = Contact.objects.filter(organization=organization, contact_type="supplier").order_by("name").first()
+    destination = Location.objects.filter(organization=organization, location_type="warehouse").order_by("code").first()
+    client.force_login(user)
+
+    upload = SimpleUploadedFile(
+        "legacy-corrupt.xlsx",
+        b"not a real workbook",
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    with override_settings(MEDIA_ROOT=tmp_path):
+        order = PurchaseOrder.objects.create(
+            organization=organization,
+            number="PO-LEGACY-CORRUPT",
+            supplier=supplier,
+            destination=destination,
+            ordered_on=timezone.localdate(),
+            supplier_reference="LEGACY-BAD-XLSX",
+            attachment=upload,
+            created_by=user,
+        )
         response = client.post(reverse("purchase-extract-document", args=[order.id]), follow=True)
         order.refresh_from_db()
 

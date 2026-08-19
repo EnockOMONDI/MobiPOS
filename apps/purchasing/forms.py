@@ -1,11 +1,13 @@
+import uuid
+
 from django import forms
-from pathlib import Path
 
 from apps.catalog.models import Product
 from apps.contacts.models import Contact
 from apps.organizations.models import Location
 from apps.organizations.permissions import accessible_locations_for
 from apps.inventory.models import StockUnit
+from config.uploads import validate_uploaded_content
 from .models import PurchaseOrderLine
 
 
@@ -72,13 +74,12 @@ class PurchaseOrderForm(forms.Form):
         attachment = self.cleaned_data.get("attachment")
         if not attachment:
             return attachment
-        extension = Path(attachment.name or "").suffix.lower()
-        if extension not in self.ALLOWED_ATTACHMENT_EXTENSIONS:
-            allowed = ", ".join(sorted(self.ALLOWED_ATTACHMENT_EXTENSIONS))
-            raise forms.ValidationError(f"Unsupported supplier document type. Allowed file types: {allowed}.")
-        if attachment.size > self.MAX_ATTACHMENT_SIZE:
-            raise forms.ValidationError("Supplier document must be 5 MB or smaller.")
-        return attachment
+        return validate_uploaded_content(
+            attachment,
+            allowed_extensions=self.ALLOWED_ATTACHMENT_EXTENSIONS,
+            max_size=self.MAX_ATTACHMENT_SIZE,
+            label="Supplier document",
+        )
 
     def clean(self):
         cleaned = super().clean()
@@ -107,6 +108,7 @@ class PurchaseOrderForm(forms.Form):
 
 
 class ReceivePurchaseLineForm(forms.Form):
+    request_id = forms.UUIDField(widget=forms.HiddenInput, required=False)
     quantity = forms.DecimalField(min_value=1, decimal_places=3)
     serial_numbers = forms.CharField(
         required=False,
@@ -119,6 +121,14 @@ class ReceivePurchaseLineForm(forms.Form):
         help_text="Use when this is the supplier's final delivery and expected stock is missing or damaged.",
     )
     discrepancy_reason = forms.CharField(widget=forms.Textarea, required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound:
+            self.fields["request_id"].initial = uuid.uuid4()
+
+    def clean_request_id(self):
+        return self.cleaned_data.get("request_id") or uuid.uuid4()
 
     def serial_list(self):
         return [item.strip() for item in self.cleaned_data["serial_numbers"].splitlines() if item.strip()]

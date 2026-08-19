@@ -39,6 +39,14 @@
           <p class="text-sm font-semibold">{{ user.get_full_name|default:user.username }}</p>
           <p class="text-xs text-slate-500">{{ active_organization|default:"Platform administration" }}</p>
         </div>
+        <a href="{% url 'approval-inbox' %}" class="relative grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700" aria-label="Work inbox{% if pending_approval_count %}, {{ pending_approval_count }} pending{% endif %}">
+          <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75A2.25 2.25 0 0 1 6 4.5h12a2.25 2.25 0 0 1 2.25 2.25v10.5A2.25 2.25 0 0 1 18 19.5H6a2.25 2.25 0 0 1-2.25-2.25V6.75Zm0 7.5h4.07a2.25 2.25 0 0 0 1.8.9h4.76a2.25 2.25 0 0 0 1.8-.9h4.07"/></svg>
+          {% if pending_approval_count %}<span class="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white">{{ pending_approval_count|default:"" }}</span>{% endif %}
+        </a>
+        <a href="{% url 'notification-list' %}" class="relative grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700" aria-label="Notifications{% if unread_notification_count %}, {{ unread_notification_count }} unread{% endif %}">
+          <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022 23.848 23.848 0 0 0 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"/></svg>
+          {% if unread_notification_count %}<span class="absolute -right-1.5 -top-1.5 grid min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-black leading-5 text-white">{{ unread_notification_count }}</span>{% endif %}
+        </a>
         <a href="{% url 'help-center' %}" class="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700" aria-label="Help center">
           <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.178-.43.326-.67.442-.745.361-1.451.999-1.451 1.827v.75M12 18h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
         </a>
@@ -114,7 +122,7 @@
         {% endfor %}
       </nav>
       <div class="border-t border-slate-100 p-4">
-        <p class="text-xs leading-5 text-slate-400">Locked actions stay visible. Select one to request access from your administrator.</p>
+        <p class="text-xs leading-5 text-slate-600">Locked actions stay visible. Select one to request access from your administrator.</p>
         <p class="mt-2 text-xs font-semibold text-red-700">Powered by Kipekee Networks</p>
       </div>
     </aside>

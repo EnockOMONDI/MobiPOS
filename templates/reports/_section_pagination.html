@@ -1,0 +1,7 @@
+{% if page.paginator.num_pages > 1 %}
+  <nav class="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-sm" aria-label="{{ label }} pagination">
+    {% if pagination.previous %}<a class="font-bold text-red-700 hover:text-red-800" href="?{{ pagination.previous }}">Previous</a>{% else %}<span></span>{% endif %}
+    <span class="text-slate-500">{{ page.start_index }}-{{ page.end_index }} of {{ page.paginator.count }}</span>
+    {% if pagination.next %}<a class="font-bold text-red-700 hover:text-red-800" href="?{{ pagination.next }}">Next</a>{% else %}<span></span>{% endif %}
+  </nav>
+{% endif %}

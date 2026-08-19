@@ -13,6 +13,7 @@
         {% endif %}
         <a class="btn-secondary" href="?format=csv{% if active_querystring %}&{{ active_querystring }}{% endif %}">Export CSV</a>
         <a class="btn-secondary" href="?format=pdf{% if active_querystring %}&{{ active_querystring }}{% endif %}">Export PDF</a>
+        <a class="btn-secondary" href="{% url 'report-export-list' %}">My exports</a>
         <button type="button" class="btn-secondary" onclick="window.print()">Print</button>
       </div>
     </div>
@@ -30,6 +31,14 @@
       </select>
     </label>
     {% endif %}
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">From date</span>
+      <input name="date_from" type="date" value="{{ date_from }}" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+    </label>
+    <label>
+      <span class="text-xs font-bold uppercase tracking-wider text-slate-500">To date</span>
+      <input name="date_to" type="date" value="{{ date_to }}" class="mt-2 rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+    </label>
     {% for control in filter_controls %}
     <label>
       <span class="text-xs font-bold uppercase tracking-wider text-slate-500">{{ control.label }}</span>
@@ -43,6 +52,9 @@
     {% endfor %}
     <button class="btn-primary">Apply filters</button>
     {% if clear_filters %}<a class="btn-secondary" href="{{ request.path }}">Clear</a>{% endif %}
+    {% if date_filter_error %}
+      <p class="w-full text-sm font-semibold text-red-700" role="alert">{{ date_filter_error }}</p>
+    {% endif %}
   </form>
   <details class="card mb-5 p-4">
     <summary class="cursor-pointer text-sm font-bold text-slate-700">Column visibility</summary>

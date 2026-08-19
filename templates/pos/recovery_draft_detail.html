@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Recovery draft | MobiPOS{% endblock %}
+{% block content %}
+<div class="flex flex-wrap items-end justify-between gap-4">
+  <div><p class="text-sm font-semibold text-red-700">Recovery draft</p><h1 class="mt-1 text-3xl font-bold tracking-tight">{{ recovery.client_reference }}</h1><p class="mt-2 text-sm text-slate-600">{{ recovery.location }} · {{ recovery.created_at|date:"d M Y H:i" }}</p></div>
+  <a class="btn-secondary" href="{% url 'pos-recovery-list' %}">Back to recovery drafts</a>
+</div>
+
+<div class="mt-6 rounded-3xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
+  <h2 class="font-bold">This is recovery evidence, not a completed transaction</h2>
+  <p class="mt-2 text-sm leading-6">Uploading this draft did not create a sale, collect a payment, issue a receipt, or move stock. Complete the linked live cart through the normal POS workflow before treating it as a sale.</p>
+</div>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+  <section class="card p-6">
+    <div class="flex items-center justify-between gap-3"><h2 class="text-xl font-bold">Product summary</h2><span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold">{{ recovery.get_status_display }}</span></div>
+    <div class="mt-5 space-y-3">
+      {% for line in recovery.payload.lines %}<div class="flex items-center justify-between rounded-2xl bg-slate-50 p-4"><span><strong class="block">{{ line.product|default:"Unnamed product" }}</strong><small class="text-slate-500">Quantity {{ line.quantity|default:"-" }}</small></span><strong>{{ line.total|default:"-" }}</strong></div>{% empty %}<p class="text-sm text-slate-500">No product summaries were captured.</p>{% endfor %}
+    </div>
+  </section>
+  <aside class="space-y-6">
+    <section class="card p-6"><h2 class="font-bold">Review evidence</h2><dl class="mt-4 space-y-3 text-sm"><div><dt class="text-slate-500">Cashier</dt><dd class="font-semibold">{{ recovery.cashier.get_full_name|default:recovery.cashier.email }}</dd></div><div><dt class="text-slate-500">Device ID</dt><dd class="break-all font-mono text-xs">{{ recovery.device_id|default:"Legacy device record" }}</dd></div><div><dt class="text-slate-500">Linked cart</dt><dd class="font-semibold">{% if recovery.draft_sale %}{{ recovery.draft_sale.number }}{% else %}Not linked{% endif %}</dd></div>{% if recovery.sale_number %}<div><dt class="text-slate-500">Reconciled sale</dt><dd><a class="font-bold text-red-700" href="{% url 'sale-detail' recovery.draft_sale_id %}">{{ recovery.sale_number }}</a></dd></div>{% endif %}{% if recovery.reviewed_by %}<div><dt class="text-slate-500">Reviewed by</dt><dd class="font-semibold">{{ recovery.reviewed_by.get_full_name|default:recovery.reviewed_by.email }}</dd></div>{% endif %}{% if recovery.review_notes %}<div><dt class="text-slate-500">Review note</dt><dd>{{ recovery.review_notes }}</dd></div>{% endif %}</dl></section>
+    {% if recovery.draft_sale and recovery.draft_sale.status == 'draft' %}<a class="btn-primary block text-center" href="{% url 'pos-cart' %}">Open linked POS cart</a>{% endif %}
+    {% if can_discard and recovery.status != 'completed' and recovery.status != 'discarded' %}<form class="card p-6" method="post" action="{% url 'pos-recovery-discard' recovery.id %}">{% csrf_token %}<label class="text-sm font-bold" for="discard-reason">Reason for discarding</label><textarea class="mt-2 w-full rounded-2xl border border-slate-300 p-3" id="discard-reason" name="reason" rows="3" required minlength="5"></textarea><button class="btn-secondary mt-3 w-full" type="submit">Discard with audit record</button></form>{% endif %}
+  </aside>
+</div>
+{% endblock %}

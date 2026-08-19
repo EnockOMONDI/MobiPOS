@@ -17,14 +17,16 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: BACKGROUND_WORKERS_ENABLED
-        value: "false"
       - key: ALLOWED_HOSTS
         sync: false
+      - key: BACKGROUND_WORKERS_ENABLED
+        value: "true"
       - key: CSRF_TRUSTED_ORIGINS
         sync: false
       - key: SENTRY_DSN
         sync: false
+      - key: SENTRY_REQUIRED
+        value: "true"
       - key: INTEGRATION_MODE
         value: disabled
       - key: PRIVILEGED_OTP_REQUIRED
@@ -32,37 +34,31 @@ services:
       - key: POS_AUTO_OPEN_SESSION
         value: "false"
       - key: EMAIL_DELIVERY_REQUIRED
-        value: "false"
-      - key: EMAIL_BACKEND
-        sync: false
-      - key: EMAIL_HOST
-        sync: false
-      - key: EMAIL_PORT
-        value: "587"
-      - key: EMAIL_HOST_USER
-        sync: false
-      - key: EMAIL_HOST_PASSWORD
-        sync: false
-      - key: EMAIL_USE_TLS
         value: "true"
+      - key: EMAIL_BACKEND
+        value: apps.notifications.backends.OutboxEmailBackend
+      - key: MAILERSEND_API_TOKEN
+        sync: false
       - key: DEFAULT_FROM_EMAIL
         sync: false
-      - key: MEDIA_STORAGE_REQUIRED
-        value: "false"
-      - key: MEDIA_STORAGE_BACKEND
+      - key: APP_BASE_URL
         sync: false
+      - key: MEDIA_STORAGE_REQUIRED
+        value: "true"
+      - key: MEDIA_STORAGE_BACKEND
+        value: uploadcare
       - key: UPLOADCARE_PUBLIC_KEY
         sync: false
       - key: UPLOADCARE_SECRET_KEY
         sync: false
       - key: UPLOADCARE_SIGNED_UPLOADS
-        value: "false"
+        value: "true"
       - key: UPLOADCARE_SIGNED_DELIVERY
-        value: "false"
+        value: "true"
       - key: UPLOADCARE_SIGNING_SECRET
         sync: false
       - key: UPLOADCARE_CDN_BASE_URL
-        value: https://ucarecdn.com
+        sync: false
   - type: worker
     name: mobipos-worker
     runtime: python
@@ -77,15 +73,63 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
       - key: BACKGROUND_WORKERS_ENABLED
         value: "true"
+      - key: EMAIL_DELIVERY_REQUIRED
+        value: "true"
+      - key: EMAIL_BACKEND
+        value: apps.notifications.backends.OutboxEmailBackend
+      - key: MAILERSEND_API_TOKEN
+        sync: false
+      - key: DEFAULT_FROM_EMAIL
+        sync: false
+      - key: APP_BASE_URL
+        sync: false
       - key: INTEGRATION_MODE
         value: disabled
       - key: MEDIA_STORAGE_BACKEND
-        sync: false
+        value: uploadcare
+      - key: MEDIA_STORAGE_REQUIRED
+        value: "true"
       - key: UPLOADCARE_PUBLIC_KEY
         sync: false
       - key: UPLOADCARE_SECRET_KEY
+        sync: false
+      - key: UPLOADCARE_SIGNED_UPLOADS
+        value: "true"
+      - key: UPLOADCARE_SIGNED_DELIVERY
+        value: "true"
+      - key: UPLOADCARE_SIGNING_SECRET
+        sync: false
+      - key: UPLOADCARE_CDN_BASE_URL
+        sync: false
+      - key: SENTRY_REQUIRED
+        value: "true"
+      - key: SENTRY_DSN
+        sync: false
+      - key: BACKUP_ENABLED
+        value: "false"
+      - key: BACKUP_SOURCE_DATABASE_URL
+        sync: false
+      - key: BACKUP_STORAGE_BACKEND
+        value: supabase
+      - key: BACKUP_SUPABASE_URL
+        sync: false
+      - key: BACKUP_SUPABASE_SERVICE_KEY
+        sync: false
+      - key: BACKUP_SUPABASE_BUCKET
+        value: database-backups
+      - key: BACKUP_ENCRYPTION_KEY
+        sync: false
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+      - key: BACKUP_RESTORE_DRILL_ENABLED
+        value: "false"
+      - key: BACKUP_RESTORE_DATABASE_URL
+        sync: false
+      - key: BACKUP_RESTORE_PROJECT_REF
         sync: false
   - type: worker
     name: mobipos-scheduler
@@ -101,13 +145,51 @@ services:
         sync: false
       - key: REDIS_URL
         sync: false
+      - key: ALLOWED_HOSTS
+        sync: false
       - key: BACKGROUND_WORKERS_ENABLED
         value: "true"
       - key: INTEGRATION_MODE
         value: disabled
       - key: MEDIA_STORAGE_BACKEND
-        sync: false
+        value: uploadcare
+      - key: MEDIA_STORAGE_REQUIRED
+        value: "true"
       - key: UPLOADCARE_PUBLIC_KEY
         sync: false
       - key: UPLOADCARE_SECRET_KEY
+        sync: false
+      - key: UPLOADCARE_SIGNED_UPLOADS
+        value: "true"
+      - key: UPLOADCARE_SIGNED_DELIVERY
+        value: "true"
+      - key: UPLOADCARE_SIGNING_SECRET
+        sync: false
+      - key: UPLOADCARE_CDN_BASE_URL
+        sync: false
+      - key: SENTRY_REQUIRED
+        value: "true"
+      - key: SENTRY_DSN
+        sync: false
+      - key: BACKUP_ENABLED
+        value: "false"
+      - key: BACKUP_SOURCE_DATABASE_URL
+        sync: false
+      - key: BACKUP_STORAGE_BACKEND
+        value: supabase
+      - key: BACKUP_SUPABASE_URL
+        sync: false
+      - key: BACKUP_SUPABASE_SERVICE_KEY
+        sync: false
+      - key: BACKUP_SUPABASE_BUCKET
+        value: database-backups
+      - key: BACKUP_ENCRYPTION_KEY
+        sync: false
+      - key: BACKUP_RETENTION_DAYS
+        value: "30"
+      - key: BACKUP_RESTORE_DRILL_ENABLED
+        value: "false"
+      - key: BACKUP_RESTORE_DATABASE_URL
+        sync: false
+      - key: BACKUP_RESTORE_PROJECT_REF
         sync: false

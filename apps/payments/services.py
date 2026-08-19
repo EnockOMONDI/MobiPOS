@@ -4,10 +4,9 @@ from django.db.models import Sum
 from django.utils import timezone
 
 from apps.sales.models import SaleStatus
-from .models import Payment, PaymentMethod, PaymentStatus
+from .models import Payment, PaymentMethod, PaymentStatus, PaymentVerificationSource
 
 
-IMMEDIATE_CONFIRMATION_METHODS = {PaymentMethod.CASH}
 PROVIDER_CONFIRMED_METHODS = {PaymentMethod.MPESA, PaymentMethod.CARD, PaymentMethod.BANK}
 
 
@@ -39,8 +38,11 @@ def record_sale_payments(*, sale, allocations, received_by):
             provider_reference=provider_reference,
             received_by=received_by,
         )
-        if payment.method in IMMEDIATE_CONFIRMATION_METHODS:
-            confirm_payment(payment=payment)
+        confirm_payment(
+            payment=payment,
+            confirmed_by=received_by,
+            verification_source=PaymentVerificationSource.MANUAL,
+        )
         payments.append(payment)
     return payments
 
@@ -82,15 +84,47 @@ def allocate_sale_refund(*, sale, amount, reason, approved_by):
 
 
 @transaction.atomic
-def confirm_payment(*, payment, confirmed_by=None, provider_confirmed=False):
+def confirm_payment(
+    *,
+    payment,
+    confirmed_by=None,
+    verification_source=PaymentVerificationSource.MANUAL,
+):
     if payment.status == PaymentStatus.CONFIRMED:
         return payment
     if payment.status != PaymentStatus.PENDING:
         raise ValidationError("Only pending payments can be confirmed.")
-    if payment.method in PROVIDER_CONFIRMED_METHODS and not provider_confirmed:
-        raise ValidationError("This payment must be confirmed by provider callback, reconciliation, or authorized manual confirmation.")
+    valid_sources = {choice for choice, _label in PaymentVerificationSource.choices}
+    if verification_source not in valid_sources:
+        raise ValidationError("Select a valid payment verification source.")
+    if payment.method in PROVIDER_CONFIRMED_METHODS and verification_source == PaymentVerificationSource.MANUAL:
+        if not confirmed_by:
+            raise ValidationError("A staff member must verify manually recorded electronic payments.")
+        if not payment.provider_reference:
+            raise ValidationError("A payment reference is required for manually recorded electronic payments.")
     payment.status = PaymentStatus.CONFIRMED
-    payment.save(update_fields=["status", "updated_at"])
+    payment.verification_source = verification_source
+    payment.verified_at = timezone.now()
+    payment.verified_by = confirmed_by
+    payment.save(update_fields=[
+        "status", "verification_source", "verified_at", "verified_by", "updated_at",
+    ])
+    from apps.audit.services import record_audit_event
+    record_audit_event(
+        action=(
+            "payment.manually_verified"
+            if verification_source == PaymentVerificationSource.MANUAL
+            else "payment.provider_verified"
+        ),
+        actor=confirmed_by,
+        organization=payment.organization,
+        target=payment,
+        metadata={
+            "method": payment.method,
+            "reference": payment.provider_reference,
+            "verification_source": verification_source,
+        },
+    )
     if payment.sale:
         sale = payment.sale.__class__.objects.select_for_update().get(pk=payment.sale_id)
         if sale.paid_total + payment.amount > sale.total:

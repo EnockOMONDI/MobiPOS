@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from celery.schedules import crontab
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -56,12 +57,14 @@ LOCAL_APPS = [
     "apps.notifications",
     "apps.integrations",
     "apps.audit",
+    "apps.backups",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.middleware.csp.ContentSecurityPolicyMiddleware",
     "config.middleware.RequestIDMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -110,7 +113,7 @@ DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 AUTH_USER_MODEL = "accounts.User"
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
-    "django.contrib.auth.backends.ModelBackend",
+    "apps.accounts.backends.EmailOrUsernameBackend",
 ]
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "dashboard"
@@ -190,6 +193,8 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 300
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     "retry-due-integration-events": {
         "task": "apps.integrations.tasks.process_due_integration_events",
@@ -199,7 +204,37 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.organizations.tasks.refresh_subscriptions",
         "schedule": 60 * 60 * 24,
     },
+    "retry-due-emails": {
+        "task": "apps.notifications.tasks.process_due_emails",
+        "schedule": 60.0,
+    },
+    "send-daily-owner-summaries": {
+        "task": "apps.notifications.tasks.send_daily_owner_summaries",
+        "schedule": 60 * 60 * 24,
+    },
+    "redact-old-email-content": {
+        "task": "apps.notifications.tasks.redact_old_email_content",
+        "schedule": 60 * 60 * 24,
+    },
+    "daily-encrypted-database-backup": {
+        "task": "apps.backups.tasks.run_scheduled_backup",
+        "schedule": crontab(hour=12, minute=0),
+    },
+    "apply-backup-retention": {
+        "task": "apps.backups.tasks.apply_backup_retention",
+        "schedule": 60 * 60 * 24,
+    },
+    "daily-operational-reconciliation": {
+        "task": "apps.audit.tasks.reconcile_active_organizations",
+        "schedule": crontab(hour=1, minute=0),
+    },
+    "expire-report-exports": {
+        "task": "apps.reports.tasks.expire_report_exports",
+        "schedule": 60 * 60 * 24,
+    },
 }
+REPORT_ASYNC_EXPORT_THRESHOLD = int(os.environ.get("REPORT_ASYNC_EXPORT_THRESHOLD", "500"))
+REPORT_EXPORT_RETENTION_DAYS = int(os.environ.get("REPORT_EXPORT_RETENTION_DAYS", "7"))
 INTEGRATION_MODE = os.environ.get("INTEGRATION_MODE", "sandbox")
 PRIVILEGED_OTP_REQUIRED = os.environ.get("PRIVILEGED_OTP_REQUIRED", "false").lower() == "true"
 POS_AUTO_OPEN_SESSION = os.environ.get("POS_AUTO_OPEN_SESSION", "true").lower() == "true"
@@ -217,7 +252,24 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
 EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() == "true"
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
 EMAIL_RAISE_DELIVERY_ERRORS = os.environ.get("EMAIL_RAISE_DELIVERY_ERRORS", "false").lower() == "true"
+MAILERSEND_API_TOKEN = os.environ.get("MAILERSEND_API_TOKEN", "")
+MAILERSEND_API_URL = os.environ.get("MAILERSEND_API_URL", "https://api.mailersend.com/v1/email")
+EMAIL_MAX_ATTEMPTS = int(os.environ.get("EMAIL_MAX_ATTEMPTS", "5"))
+EMAIL_CONTENT_RETENTION_DAYS = int(os.environ.get("EMAIL_CONTENT_RETENTION_DAYS", "7"))
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+ACCOUNT_SETUP_TOKEN_DAYS = int(os.environ.get("ACCOUNT_SETUP_TOKEN_DAYS", "3"))
+BACKUP_ENABLED = os.environ.get("BACKUP_ENABLED", "false").lower() == "true"
+BACKUP_SOURCE_DATABASE_URL = os.environ.get("BACKUP_SOURCE_DATABASE_URL", os.environ.get("DIRECT_DATABASE_URL", os.environ.get("DATABASE_URL", "")))
+BACKUP_RESTORE_DATABASE_URL = os.environ.get("BACKUP_RESTORE_DATABASE_URL", "")
+BACKUP_RESTORE_PROJECT_REF = os.environ.get("BACKUP_RESTORE_PROJECT_REF", "")
+BACKUP_STORAGE_BACKEND = os.environ.get("BACKUP_STORAGE_BACKEND", "filesystem")
+BACKUP_STORAGE_DIR = Path(os.environ.get("BACKUP_STORAGE_DIR", BASE_DIR / "private_backups"))
+BACKUP_SUPABASE_URL = os.environ.get("BACKUP_SUPABASE_URL", "").rstrip("/")
+BACKUP_SUPABASE_SERVICE_KEY = os.environ.get("BACKUP_SUPABASE_SERVICE_KEY", "")
+BACKUP_SUPABASE_BUCKET = os.environ.get("BACKUP_SUPABASE_BUCKET", "database-backups")
+BACKUP_ENCRYPTION_KEY = os.environ.get("BACKUP_ENCRYPTION_KEY", "")
+BACKUP_RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
+BACKUP_RESTORE_DRILL_ENABLED = os.environ.get("BACKUP_RESTORE_DRILL_ENABLED", "false").lower() == "true"
 
 LOGGING = {
     "version": 1,

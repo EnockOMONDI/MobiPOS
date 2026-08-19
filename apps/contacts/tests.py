@@ -1,4 +1,5 @@
 import pytest
+from django.utils import timezone
 from django.core.management import call_command
 from django.urls import reverse
 
@@ -6,6 +7,8 @@ from apps.accounts.models import User
 from apps.audit.models import AuditEvent
 from apps.contacts.models import Contact
 from apps.organizations.models import Organization
+from apps.payments.models import Payment, PaymentMethod, PaymentStatus
+from apps.reports.exporting import build_simple_pdf
 
 
 @pytest.mark.django_db
@@ -144,3 +147,100 @@ def test_contact_statement_export_downloads(client, export_format, content_type,
         assert b"MobiPOS" in response.content
         assert organization.name.encode() in response.content
         assert b"Supplier and Customer Statement" in response.content
+
+
+@pytest.mark.django_db
+def test_contact_statement_paginates_screen_but_exports_every_record(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    contact = Contact.objects.create(
+        organization=organization,
+        contact_type="customer",
+        name="High Volume Statement Customer",
+    )
+    for index in range(105):
+        Payment.objects.create(
+            organization=organization,
+            number=f"BULK-PAY-{index:03d}",
+            customer=contact,
+            method=PaymentMethod.CASH,
+            status=PaymentStatus.CONFIRMED,
+            amount=100,
+            received_by=owner,
+        )
+    client.force_login(owner)
+
+    screen = client.get(reverse("contact-statement", args=[contact.id]))
+    exported = client.get(
+        reverse("contact-statement", args=[contact.id]),
+        {"format": "csv"},
+    )
+
+    assert screen.status_code == 200
+    assert screen.context["payments"].paginator.count == 105
+    assert screen.context["payments"].paginator.num_pages == 5
+    assert b"BULK-PAY-104" in exported.content
+    assert b"BULK-PAY-000" in exported.content
+
+
+@pytest.mark.django_db
+def test_contact_statement_period_filters_screen_totals_and_download(client):
+    call_command("seed_demo_data")
+    owner = User.objects.get(username="brian")
+    organization = Organization.objects.get(slug="nairobi-mobile-hub")
+    contact = Contact.objects.create(
+        organization=organization,
+        contact_type="customer",
+        name="Period Statement Customer",
+    )
+    old_payment = Payment.objects.create(
+        organization=organization,
+        number="PERIOD-OLD",
+        customer=contact,
+        method=PaymentMethod.CASH,
+        status=PaymentStatus.CONFIRMED,
+        amount=100,
+        received_by=owner,
+    )
+    current_payment = Payment.objects.create(
+        organization=organization,
+        number="PERIOD-CURRENT",
+        customer=contact,
+        method=PaymentMethod.CASH,
+        status=PaymentStatus.CONFIRMED,
+        amount=250,
+        received_by=owner,
+    )
+    Payment.objects.filter(id=old_payment.id).update(
+        received_at=timezone.now() - timezone.timedelta(days=30)
+    )
+    Payment.objects.filter(id=current_payment.id).update(received_at=timezone.now())
+    client.force_login(owner)
+    date_from = (timezone.localdate() - timezone.timedelta(days=1)).isoformat()
+
+    screen = client.get(
+        reverse("contact-statement", args=[contact.id]),
+        {"date_from": date_from},
+    )
+    exported = client.get(
+        reverse("contact-statement", args=[contact.id]),
+        {"format": "csv", "date_from": date_from},
+    )
+
+    assert screen.context["payments_total"] == 250
+    assert b"PERIOD-CURRENT" in exported.content
+    assert b"PERIOD-OLD" not in exported.content
+
+
+def test_pdf_export_spans_pages_without_truncating_rows():
+    pdf = build_simple_pdf(
+        title="Long export",
+        headers=["Reference"],
+        rows=[[f"PDF-ROW-{index:03d}"] for index in range(150)],
+    )
+
+    assert pdf.startswith(b"%PDF")
+    assert pdf.count(b"/Type /Page") >= 3
+    assert b"PDF-ROW-000" in pdf
+    assert b"PDF-ROW-149" in pdf

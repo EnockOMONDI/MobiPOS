@@ -3,16 +3,18 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.notifications.services import notify_business_event
 from apps.integrations.services import create_return_fiscal_document
 from apps.integrations.models import FiscalDocumentType, FiscalProvider
 from apps.operations.forms import InstallmentScheduleForm
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from apps.payments.forms import AdditionalPaymentForm
-from apps.payments.models import Payment, PaymentMethod, PaymentStatus
+from apps.payments.models import Payment, PaymentVerificationSource
 from apps.payments.services import allocate_sale_refund, confirm_payment
 from .forms import ReturnRequestForm
 from .models import ReturnStatus, Sale, SaleReturn, SaleReturnLine
@@ -70,15 +72,16 @@ def sale_add_payment(request, sale_id):
             provider_reference=provider_reference,
             received_by=request.user,
         )
-        if payment.method == PaymentMethod.CASH:
-            try:
-                confirm_payment(payment=payment)
-                messages.success(request, "Cash payment confirmed.")
-            except ValidationError as error:
-                messages.error(request, error.message)
-                transaction.set_rollback(True)
-        elif payment.status == PaymentStatus.PENDING:
-            messages.success(request, "Payment recorded as pending confirmation.")
+        try:
+            confirm_payment(
+                payment=payment,
+                confirmed_by=request.user,
+                verification_source=PaymentVerificationSource.MANUAL,
+            )
+            messages.success(request, f"{payment.get_method_display()} payment recorded and verified.")
+        except ValidationError as error:
+            messages.error(request, error.message)
+            transaction.set_rollback(True)
     return redirect("sale-detail", sale_id=sale.id)
 
 
@@ -113,6 +116,13 @@ def sale_request_return(request, sale_id):
             for line, quantity, line_value in form.cleaned_data["selected_lines"]
         ])
         record_audit_event(action="return.requested", actor=request.user, organization=request.organization, target=sale_return, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Customer return awaiting approval",
+            message=f"{sale_return.number} requests a {sale_return.get_outcome_display().lower()} for sale {sale.number}.",
+            link=reverse("sale-detail", args=[sale.id]),
+            include_owners=True,
+        )
         messages.success(request, "Return request created.")
     return redirect("sale-detail", sale_id=sale.id)
 
@@ -136,5 +146,12 @@ def return_approve_complete(request, return_id):
         )
     create_return_fiscal_document(sale_return=sale_return)
     record_audit_event(action="return.completed", actor=request.user, organization=request.organization, target=sale_return, request=request)
+    notify_business_event(
+        organization=request.organization,
+        title="Customer return completed",
+        message=f"{sale_return.number} for sale {sale_return.sale.number} was completed and recorded.",
+        link=reverse("sale-detail", args=[sale_return.sale_id]),
+        users=(sale_return.requested_by,),
+    )
     messages.success(request, "Return and refund completed.")
     return redirect("sale-detail", sale_id=sale_return.sale_id)

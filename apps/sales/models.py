@@ -56,6 +56,16 @@ class Sale(OrganizationOwnedModel):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="created_sales")
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=("organization", "location", "status", "completed_at"),
+                name="sale_org_loc_st_done",
+            ),
+            models.Index(
+                fields=("organization", "customer", "completed_at"),
+                name="sale_org_cust_done",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(fields=("organization", "number"), name="unique_sale_number_per_org"),
             models.UniqueConstraint(

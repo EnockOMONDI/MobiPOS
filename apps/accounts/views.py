@@ -1,7 +1,10 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import logout
+from django.db import transaction
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 from django_otp import login as otp_login
@@ -9,9 +12,47 @@ from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.audit.services import record_audit_event
 
-from .forms import MFAConfirmForm, RecoveryCodeForm
-from .models import UserSession
+from .forms import AccountSetupPasswordForm, MFAConfirmForm, RecoveryCodeForm
+from .models import AccountSetupToken, UserSession
 from .services import confirmed_totp_device, consume_recovery_code, generate_recovery_codes, revoke_session
+
+
+def account_setup(request, token):
+    token_hash = AccountSetupToken.hash_token(token)
+    setup_token = get_object_or_404(
+        AccountSetupToken.objects.select_related("user", "organization"),
+        token_hash=token_hash,
+    )
+    if setup_token.used_at or setup_token.expires_at <= timezone.now():
+        raise Http404("This account setup link has expired or has already been used.")
+
+    form = AccountSetupPasswordForm(setup_token.user, request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            locked_token = AccountSetupToken.objects.select_for_update().select_related("user").get(pk=setup_token.pk)
+            if locked_token.used_at or locked_token.expires_at <= timezone.now():
+                raise Http404("This account setup link has expired or has already been used.")
+            user = locked_token.user
+            form.user = user
+            form.save()
+            user.requires_password_setup = False
+            user.save(update_fields=["requires_password_setup"])
+            locked_token.used_at = timezone.now()
+            locked_token.save(update_fields=["used_at"])
+            record_audit_event(
+                action="identity.account_setup_completed",
+                actor=user,
+                organization=locked_token.organization,
+                target=user,
+                request=request,
+            )
+        messages.success(request, "Your password is ready. Sign in with your email address.")
+        return redirect("login")
+    return render(
+        request,
+        "accounts/account_setup.html",
+        {"form": form, "setup_token": setup_token},
+    )
 
 
 @login_required

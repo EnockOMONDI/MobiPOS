@@ -13,6 +13,7 @@ from apps.organizations.models import AgentDocumentType, AgentProfile, AgentProf
 from apps.organizations.permissions import organization_owner_required
 from apps.sales.models import Sale, SaleLine, SaleStatus
 from .exporting import safe_csv_row
+from .pagination import paginate_section
 
 
 def _decimal(value):
@@ -138,6 +139,21 @@ def agent_network_report(request):
             ]))
         return response
 
+    profile_page, profile_pagination = paginate_section(
+        request, profile_rows, parameter="profiles_page"
+    )
+    dsa_page, dsa_pagination = paginate_section(
+        request,
+        dsa_profiles.order_by("supervisor__legal_name", "legal_name"),
+        parameter="dsa_page",
+    )
+    pending_page, pending_pagination = paginate_section(
+        request, pending_profiles.order_by("created_at"), parameter="pending_page"
+    )
+    missing_page, missing_pagination = paginate_section(
+        request, missing_national_id.order_by("legal_name"), parameter="missing_page"
+    )
+
     context = {
         "summary": {
             "total": profiles.count(),
@@ -151,12 +167,15 @@ def agent_network_report(request):
         },
         "status_summary": status_summary,
         "type_summary": type_summary,
-        "profile_rows": profile_rows,
+        "profile_rows": profile_page,
+        "profile_pagination": profile_pagination,
         "top_performers": top_performers,
-        "agents": active_agents.order_by("legal_name"),
-        "dsas": dsa_profiles.order_by("supervisor__legal_name", "legal_name"),
-        "pending_profiles": pending_profiles.order_by("created_at")[:50],
-        "missing_documents": missing_national_id.order_by("legal_name")[:50],
+        "dsas": dsa_page,
+        "dsa_pagination": dsa_pagination,
+        "pending_profiles": pending_page,
+        "pending_pagination": pending_pagination,
+        "missing_documents": missing_page,
+        "missing_pagination": missing_pagination,
         "recent_activity": recent_activity,
     }
     return render(request, "reports/agent_network.html", context)

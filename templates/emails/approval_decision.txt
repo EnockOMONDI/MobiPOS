@@ -1,8 +1,11 @@
 Approval {{ approval.get_status_display|lower }}
 
-Your request for {{ approval.display_type }} was {{ approval.get_status_display|lower }}.
+Your request for {{ target.title }} was {{ approval.get_status_display|lower }}.
 
 Business: {{ organization.name }}
+Affected record: {{ target.record }}
+{% if approval.amount %}Financial impact: KES {{ approval.amount }}
+{% endif %}
 Reason: {{ approval.reason }}
 {% if approval.decision_notes %}Decision notes: {{ approval.decision_notes }}
 {% endif %}

@@ -3,6 +3,8 @@ from django import forms
 from apps.organizations.models import Branch
 from apps.organizations.permissions import accessible_branches_for
 
+from .models import ExpensePaymentMethod
+
 
 class ExpenseForm(forms.Form):
     branch = forms.ModelChoiceField(queryset=Branch.objects.none())
@@ -15,3 +17,22 @@ class ExpenseForm(forms.Form):
         super().__init__(*args, **kwargs)
         if organization:
             self.fields["branch"].queryset = accessible_branches_for(user, organization)
+
+
+class ExpensePaymentForm(forms.Form):
+    method = forms.ChoiceField(choices=ExpensePaymentMethod.choices)
+    reference = forms.CharField(
+        max_length=120,
+        required=False,
+        help_text="Required for M-Pesa, card and bank payments. Use the provider or bank reference.",
+    )
+    notes = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}), required=False)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        method = cleaned_data.get("method")
+        reference = (cleaned_data.get("reference") or "").strip()
+        if method != ExpensePaymentMethod.CASH and not reference:
+            self.add_error("reference", "Enter the payment reference for this payment method.")
+        cleaned_data["reference"] = reference
+        return cleaned_data

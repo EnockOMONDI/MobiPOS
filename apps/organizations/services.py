@@ -34,7 +34,7 @@ DEFAULT_ROLE_PERMISSION_CODES = {
     "manager": (
         "catalog.add_brand", "catalog.add_category", "catalog.add_product", "catalog.change_product", "catalog.view_product",
         "contacts.add_contact", "contacts.change_contact", "contacts.view_contact",
-        "expenses.add_expense", "expenses.view_expense",
+        "expenses.add_expense", "expenses.change_expense", "expenses.view_expense",
         "inventory.add_stockadjustment", "inventory.view_stockbalance", "inventory.view_stockmovement", "inventory.view_stockunit",
         "organizations.add_agentprofile", "organizations.view_activity_report", "organizations.view_operational_report", "organizations.view_retail_analytics",
         "payments.add_payment", "payments.view_payment",
@@ -71,7 +71,7 @@ DEFAULT_ROLE_PERMISSION_CODES = {
         "repairs.add_repairticket", "repairs.change_repairticket", "repairs.view_repairticket",
     ),
     "finance": (
-        "contacts.view_contact", "expenses.add_expense", "expenses.view_expense",
+        "contacts.view_contact", "expenses.add_expense", "expenses.change_expense", "expenses.view_expense",
         "organizations.view_activity_report", "organizations.view_operational_report", "organizations.view_retail_analytics",
         "payments.add_payment", "payments.view_payment", "sales.view_sale", "sales.view_salereturn",
         "commissions.view_commissionaccrual",

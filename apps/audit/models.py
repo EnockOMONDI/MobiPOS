@@ -26,6 +26,16 @@ class AuditEvent(models.Model):
 
     class Meta:
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=("organization", "created_at"),
+                name="audit_org_created",
+            ),
+            models.Index(
+                fields=("organization", "action", "created_at"),
+                name="audit_org_action_ct",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.action} at {self.created_at:%Y-%m-%d %H:%M}"

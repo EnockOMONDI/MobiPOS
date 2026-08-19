@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.accounts.setup_tokens import account_setup_url, issue_account_setup_token
 from apps.notifications.emailing import send_owner_welcome_email, send_staff_account_created_email
 from .forms import AgedStockPolicyForm, AgentDSARegistrationForm, AgentDocumentUploadForm, AgentProfileDecisionForm, BranchCreateForm, InvitationAcceptForm, LocationCreateForm, MembershipAccessForm, OrganizationRegistrationForm, RoleCreateForm, TenantUserForm
 from .permissions import organization_owner_required, organization_permission_required, platform_admin_required
@@ -193,7 +194,7 @@ def register_organization(request):
             request=request,
         )
         transaction.on_commit(lambda: send_owner_welcome_email(user=user, organization=organization))
-        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        login(request, user, backend="apps.accounts.backends.EmailOrUsernameBackend")
         return redirect("dashboard")
     return render(request, "registration/register.html", {"form": form})
 
@@ -240,11 +241,12 @@ def tenant_user_create(request):
                     last_name=form.cleaned_data["last_name"],
                 ),
                 email=form.cleaned_data["email"],
-                password=form.cleaned_data["password"],
+                password=None,
                 first_name=form.cleaned_data["first_name"],
                 last_name=form.cleaned_data["last_name"],
                 phone_number=form.cleaned_data["phone_number"],
                 is_active=True,
+                requires_password_setup=True,
             )
             membership = Membership.objects.create(
                 organization=request.organization, user=user, status=MembershipStatus.ACTIVE,
@@ -273,14 +275,21 @@ def tenant_user_create(request):
                     request=request,
                 )
             record_audit_event(action="user.created", actor=request.user, organization=request.organization, target=user, request=request)
+            setup_token, raw_setup_token = issue_account_setup_token(
+                user=user,
+                organization=request.organization,
+                created_by=request.user,
+            )
             transaction.on_commit(
                 lambda: send_staff_account_created_email(
                     user=user,
                     organization=request.organization,
                     created_by=request.user,
+                    setup_url=account_setup_url(raw_setup_token),
+                    expires_at=setup_token.expires_at,
                 )
             )
-            messages.success(request, f"{user.get_full_name() or user.email} was created and can log in now.")
+            messages.success(request, f"{user.get_full_name() or user.email} was created. A secure setup link was sent by email.")
             return redirect("module-overview", module="users")
     return render(request, "organizations/user_create.html", {"form": form})
 
@@ -312,7 +321,7 @@ def invitation_accept(request, token):
             invitation.accepted_at = timezone.now()
             invitation.save(update_fields=["status", "accepted_at", "updated_at"])
             record_audit_event(action="user.invitation_accepted", actor=user, organization=invitation.organization, target=invitation, request=request)
-        login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+        login(request, user, backend="apps.accounts.backends.EmailOrUsernameBackend")
         messages.success(request, "Invitation accepted. Set up two-factor authentication to secure your account.")
         return redirect("mfa-setup")
     return render(request, "registration/invitation_accept.html", {"form": form, "invitation": invitation})

@@ -16,34 +16,35 @@
 
   <section class="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
     <a href="{% url 'transfer-list' %}" class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-red-200 hover:bg-red-50">
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">All transfers</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-600">All transfers</p>
       <p class="mt-2 text-2xl font-black text-slate-950">{{ total_transfers }}</p>
     </a>
     <a href="{% url 'transfer-list' %}?status=requested" class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-red-200 hover:bg-red-50">
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Requested</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-600">Requested</p>
       <p class="mt-2 text-2xl font-black text-amber-700">{{ status_counts.requested|default:0 }}</p>
     </a>
     <a href="{% url 'transfer-list' %}?status=approved" class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-red-200 hover:bg-red-50">
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Approved</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-600">Approved</p>
       <p class="mt-2 text-2xl font-black text-blue-700">{{ status_counts.approved|default:0 }}</p>
     </a>
     <a href="{% url 'transfer-list' %}?status=in_transit" class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-red-200 hover:bg-red-50">
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">In transit</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-600">In transit</p>
       <p class="mt-2 text-2xl font-black text-indigo-700">{{ status_counts.in_transit|default:0 }}</p>
     </a>
     <a href="{% url 'transfer-list' %}?status=discrepancy" class="rounded-2xl border bg-white p-4 shadow-sm transition hover:border-red-200 hover:bg-red-50">
-      <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Discrepancies</p>
+      <p class="text-xs font-bold uppercase tracking-wider text-slate-600">Discrepancies</p>
       <p class="mt-2 text-2xl font-black text-red-700">{{ status_counts.discrepancy|default:0 }}</p>
     </a>
   </section>
 
-  <form method="get" class="card mt-5 flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
+  <form method="get" class="card mt-5 flex flex-col gap-3 p-4 lg:flex-row lg:items-end">
     <label class="sr-only" for="transfer-search">Search transfers</label>
     <div class="relative flex-1">
       <svg class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="m21 21-4.35-4.35m1.1-5.15a6.25 6.25 0 1 1-12.5 0 6.25 6.25 0 0 1 12.5 0Z"/></svg>
       <input id="transfer-search" name="q" value="{{ query }}" class="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm" placeholder="Search transfer number, location, product, SKU, IMEI or requester">
     </div>
-    <select name="status" class="rounded-xl border border-slate-200 px-3 py-3 text-sm">
+    <label class="sr-only" for="transfer-status">Transfer status</label>
+    <select id="transfer-status" name="status" class="rounded-xl border border-slate-200 px-3 py-3 text-sm">
       <option value="">All statuses</option>
       <option value="requested" {% if status == "requested" %}selected{% endif %}>Requested</option>
       <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
@@ -52,7 +53,16 @@
       <option value="discrepancy" {% if status == "discrepancy" %}selected{% endif %}>Discrepancy</option>
       <option value="cancelled" {% if status == "cancelled" %}selected{% endif %}>Cancelled</option>
     </select>
+    <div>
+      <label for="transfer-date-from" class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">From date</label>
+      <input id="transfer-date-from" type="date" name="date_from" value="{{ date_from }}" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+    </div>
+    <div>
+      <label for="transfer-date-to" class="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-600">To date</label>
+      <input id="transfer-date-to" type="date" name="date_to" value="{{ date_to }}" class="rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+    </div>
     <button class="btn-secondary">Apply filters</button>
+    {% if date_filter_error %}<p class="text-sm font-semibold text-red-700 lg:basis-full" role="alert">{{ date_filter_error }}</p>{% endif %}
   </form>
 
   <section class="mt-5 space-y-4">
@@ -81,7 +91,7 @@
 
         <div class="mt-4 grid gap-4 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
           <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">From</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-600">From</p>
             <p class="mt-1 font-bold text-slate-950">{{ transfer.source }}</p>
             <p class="mt-1 text-xs text-slate-500">{{ transfer.source.branch.name }}</p>
           </div>
@@ -89,7 +99,7 @@
             <svg class="size-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M7 7h11m0 0-4-4m4 4-4 4M17 17H6m0 0 4 4m-4-4 4-4"/></svg>
           </span>
           <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
-            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">To</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-600">To</p>
             <p class="mt-1 font-bold text-slate-950">{{ transfer.destination }}</p>
             <p class="mt-1 text-xs text-slate-500">{{ transfer.destination.branch.name }}</p>
           </div>
@@ -99,7 +109,7 @@
           {% for line in transfer.lines.all %}
             <div class="grid gap-2 border-t border-slate-100 px-4 py-3 text-sm first:border-t-0 md:grid-cols-[11rem_1fr_auto] md:items-center">
               <span class="font-mono text-xs font-bold text-slate-500">{% if line.stock_unit %}{{ line.stock_unit.serial_number }}{% else %}Qty {{ line.quantity }}{% endif %}</span>
-              <span class="font-semibold text-slate-800">{{ line.product.name }}{% if line.product.sku %} <span class="font-normal text-slate-400">({{ line.product.sku }})</span>{% endif %}</span>
+              <span class="font-semibold text-slate-800">{{ line.product.name }}{% if line.product.sku %} <span class="font-normal text-slate-600">({{ line.product.sku }})</span>{% endif %}</span>
               <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">Received {{ line.received_quantity }} / {{ line.quantity }}</span>
             </div>
           {% empty %}
@@ -131,4 +141,19 @@
       </div>
     {% endfor %}
   </section>
+
+  {% if page_obj.paginator.num_pages > 1 %}
+    <nav class="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm" aria-label="Transfer pagination">
+      <p class="text-slate-500">Showing {{ page_obj.start_index }}-{{ page_obj.end_index }} of {{ page_obj.paginator.count }} matching transfers</p>
+      <div class="flex items-center gap-2">
+        {% if page_obj.has_previous %}
+          <a class="btn-secondary" href="?page={{ page_obj.previous_page_number }}{% if active_querystring %}&{{ active_querystring }}{% endif %}">Previous</a>
+        {% endif %}
+        <span class="px-2 font-bold text-slate-600">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        {% if page_obj.has_next %}
+          <a class="btn-secondary" href="?page={{ page_obj.next_page_number }}{% if active_querystring %}&{{ active_querystring }}{% endif %}">Next</a>
+        {% endif %}
+      </div>
+    </nav>
+  {% endif %}
 {% endblock %}

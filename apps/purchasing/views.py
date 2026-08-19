@@ -1,12 +1,15 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from apps.audit.services import record_audit_event
+from apps.notifications.services import notify_business_event
 from apps.organizations.permissions import accessible_locations_for, organization_owner_required, organization_permission_required
 from .document_extraction import extract_purchase_document_text
 from .forms import PurchaseOrderForm, ReceivePurchaseLineForm, SupplierReturnForm
@@ -122,15 +125,30 @@ def purchase_receive(request, line_id):
         try:
             receive_purchase_line(
                 line=line, quantity=form.cleaned_data["quantity"], actor=request.user,
+                request_id=form.cleaned_data["request_id"],
                 serial_numbers=form.serial_list(),
                 damaged_quantity=form.cleaned_data["damaged_quantity"],
                 close_with_discrepancy=form.cleaned_data["close_with_discrepancy"],
                 discrepancy_reason=form.cleaned_data["discrepancy_reason"],
             )
             record_audit_event(action="purchase.received", actor=request.user, organization=request.organization, target=line.order, request=request)
+            line.order.refresh_from_db(fields=("status",))
+            if line.order.status == "discrepancy":
+                notify_business_event(
+                    organization=request.organization,
+                    title="Supplier delivery discrepancy",
+                    message=f"{line.order.number} has missing or damaged stock that needs owner review.",
+                    link=reverse("purchase-detail", args=[line.order_id]),
+                    include_owners=True,
+                )
             messages.success(request, "Stock received successfully.")
         except ValidationError as error:
             messages.error(request, error.message)
+        except IntegrityError:
+            messages.error(
+                request,
+                "This receipt conflicts with stock recorded by another user. Refresh the purchase before trying again.",
+            )
     else:
         messages.error(request, "Correct the receiving details.")
     return redirect("purchase-detail", order_id=line.order_id)
@@ -142,10 +160,20 @@ def purchase_receive(request, line_id):
 def purchase_discrepancy_resolve(request, discrepancy_id):
     discrepancy = get_object_or_404(PurchaseDiscrepancy, id=discrepancy_id, organization=request.organization)
     try:
-        resolve_purchase_discrepancy(
+        discrepancy = resolve_purchase_discrepancy(
             discrepancy=discrepancy, actor=request.user, resolution=request.POST.get("resolution", "")
         )
         record_audit_event(action="purchase.discrepancy_resolved", actor=request.user, organization=request.organization, target=discrepancy, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Supplier discrepancy resolved",
+            message=(
+                f"The discrepancy on {discrepancy.line.order.number} was resolved as "
+                f"{'accepted short delivery' if discrepancy.resolution == 'accept_short' else 'replacement pending'}."
+            ),
+            link=reverse("purchase-detail", args=[discrepancy.line.order_id]),
+            users=(discrepancy.line.order.created_by,),
+        )
         messages.success(request, "Purchase discrepancy resolved.")
     except ValidationError as error:
         messages.error(request, error.message)
@@ -165,6 +193,13 @@ def supplier_return_create(request):
             **form.cleaned_data,
         )
         record_audit_event(action="supplier_return.requested", actor=request.user, organization=request.organization, target=supplier_return, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Supplier return awaiting approval",
+            message=f"{supplier_return.number} was requested for {supplier_return.line.product.name}.",
+            link=reverse("supplier-return-detail", args=[supplier_return.id]),
+            include_owners=True,
+        )
         messages.success(request, "Supplier return submitted for approval.")
         return redirect("supplier-return-detail", return_id=supplier_return.id)
     return render(request, "purchasing/supplier_return.html", {"form": form})
@@ -190,6 +225,13 @@ def supplier_return_complete(request, return_id):
     try:
         complete_supplier_return(supplier_return=supplier_return, actor=request.user)
         record_audit_event(action="supplier_return.completed", actor=request.user, organization=request.organization, target=supplier_return, request=request)
+        notify_business_event(
+            organization=request.organization,
+            title="Supplier return completed",
+            message=f"{supplier_return.number} was completed and its stock and payable effects were recorded.",
+            link=reverse("supplier-return-detail", args=[supplier_return.id]),
+            users=(supplier_return.requested_by,),
+        )
         messages.success(request, "Supplier return completed.")
     except ValidationError as error:
         messages.error(request, error.message)

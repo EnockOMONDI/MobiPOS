@@ -1,4 +1,6 @@
 import pytest
+from datetime import timedelta
+from decimal import Decimal
 from io import BytesIO
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import ValidationError
@@ -9,8 +11,8 @@ from openpyxl import Workbook
 
 from apps.accounts.models import User
 from apps.catalog.models import Category, Product
-from apps.inventory.aging import request_aged_stock_action, sync_aged_stock_action_from_approval
-from apps.inventory.models import AgedStockAction, AgedStockActionStatus, SerialStatus, StockAdjustment, StockBalance, StockMovement, StockMovementType, StockUnit
+from apps.inventory.aging import execute_aged_stock_action, request_aged_stock_action, sync_aged_stock_action_from_approval
+from apps.inventory.models import AgedStockAction, AgedStockActionStatus, SerialStatus, StockAdjustment, StockBalance, StockMovement, StockMovementType, StockUnit, StockUnitOffer
 from apps.operations.models import ApprovalStatus
 from apps.inventory.services import post_stock_movement, reverse_stock_movement
 from apps.organizations.models import Branch, Company, Location, Membership, MembershipStatus, Organization
@@ -341,5 +343,125 @@ def test_aged_stock_action_reuses_active_request():
 
     assert first == second
     assert AgedStockAction.objects.filter(stock_unit=unit).count() == 1
+
+
+def _approved_aged_action(*, action_type, proposal):
+    org = Organization.objects.create(name=f"Execute {action_type}", slug=f"execute-{action_type}", status="active")
+    manager = User.objects.create_user(username=f"manager-{action_type}", email=f"manager-{action_type}@example.com")
+    owner = User.objects.create_user(username=f"owner-{action_type}", email=f"owner-{action_type}@example.com")
+    Membership.objects.create(organization=org, user=manager, status=MembershipStatus.ACTIVE)
+    Membership.objects.create(organization=org, user=owner, status=MembershipStatus.ACTIVE, is_owner=True)
+    company = Company.objects.create(organization=org, name="Company", code="CO")
+    branch = Branch.objects.create(organization=org, company=company, name="Source", code="SRC")
+    source = Location.objects.create(organization=org, branch=branch, name="Source POS", code="SRC-POS", location_type="pos")
+    category = Category.objects.create(organization=org, name="Phones", code="phones")
+    product = Product.objects.create(
+        organization=org,
+        category=category,
+        name="Tracked phone",
+        sku=f"PHONE-{action_type}",
+        is_serialized=True,
+        selling_price=Decimal("20000.00"),
+    )
+    unit = StockUnit.objects.create(
+        organization=org,
+        product=product,
+        serial_number=f"EXECUTE-{action_type}",
+        location=source,
+        status=SerialStatus.AVAILABLE,
+        unit_cost=Decimal("10000.00"),
+    )
+    post_stock_movement(
+        organization=org,
+        product=product,
+        location=source,
+        quantity=1,
+        movement_type=StockMovementType.OPENING,
+        actor=manager,
+        stock_unit=unit,
+    )
+    action = request_aged_stock_action(
+        stock_unit=unit,
+        action_type=action_type,
+        reason="Approved aged stock action.",
+        proposal=proposal,
+        requested_by=manager,
+    )
+    approval = action.approval
+    approval.status = ApprovalStatus.APPROVED
+    approval.decided_by = owner
+    approval.decided_at = timezone.now()
+    approval.save(update_fields=["status", "decided_by", "decided_at", "updated_at"])
+    action = sync_aged_stock_action_from_approval(approval=approval)
+    return action, manager, owner, source
+
+
+@pytest.mark.django_db
+def test_approved_aged_stock_discount_creates_unit_offer():
+    action, _, owner, _ = _approved_aged_action(
+        action_type="discount",
+        proposal={
+            "promotional_price": "18000.00",
+            "valid_until": (timezone.localdate() + timedelta(days=14)).isoformat(),
+        },
+    )
+
+    executed = execute_aged_stock_action(action=action, actor=owner)
+
+    offer = StockUnitOffer.objects.get(aged_stock_action=executed)
+    assert executed.status == AgedStockActionStatus.COMPLETED
+    assert offer.promotional_price == Decimal("18000.00")
+    assert offer.stock_unit == action.stock_unit
+
+
+@pytest.mark.django_db
+def test_approved_aged_stock_writeoff_posts_once_and_removes_available_stock():
+    action, _, owner, source = _approved_aged_action(action_type="write_off", proposal={})
+
+    first = execute_aged_stock_action(action=action, actor=owner)
+    second = execute_aged_stock_action(action=action, actor=owner)
+
+    first.stock_unit.refresh_from_db()
+    assert second.id == first.id
+    assert first.status == AgedStockActionStatus.COMPLETED
+    assert first.stock_unit.status == SerialStatus.WRITTEN_OFF
+    assert first.stock_unit.location is None
+    assert StockBalance.objects.get(
+        organization=first.organization,
+        product=first.stock_unit.product,
+        location=source,
+    ).quantity == 0
+    assert StockMovement.objects.filter(
+        organization=first.organization,
+        reference_type="aged_stock_action",
+        reference_id=str(first.id),
+    ).count() == 1
+
+
+@pytest.mark.django_db
+def test_approved_aged_stock_transfer_creates_one_approved_transfer():
+    action, _, owner, source = _approved_aged_action(action_type="transfer", proposal={})
+    destination = Location.objects.create(
+        organization=action.organization,
+        branch=source.branch,
+        name="Destination POS",
+        code="DST-POS",
+        location_type="pos",
+    )
+    action.proposal = {"destination_id": str(destination.id), "destination_name": destination.name}
+    action.save(update_fields=["proposal", "updated_at"])
+
+    first = execute_aged_stock_action(action=action, actor=owner)
+    second = execute_aged_stock_action(action=action, actor=owner)
+
+    from apps.transfers.models import StockTransfer
+
+    assert first.status == AgedStockActionStatus.APPROVED
+    assert second.execution_result == first.execution_result
+    transfer = StockTransfer.objects.get(id=first.execution_result["transfer_id"])
+    assert transfer.status == "approved"
+    assert transfer.source == source
+    assert transfer.destination == destination
+    assert StockTransfer.objects.filter(notes__contains=str(first.id)).count() == 1
 
 # Create your tests here.

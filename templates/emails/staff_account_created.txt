@@ -1,17 +1,14 @@
-Hi {{ user.first_name|default:user.username }},
+Hi {{ user.first_name|default:user.email }},
 
 Your MobiPOS account for {{ organization.name }} is ready.
 
 Added by:
 {{ created_by.get_full_name|default:created_by.username }}
 
-Username:
-{{ user.username }}
+Sign-in email:
+{{ user.email }}
 
-For your security, your temporary password is not included in this email. Get it directly from your organization owner or manager.
+Create your private password using this secure, single-use link. It expires on {{ expires_at|date:"d M Y, H:i" }}.
 
-Sign in:
-{{ login_url }}
-
-Reset password:
-{{ password_reset_url }}
+Set up your account:
+{{ setup_url }}

@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}POS cart | MobiPOS{% endblock %}
 {% block content %}
-<div class="flex flex-wrap items-start justify-between gap-4">
+<div class="flex flex-wrap items-start justify-between gap-4" data-pos-cart-id="{{ cart.id|default:'' }}">
   <div>
     <p class="text-sm font-semibold text-red-700" data-pos-location="{{ location }}">{{ location }}</p>
     <h1 class="mt-1 text-3xl font-bold tracking-tight">Point of sale</h1>
@@ -100,7 +100,7 @@
           <p class="mt-1 text-sm text-slate-500">Review stock, discounts, tax and totals before collecting payment.</p>
         </div>
         <div class="rounded-2xl bg-slate-100 px-4 py-3 text-right">
-          <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Cart total</p>
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-700">Cart total</p>
           <p class="text-2xl font-black">KES {{ cart_total }}</p>
         </div>
       </div>
@@ -125,9 +125,9 @@
         <div class="mt-5 rounded-3xl bg-slate-50 p-6">
           <p class="text-sm text-slate-500">No items have been added.</p>
           <div class="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-4">
-            <p class="text-sm font-bold text-slate-700">Offline invoice queue</p>
-            <p class="mt-1 text-xs text-slate-500">Offline queue on this device: <span data-offline-count>{{ queued_offline_count }}</span>. Add items before using Save offline invoice.</p>
-            <button class="mt-3 font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Sync now</button>
+            <p class="text-sm font-bold text-slate-700">Recovery drafts</p>
+            <p class="mt-1 text-xs text-slate-500">Saved on this device: <span data-offline-count>0</span>. Add an item before saving a recovery draft.</p>
+            <div class="mt-3 flex gap-3"><button class="font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Upload drafts</button><a class="font-bold text-slate-700" href="{% url 'pos-recovery-list' %}">Review {{ server_recovery_count }}</a></div>
           </div>
         </div>
       {% endif %}
@@ -180,12 +180,12 @@
             </div>
             <div class="flex flex-wrap gap-2">
               <button class="btn-primary" type="submit">Complete sale</button>
-              <button class="btn-secondary" type="button" data-save-offline-invoice>Save offline invoice</button>
+              <button class="btn-secondary" type="button" data-save-offline-invoice>Save recovery draft</button>
               <a href="{% url 'module-overview' 'sales' %}" class="btn-secondary">Sales register</a>
             </div>
           </div>
-          <p class="mt-3 text-xs font-semibold text-slate-600">Offline queue on this device: <span data-offline-count>{{ queued_offline_count }}</span>. <button class="font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Sync now</button></p>
-          <p class="mt-1 text-xs text-slate-500" data-offline-status>Queued invoices are stored locally first, then uploaded to the server queue when online.</p>
+          <p class="mt-3 text-xs font-semibold text-slate-600">Saved on this device: <span data-offline-count>0</span>. <button class="font-bold text-red-700" type="button" data-sync-offline-invoices="{% url 'pos-offline-sync' %}">Upload drafts</button> · <a class="font-bold text-slate-700" href="{% url 'pos-recovery-list' %}">Review {{ server_recovery_count }} server draft{{ server_recovery_count|pluralize }}</a></p>
+          <p class="mt-1 text-xs text-slate-500" data-offline-status>Recovery drafts contain product summaries only. Uploading one does not complete a sale or move stock.</p>
         </div>
       </form>
     {% endif %}
@@ -223,6 +223,7 @@
     </div>
     <div class="space-y-4 p-5">
       <video data-camera-video class="aspect-video w-full rounded-3xl bg-slate-900 object-cover" muted playsinline></video>
+      <p data-camera-error hidden class="rounded-xl bg-red-50 px-3 py-2 text-sm font-semibold text-red-700" role="alert"></p>
       <p class="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">If this browser does not support camera barcode detection, type or paste the scanned value below.</p>
       <input data-camera-manual class="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm" placeholder="IMEI, serial, barcode or QR value">
       <div class="flex justify-end gap-2">

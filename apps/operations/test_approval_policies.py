@@ -2,12 +2,13 @@ from decimal import Decimal
 
 import pytest
 from django.core import mail
-from django.test import override_settings
+from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from apps.operations.models import ApprovalPolicy
+from apps.operations.models import ApprovalPolicy, ApprovalRequest
 from apps.operations.services import request_approval, user_can_decide_approval
+from apps.organizations.context_processors import organization_context
 from apps.organizations.models import Membership, MembershipStatus, Organization, Role
 from apps.notifications.models import Notification
 
@@ -17,6 +18,39 @@ EMAIL_SETTINGS = {
     "DEFAULT_FROM_EMAIL": "MobiPOS <no-reply@example.com>",
     "APP_BASE_URL": "https://kipekeestudio.co.ke",
 }
+
+
+@pytest.mark.django_db
+def test_navigation_approval_count_is_not_truncated_at_one_hundred():
+    organization = Organization.objects.create(name="Approval Count Org", slug="approval-count-org", status="active")
+    owner = User.objects.create_user(username="approval-count-owner", email="count-owner@example.com")
+    requester = User.objects.create_user(username="approval-count-requester", email="count-requester@example.com")
+    membership = Membership.objects.create(
+        organization=organization,
+        user=owner,
+        status=MembershipStatus.ACTIVE,
+        is_owner=True,
+    )
+    Membership.objects.create(organization=organization, user=requester, status=MembershipStatus.ACTIVE)
+    ApprovalRequest.objects.bulk_create([
+        ApprovalRequest(
+            organization=organization,
+            request_type="expense",
+            target_type="tests.Target",
+            target_id=str(index),
+            reason="Count this pending approval.",
+            requested_by=requester,
+        )
+        for index in range(101)
+    ])
+    request = RequestFactory().get("/")
+    request.user = owner
+    request.organization = organization
+    request.membership = membership
+
+    context = organization_context(request)
+
+    assert context["pending_approval_count"] == 101
 
 
 @pytest.mark.django_db
@@ -65,6 +99,8 @@ def test_approval_request_notifies_eligible_owner(django_capture_on_commit_callb
 
     notification = Notification.objects.get(organization=organization, recipient=owner)
     assert notification.link == reverse("approval-detail", args=[approval.id])
+    assert notification.approval == approval
+    assert notification.kind == Notification.Kind.APPROVAL_REQUEST
     assert "Aged-stock action approval" in notification.title
     assert len(mail.outbox) == 1
     assert mail.outbox[0].to == ["owner@example.com"]

@@ -9,6 +9,7 @@
   </div>
   <div class="flex flex-wrap gap-3">
     <a href="{% url 'module-overview' 'purchases' %}" class="btn-secondary">Back to purchases</a>
+    {% if order.payable %}<a href="{% url 'payable-detail' order.payable.id %}" class="btn-secondary">Supplier payable</a>{% endif %}
     {% if order.status == "draft" %}<form method="post" action="{% url 'purchase-approve' order.id %}">{% csrf_token %}<button class="btn-primary">Approve order</button></form>{% endif %}
   </div>
 </div>

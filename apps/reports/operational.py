@@ -10,6 +10,7 @@ from apps.inventory.models import StockBalance
 from apps.operations.models import Payable, Receivable
 from apps.sales.models import SaleLine
 from apps.organizations.permissions import accessible_branches_for, organization_owner_or_permission_required
+from .pagination import paginate_section
 
 
 @login_required
@@ -30,6 +31,14 @@ def operational_report(request):
         organization=organization, purchase_order__destination__branch__in=branches, outstanding_amount__gt=0
     )
     overdue = receivables.filter(due_on__lt=timezone.localdate()).aggregate(total=Sum("outstanding_amount"))["total"] or Decimal("0")
+    stock_balances, stock_pagination = paginate_section(
+        request,
+        StockBalance.objects.filter(
+            organization=organization,
+            location__branch__in=branches,
+        ).select_related("product", "location").order_by("product__name", "location__name"),
+        parameter="stock_page",
+    )
     context = {
         "revenue": revenue,
         "cost": cost,
@@ -39,8 +48,7 @@ def operational_report(request):
         "receivable_total": receivables.aggregate(total=Sum("outstanding_amount"))["total"] or Decimal("0"),
         "payable_total": payables.aggregate(total=Sum("outstanding_amount"))["total"] or Decimal("0"),
         "overdue_total": overdue,
-        "stock_balances": StockBalance.objects.filter(
-            organization=organization, location__branch__in=branches
-        ).select_related("product", "location")[:100],
+        "stock_balances": stock_balances,
+        "stock_pagination": stock_pagination,
     }
     return render(request, "reports/operational.html", context)

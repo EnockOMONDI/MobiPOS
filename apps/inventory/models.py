@@ -37,6 +37,16 @@ class StockUnit(OrganizationOwnedModel):
     warranty_expires_on = models.DateField(null=True, blank=True)
 
     class Meta:
+        indexes = [
+            models.Index(
+                fields=("organization", "status", "location", "product"),
+                name="inv_su_org_st_loc_pr",
+            ),
+            models.Index(
+                fields=("organization", "product", "location", "created_at"),
+                name="inv_su_org_pr_loc_ct",
+            ),
+        ]
         constraints = [
             models.UniqueConstraint(fields=("organization", "serial_number"), name="unique_serial_per_org"),
             models.UniqueConstraint(
@@ -114,6 +124,16 @@ class StockMovement(OrganizationOwnedModel):
 
     class Meta:
         ordering = ("-created_at",)
+        indexes = [
+            models.Index(
+                fields=("organization", "stock_unit", "created_at"),
+                name="inv_sm_org_su_ct",
+            ),
+            models.Index(
+                fields=("organization", "product", "location", "created_at"),
+                name="inv_sm_org_pr_loc_ct",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if not self._state.adding:
@@ -182,6 +202,8 @@ class AgedStockAction(OrganizationOwnedModel):
     status = models.CharField(max_length=20, choices=AgedStockActionStatus.choices, default=AgedStockActionStatus.REQUESTED)
     reason = models.TextField()
     next_step = models.TextField(blank=True)
+    proposal = models.JSONField(default=dict, blank=True)
+    execution_result = models.JSONField(default=dict, blank=True)
     approval = models.ForeignKey(
         "operations.ApprovalRequest",
         on_delete=models.PROTECT,
@@ -227,5 +249,46 @@ class AgedStockAction(OrganizationOwnedModel):
 
     def __str__(self):
         return f"{self.get_action_type_display()} for {self.stock_unit}"
+
+
+class StockUnitOfferType(models.TextChoices):
+    DISCOUNT = "discount", "Discount"
+    CAMPAIGN = "campaign", "Campaign"
+
+
+class StockUnitOffer(OrganizationOwnedModel):
+    """A unit-specific sales offer created from an approved aged-stock action."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    stock_unit = models.ForeignKey(StockUnit, on_delete=models.PROTECT, related_name="offers")
+    aged_stock_action = models.OneToOneField(
+        AgedStockAction,
+        on_delete=models.PROTECT,
+        related_name="offer",
+    )
+    offer_type = models.CharField(max_length=20, choices=StockUnitOfferType.choices)
+    name = models.CharField(max_length=160)
+    promotional_price = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    starts_on = models.DateField()
+    ends_on = models.DateField()
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def clean(self):
+        super().clean()
+        if self.stock_unit_id and self.stock_unit.organization_id != self.organization_id:
+            raise ValidationError("Offer and stock unit must belong to the same organization.")
+        if self.aged_stock_action_id and self.aged_stock_action.organization_id != self.organization_id:
+            raise ValidationError("Offer and aged-stock action must belong to the same organization.")
+        if self.ends_on and self.starts_on and self.ends_on < self.starts_on:
+            raise ValidationError("Offer end date cannot be before its start date.")
+        if self.offer_type == StockUnitOfferType.DISCOUNT and self.promotional_price is None:
+            raise ValidationError("Discount offers require a promotional price.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
 # Create your models here.
