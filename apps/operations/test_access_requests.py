@@ -9,7 +9,7 @@ from apps.organizations.permissions import user_has_organization_permission
 
 
 @pytest.mark.django_db
-def test_locked_navigation_stays_visible_and_register_is_protected(client):
+def test_locked_navigation_is_hidden_and_register_is_protected(client):
     user = User.objects.create_user(username="staff", email="staff@example.com")
     organization = Organization.objects.create(name="Acme", slug="access-nav-acme", status="active")
     Membership.objects.create(
@@ -18,15 +18,15 @@ def test_locked_navigation_stays_visible_and_register_is_protected(client):
     client.force_login(user)
 
     dashboard = client.get(reverse("dashboard"))
-    products = next(
+    products = [
         item
         for group in dashboard.context["navigation_groups"]
         for item in group["items"]
         if item["label"] == "Products"
-    )
+    ]
 
-    assert products["enabled"] is False
-    assert b"Products" in dashboard.content
+    assert products and products[0]["enabled"] is False
+    assert b">Products<" not in dashboard.content
     assert client.get(reverse("module-overview", args=["products"])).status_code == 403
 
 

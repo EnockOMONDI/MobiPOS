@@ -32,47 +32,41 @@ def item(label, url_name, icon, permission=None, args=(), owner_only=False, requ
 
 
 NAVIGATION_GROUPS = (
-    ("Sales & POS", "cart", (
+    ("Home", "home", (
+        item("Dashboard", "dashboard", "home"),
+    )),
+    ("Sales", "cart", (
         item("Open register", "session-open", "wallet", "sales.add_sale"),
-        item("New sale", "pos-cart", "cart", "sales.add_sale"),
         item("Sales register", "sales-workspace", "chart", "sales.view_sale"),
-        item("Register DSA", "agent-dsa-create", "sparkles", "organizations.add_agentprofile"),
         item("Payments", "payments-workspace", "wallet", "payments.view_payment"),
         item("Cashier sessions", "operational-register", "wallet", "pos.view_possession", ("sessions",)),
-        item("Returns", "operational-register", "box", "sales.view_salereturn", ("returns",)),
-        item("Refunds", "operational-register", "wallet", "payments.view_refund", ("refunds",)),
+        item("Returns and refunds", "operational-register", "box", "sales.view_salereturn", ("returns",)),
     )),
     ("Inventory", "box", (
         item("Products", "module-overview", "box", "catalog.view_product", ("products",)),
-        item("Add product", "product-create", "sparkles", "catalog.add_product"),
         item("Stock levels", "operational-register", "chart", "inventory.view_stockbalance", ("stock",)),
-        item("Serialized inventory", "operational-register", "box", "inventory.view_stockunit", ("inventory",)),
+        item("Serialized devices", "operational-register", "box", "inventory.view_stockunit", ("inventory",)),
         item("Agent stock", "operational-register", "box", "inventory.view_stockunit", ("agent-stock",)),
-        item("Allocate to agent", "agent-allocation-create", "truck", "transfers.add_stocktransfer"),
-        item("Recall agent stock", "agent-recall-create", "truck", "transfers.add_stocktransfer"),
         item("Batch IMEI intake", "batch-serial-intake", "sparkles", "inventory.add_stockadjustment"),
         item("Stock movements", "operational-register", "truck", "inventory.view_stockmovement", ("movements",)),
-        item("Stock adjustment", "stock-adjustment-create", "wrench", "inventory.add_stockadjustment"),
+        item("Stock adjustments", "stock-adjustment-create", "wrench", "inventory.add_stockadjustment"),
         item("Transfers", "transfer-list", "truck", "transfers.view_stocktransfer"),
     )),
     ("Purchasing", "truck", (
         item("New purchase", "purchase-create", "sparkles", "purchasing.add_purchaseorder"),
         item("Purchase register", "purchasing-workspace", "chart", "purchasing.view_purchaseorder"),
         item("Purchase discrepancies", "operational-register", "wrench", "purchasing.view_purchasediscrepancy", ("purchase-discrepancies",)),
-        item("Supplier return", "supplier-return-create", "truck", "purchasing.add_supplierreturn"),
         item("Supplier returns", "operational-register", "chart", "purchasing.view_supplierreturn", ("supplier-returns",)),
         item("Payables", "payables-workspace", "wallet", "purchasing.view_purchaseorder"),
     )),
     ("Customers & Finance", "wallet", (
         item("Customers and suppliers", "module-overview", "wallet", "contacts.view_contact", ("contacts",)),
-        item("Add customer or supplier", "contact-create", "sparkles", "contacts.add_contact"),
         item("Receivables", "receivables-workspace", "wallet", "sales.view_sale"),
         item("Expenses", "expenses-workspace", "chart", "expenses.view_expense"),
-        item("New expense", "expense-create", "sparkles", "expenses.add_expense"),
         item("Commissions", "operational-register", "chart", "commissions.view_commissionaccrual", ("commissions",)),
         item("Commission payouts", "operational-register", "wallet", owner_only=True, args=("commission-payouts",), requestable=False),
     )),
-    ("Repairs & Warranty", "wrench", (
+    ("More", "cog", (
         item("New repair", "repair-create", "sparkles", "repairs.add_repairticket"),
         item("Repair register", "operational-register", "wrench", "repairs.view_repairticket", ("repairs",)),
     )),
@@ -91,9 +85,7 @@ NAVIGATION_GROUPS = (
         item("Roles and permissions", "module-overview", "lock", owner_only=True, args=("roles",), requestable=False),
         item("Approval policies", "approval-policy-list", "lock", owner_only=True, requestable=False),
         item("Branches", "module-overview", "box", owner_only=True, args=("branches",), requestable=False),
-        item("Add branch", "branch-create", "sparkles", owner_only=True, requestable=False),
         item("Locations", "module-overview", "box", owner_only=True, args=("locations",), requestable=False),
-        item("Add location", "location-create", "sparkles", owner_only=True, requestable=False),
         item("Subscriptions", "module-overview", "wallet", owner_only=True, args=("subscriptions",), requestable=False),
         item("eTIMS setup", "etims-settings", "cog", owner_only=True, requestable=False),
         item("eTIMS tax receipts", "module-overview", "chart", owner_only=True, args=("fiscal-documents",), requestable=False),
@@ -144,6 +136,7 @@ def build_navigation(request):
             "label": label,
             "icon_path": ICONS[icon],
             "items": items,
+            "visible": any(nav_item["enabled"] for nav_item in items),
             "active": any(nav_item["active"] for nav_item in items),
         })
     return groups

@@ -11,16 +11,16 @@
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script defer src="{% static 'js/table_controls.js' %}?v=20260719"></script>
   <script defer src="{% static 'js/access_request_modal.js' %}?v=20260820"></script>
+  <script defer src="{% static 'js/navigation.js' %}?v=20260820"></script>
 </head>
 <body
   class="min-h-screen bg-slate-50 text-slate-900"
-  x-data="{ mobileMenu: false, accessOpen: false, accessLabel: '', accessPermission: '', accessReason: '', accessRequestable: true, accessMessage: '' }"
-  @keydown.escape.window="mobileMenu = false; accessOpen = false"
+  data-mobile-menu="closed"
 >
   {% if user.is_authenticated %}
   <header class="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl">
     <div class="flex h-16 items-center gap-4 px-4 lg:px-6">
-      <button class="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-600 lg:hidden" @click="mobileMenu = true" aria-label="Open navigation">
+      <button type="button" class="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-600 lg:hidden" data-mobile-open aria-label="Open navigation">
         <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>
       <a href="{% url 'dashboard' %}" class="flex items-center gap-3 font-semibold">
@@ -64,14 +64,14 @@
   </header>
 
   <div class="flex min-h-[calc(100vh-4rem)]">
-    <div x-cloak x-show="mobileMenu" x-transition.opacity class="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden" @click="mobileMenu = false"></div>
+    <div hidden data-mobile-backdrop class="fixed inset-0 z-40 bg-slate-950/45 backdrop-blur-sm lg:hidden"></div>
     <aside
+      data-mobile-nav
       class="fixed inset-y-0 left-0 z-50 flex w-[19rem] -translate-x-full flex-col border-r border-slate-200 bg-white shadow-2xl transition-transform duration-300 lg:sticky lg:top-16 lg:z-20 lg:h-[calc(100vh-4rem)] lg:translate-x-0 lg:shadow-none"
-      :class="mobileMenu ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
     >
       <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4 lg:hidden">
         <span class="font-semibold">Workspace navigation</span>
-        <button class="grid size-9 place-items-center rounded-lg bg-slate-100 text-slate-600" @click="mobileMenu = false" aria-label="Close navigation">
+        <button type="button" data-mobile-close class="grid size-9 place-items-center rounded-lg bg-slate-100 text-slate-600" aria-label="Close navigation">
           <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="M6 18 18 6M6 6l12 12"/></svg>
         </button>
       </div>
@@ -90,44 +90,44 @@
       </div>
       <nav class="flex-1 space-y-2 overflow-y-auto px-3 py-4">
         {% for group in navigation_groups %}
-        <section x-data="{ open: {{ group.active|yesno:'true,false' }} }" class="rounded-2xl">
-          <button type="button" @click="open = !open" class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+        {% if group.visible %}
+        {% if group.items|length == 1 %}
+          {% for item in group.items %}
+            {% if item.enabled %}
+            <a href="{{ item.url }}" data-mobile-link class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition {% if item.active %}bg-red-50 font-semibold text-red-700 ring-1 ring-red-100{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-950{% endif %}">
+              <svg class="size-4.5 shrink-0 {% if item.active %}text-red-600{% else %}text-slate-400 group-hover:text-slate-600{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="{{ item.icon_path }}"/></svg>
+              <span class="flex-1">{{ item.label }}</span>
+              {% if item.active %}<span class="size-1.5 rounded-full bg-red-600"></span>{% endif %}
+            </a>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+        <details class="group rounded-2xl" {% if group.active %}open{% endif %}>
+          <summary class="flex cursor-pointer list-none items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-100 [&::-webkit-details-marker]:hidden">
             <span class="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 transition group-hover:bg-white group-hover:text-red-700">
               <svg class="size-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.65"><path stroke-linecap="round" stroke-linejoin="round" d="{{ group.icon_path }}"/></svg>
             </span>
             <span class="flex-1">{{ group.label }}</span>
-            <svg class="size-4 text-slate-400 transition-transform" :class="open && 'rotate-180'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="m6 9 6 6 6-6"/></svg>
-          </button>
-          <div x-show="open" class="mt-1 space-y-1 pl-2">
+            <svg class="size-4 text-slate-400 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="m6 9 6 6 6-6"/></svg>
+          </summary>
+          <div class="mt-1 space-y-1 pl-2">
             {% for item in group.items %}
               {% if item.enabled %}
-              <a href="{{ item.url }}" @click="mobileMenu = false" class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition {% if item.active %}bg-red-50 font-semibold text-red-700 ring-1 ring-red-100{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-950{% endif %}">
+              <a href="{{ item.url }}" data-mobile-link class="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition {% if item.active %}bg-red-50 font-semibold text-red-700 ring-1 ring-red-100{% else %}text-slate-600 hover:bg-slate-100 hover:text-slate-950{% endif %}">
                 <svg class="size-4.5 shrink-0 {% if item.active %}text-red-600{% else %}text-slate-400 group-hover:text-slate-600{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="{{ item.icon_path }}"/></svg>
                 <span class="flex-1">{{ item.label }}</span>
                 {% if item.active %}<span class="size-1.5 rounded-full bg-red-600"></span>{% endif %}
               </a>
-              {% else %}
-              <button
-                type="button"
-                class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-400 transition hover:bg-amber-50 hover:text-amber-800"
-                data-access-trigger
-                data-access-label="{{ item.label }}"
-                data-access-permission="{{ item.permission|default:'' }}"
-                data-access-requestable="{{ item.requestable|yesno:'true,false' }}"
-                data-access-message="{{ item.locked_reason }}"
-              >
-                <svg class="size-4.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="{{ item.icon_path }}"/></svg>
-                <span class="flex-1">{{ item.label }}</span>
-                <svg class="size-3.5 text-slate-300 group-hover:text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 0 0-9 0v3.75m-.75 0h10.5A2.25 2.25 0 0 1 19.5 12.75v7.5H4.5v-7.5a2.25 2.25 0 0 1 2.25-2.25Z"/></svg>
-              </button>
               {% endif %}
             {% endfor %}
           </div>
-        </section>
+        </details>
+        {% endif %}
+        {% endif %}
         {% endfor %}
       </nav>
       <div class="border-t border-slate-100 p-4">
-        <p class="text-xs leading-5 text-slate-600">Locked actions stay visible. Select one to request access from your administrator.</p>
+        <p class="text-xs leading-5 text-slate-600">Your workspace shows the tools available to your role. Ask an administrator to add access when your responsibilities change.</p>
         <p class="mt-2 text-xs font-semibold text-red-700">Powered by Kipekee Networks</p>
       </div>
     </aside>
