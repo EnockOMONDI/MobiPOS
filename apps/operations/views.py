@@ -10,7 +10,6 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
-from django.utils.http import url_has_allowed_host_and_scheme
 
 from apps.audit.services import record_audit_event
 from apps.organizations.permissions import (
@@ -266,7 +265,11 @@ def access_request_create(request):
             reason=reason,
         )
     except ValidationError as error:
-        messages.error(request, error.message)
+        detail = "; ".join(str(message) for message in error.messages)
+        messages.error(
+            request,
+            detail or "We could not send that access request. Please try again or contact your administrator.",
+        )
     else:
         record_audit_event(
             action="access.requested",
@@ -275,10 +278,12 @@ def access_request_create(request):
             target=approval,
             request=request,
         )
-        messages.success(request, "Access request sent to your organization administrator.")
-    next_url = request.POST.get("next", "")
-    if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
-        return redirect(next_url)
+        messages.success(
+            request,
+            "Your access request was sent. An organization administrator will review it and notify you when a decision is made.",
+        )
+    # Do not send the user back to the locked page. That would immediately
+    # reopen the dialog and make a successful request feel like a failure.
     return redirect("dashboard")
 
 

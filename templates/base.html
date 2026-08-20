@@ -10,6 +10,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.7/dist/htmx.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script defer src="{% static 'js/table_controls.js' %}?v=20260719"></script>
+  <script defer src="{% static 'js/access_request_modal.js' %}?v=20260820"></script>
 </head>
 <body
   class="min-h-screen bg-slate-50 text-slate-900"
@@ -109,7 +110,11 @@
               <button
                 type="button"
                 class="group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-slate-400 transition hover:bg-amber-50 hover:text-amber-800"
-                @click="accessLabel = '{{ item.label|escapejs }}'; accessPermission = '{{ item.permission|default:''|escapejs }}'; accessReason = ''; accessRequestable = {{ item.requestable|yesno:'true,false' }}; accessMessage = '{{ item.locked_reason|escapejs }}'; accessOpen = true"
+                data-access-trigger
+                data-access-label="{{ item.label }}"
+                data-access-permission="{{ item.permission|default:'' }}"
+                data-access-requestable="{{ item.requestable|yesno:'true,false' }}"
+                data-access-message="{{ item.locked_reason }}"
               >
                 <svg class="size-4.5 shrink-0 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="{{ item.icon_path }}"/></svg>
                 <span class="flex-1">{{ item.label }}</span>
@@ -130,15 +135,17 @@
     <main class="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       {% if messages %}
         <div class="mb-6 space-y-2">
-          {% for message in messages %}<div class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">{{ message }}</div>{% endfor %}
+          {% for message in messages %}
+            <div role="status" aria-live="polite" class="rounded-xl border px-4 py-3 text-sm shadow-sm {% if 'success' in message.tags %}border-emerald-200 bg-emerald-50 text-emerald-900{% elif 'error' in message.tags %}border-red-200 bg-red-50 text-red-900{% else %}border-slate-200 bg-white text-slate-800{% endif %}">{{ message }}</div>
+          {% endfor %}
         </div>
       {% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>
 
-  <div x-cloak x-show="accessOpen" x-transition.opacity class="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm" @click.self="accessOpen = false">
-    <div x-show="accessOpen" x-transition class="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-950/20">
+  <div id="access-request-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="access-request-title" class="fixed inset-0 z-[60] grid place-items-center bg-slate-950/50 p-4 backdrop-blur-sm">
+    <div class="w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl shadow-slate-950/20">
       <div class="bg-gradient-to-br from-amber-50 to-orange-50 px-6 py-5">
         <div class="flex items-start gap-4">
           <span class="grid size-12 shrink-0 place-items-center rounded-2xl bg-white text-amber-700 shadow-sm">
@@ -146,26 +153,29 @@
           </span>
           <div class="min-w-0">
             <p class="text-xs font-bold uppercase tracking-widest text-amber-700">Access required</p>
-            <h2 class="mt-1 text-xl font-bold text-slate-950" x-text="accessLabel"></h2>
-            <p class="mt-2 text-sm leading-6 text-slate-600" x-text="accessMessage"></p>
+            <h2 id="access-request-title" class="mt-1 text-xl font-bold text-slate-950">Additional access</h2>
+            <p id="access-request-message" class="mt-2 text-sm leading-6 text-slate-600">This action needs administrator approval for your organization.</p>
           </div>
+          <button type="button" data-access-close class="ml-auto grid size-9 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-white hover:text-slate-950" aria-label="Close access request dialog">
+            <svg class="size-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" d="m6 6 12 12M18 6 6 18"/></svg>
+          </button>
         </div>
       </div>
-      <form x-show="accessRequestable" method="post" action="{% url 'access-request-create' %}" class="space-y-4 p-6">
+      <form id="access-request-form" method="post" action="{% url 'access-request-create' %}" class="space-y-4 p-6" data-access-request-panel>
         {% csrf_token %}
-        <input type="hidden" name="permission" :value="accessPermission">
+        <input id="access-request-permission" type="hidden" name="permission" value="">
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
         <label class="block">
           <span class="text-sm font-semibold text-slate-700">Why do you need this access?</span>
-          <textarea name="reason" x-model="accessReason" rows="3" required class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-amber-500 transition focus:ring-2" placeholder="Briefly explain the business task you need to complete."></textarea>
+          <textarea id="access-request-reason" name="reason" rows="3" required class="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none ring-amber-500 transition focus:ring-2" placeholder="Briefly explain the business task you need to complete."></textarea>
         </label>
         <div class="flex justify-end gap-3">
-          <button type="button" @click="accessOpen = false" class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button>
-          <button type="submit" class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-300">Send access request</button>
+          <button type="button" data-access-close class="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600">Cancel</button>
+          <button type="submit" data-access-submit class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-300">Send access request</button>
         </div>
       </form>
-      <div x-show="!accessRequestable" class="flex justify-end p-6">
-        <button type="button" @click="accessOpen = false" class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white">Understood</button>
+      <div id="access-request-info" hidden class="flex justify-end p-6">
+        <button type="button" data-access-close class="rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white">Understood</button>
       </div>
     </div>
   </div>

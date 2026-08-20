@@ -66,6 +66,58 @@ def test_owner_approval_grants_requested_access_through_managed_role(client):
 
 
 @pytest.mark.django_db
+def test_access_request_redirects_to_dashboard_with_friendly_confirmation(client):
+    organization = Organization.objects.create(name="Acme", slug="access-confirmation-acme", status="active")
+    staff = User.objects.create_user(username="confirmation-staff", email="confirmation@example.com")
+    Membership.objects.create(user=staff, organization=organization, status=MembershipStatus.ACTIVE)
+    client.force_login(staff)
+
+    response = client.post(
+        reverse("access-request-create"),
+        {
+            "permission": "catalog.view_product",
+            "reason": "I need to check stock before serving customers.",
+            "next": reverse("module-overview", args=["products"]),
+        },
+        follow=True,
+    )
+
+    assert response.redirect_chain[0][0] == reverse("dashboard")
+    assert any(
+        "Your access request was sent" in message.message
+        for message in response.context["messages"]
+    )
+
+
+@pytest.mark.django_db
+def test_invalid_access_request_shows_actionable_error_and_returns_to_dashboard(client):
+    organization = Organization.objects.create(name="Acme", slug="access-error-acme", status="active")
+    staff = User.objects.create_user(username="error-staff", email="error@example.com")
+    Membership.objects.create(user=staff, organization=organization, status=MembershipStatus.ACTIVE)
+    client.force_login(staff)
+
+    response = client.post(reverse("access-request-create"), {"permission": "not-a-real-permission"}, follow=True)
+
+    assert response.redirect_chain[0][0] == reverse("dashboard")
+    assert any("cannot be delegated" in message.message for message in response.context["messages"])
+
+
+@pytest.mark.django_db
+def test_duplicate_pending_access_request_keeps_one_request_and_confirms_submission(client):
+    organization = Organization.objects.create(name="Acme", slug="access-duplicate-acme", status="active")
+    staff = User.objects.create_user(username="duplicate-staff", email="duplicate@example.com")
+    Membership.objects.create(user=staff, organization=organization, status=MembershipStatus.ACTIVE)
+    client.force_login(staff)
+    payload = {"permission": "catalog.view_product", "reason": "I need product access."}
+
+    client.post(reverse("access-request-create"), payload)
+    response = client.post(reverse("access-request-create"), payload, follow=True)
+
+    assert ApprovalRequest.objects.filter(requested_by=staff, status=ApprovalStatus.PENDING).count() == 1
+    assert any("Your access request was sent" in message.message for message in response.context["messages"])
+
+
+@pytest.mark.django_db
 def test_repeated_access_request_preserves_decided_history(client):
     organization = Organization.objects.create(name="Acme", slug="access-history-acme", status="active")
     staff = User.objects.create_user(username="history-staff", email="history-staff@example.com")
